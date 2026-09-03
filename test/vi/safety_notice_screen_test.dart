@@ -33,7 +33,7 @@ void main() {
     final speaker = RecordingSpeaker();
     await tester.pumpWidget(_host(SafetyNoticeScreen(
       speaker: speaker,
-      onAcknowledge: () {},
+      onAcknowledge: () async {},
     )));
     await tester.pump();
 
@@ -41,7 +41,7 @@ void main() {
   });
 
   testWidgets('renders the headline and every line', (tester) async {
-    await tester.pumpWidget(_host(SafetyNoticeScreen(onAcknowledge: () {})));
+    await tester.pumpWidget(_host(SafetyNoticeScreen(onAcknowledge: () async {})));
     await tester.pump();
 
     expect(find.text(kSafetyNotice.headline), findsOneWidget);
@@ -52,7 +52,7 @@ void main() {
 
   testWidgets('has exactly one control, so it can be finished blind',
       (tester) async {
-    await tester.pumpWidget(_host(SafetyNoticeScreen(onAcknowledge: () {})));
+    await tester.pumpWidget(_host(SafetyNoticeScreen(onAcknowledge: () async {})));
     await tester.pump();
 
     expect(find.byType(FilledButton), findsOneWidget);
@@ -60,7 +60,7 @@ void main() {
 
   testWidgets('the control carries a semantic label', (tester) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(_host(SafetyNoticeScreen(onAcknowledge: () {})));
+    await tester.pumpWidget(_host(SafetyNoticeScreen(onAcknowledge: () async {})));
     await tester.pump();
 
     expect(
@@ -77,7 +77,7 @@ void main() {
     final speaker = RecordingSpeaker();
     await tester.pumpWidget(_host(SafetyNoticeScreen(
       speaker: speaker,
-      onAcknowledge: () => acknowledged = true,
+      onAcknowledge: () async => acknowledged = true,
     )));
     await tester.pump();
 
@@ -93,7 +93,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_host(SafetyNoticeScreen(
       alreadyAcknowledged: true,
-      onAcknowledge: () {},
+      onAcknowledge: () async {},
     )));
     await tester.pump();
 
@@ -107,7 +107,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      _host(SafetyNoticeScreen(onAcknowledge: () {}), textScale: 2.0),
+      _host(SafetyNoticeScreen(onAcknowledge: () async {}), textScale: 2.0),
     );
     await tester.pump();
 
@@ -121,7 +121,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      _host(SafetyNoticeScreen(onAcknowledge: () {}), textScale: 2.0),
+      _host(SafetyNoticeScreen(onAcknowledge: () async {}), textScale: 2.0),
     );
     await tester.pump();
 

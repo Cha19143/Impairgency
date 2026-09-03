@@ -69,11 +69,24 @@ GoRouter createRouter(AppSession session) => GoRouter(
       routes: [
         GoRoute(
           path: Routes.safety,
-          builder: (_, __) => SafetyNoticeScreen(
-            speaker: session.speaker,
-            alreadyAcknowledged: session.state.safetyAcknowledged,
-            onAcknowledge: session.acknowledgeSafety,
-          ),
+          builder: (context, _) {
+            // Captured before the callback runs: once acknowledged, the state
+            // says true and the screen would no longer know it had been the
+            // first run.
+            final firstRun = !session.state.safetyAcknowledged;
+            return SafetyNoticeScreen(
+              speaker: session.speaker,
+              alreadyAcknowledged: !firstRun,
+              onAcknowledge: () async {
+                await session.acknowledgeSafety();
+                if (!context.mounted) return;
+                // The redirect deliberately allows /safety once acknowledged,
+                // so that the dashboard can reopen it. That means nothing moves
+                // the user off it here - this navigation has to be explicit.
+                appNavigate(context, firstRun ? Routes.welcome : Routes.home);
+              },
+            );
+          },
         ),
 
         // ---- visually impaired user app (mobile) ----

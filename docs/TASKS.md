@@ -33,6 +33,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | **Overall** | | **27 / 84  (32%)** |
 |---|---|---|
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `█████████░░░` | 8 / 11 |
+| Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **27 / 84  (32%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `█████░░░░░░░` | 4 / 9 |
 | Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
@@ -279,8 +288,16 @@ enabled**. Screen fully black, start to finish.
 The old repo at `~/kokey/CapstoneImpairgency/cprwire/` is reference-only.
 
 - [ ] Camera + detection loop from `scan_environment_widget.dart` — without its
-      FlutterFlow scaffolding
-- [ ] Contact picker
+      FlutterFlow scaffolding. **Note:** `camera`, `google_mlkit_object_detection`,
+      `tflite_flutter` and `image` are deliberately not declared yet — ML Kit
+      ships no arm64 simulator slice and breaks every iOS simulator build. Add
+      them back with this, and verify on a physical device (a simulator has no
+      camera anyway)
+- [ ] Contact picker. **Do not use `flutter_contacts`** — its iOS registration
+      force-unwraps `UIApplication.shared.delegate!.window!!`, which has been nil
+      since iOS 13, so it crashes on launch in any app that includes it. Prefer
+      the system picker (`CNContactPickerViewController` / `ACTION_PICK`), which
+      needs no contacts permission at all
 - [ ] OTP Cloud Functions from `firebase/functions/`
 - [x] Voice command vocabulary + tests — *ported and extended to six commands*
 

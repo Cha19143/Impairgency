@@ -18,7 +18,7 @@ class SafetyNoticeScreen extends StatefulWidget {
     this.notice = kSafetyNotice,
   });
 
-  final VoidCallback onAcknowledge;
+  final Future<void> Function() onAcknowledge;
   final Speaker speaker;
 
   /// Revisits get a way out rather than a second acknowledgement.

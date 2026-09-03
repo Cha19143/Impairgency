@@ -31,14 +31,35 @@ dependencies:
   speech_to_text: ^7.4.0
   flutter_tts: ^4.0.2
 
-  # Vision - §2.A.1 object detection, §2.A.3 environment
-  camera: ^0.11.0+2
-  google_mlkit_object_detection: ^0.13.0
-  tflite_flutter: ^0.11.0
-  image: ^4.2.0
+  # Vision - §2.A.1 object detection, §2.A.3 environment.
+  #
+  # Deliberately NOT declared yet. Google's MLImage.framework ships no arm64
+  # simulator slice, and Xcode 26 simulators are arm64-only on Apple Silicon -
+  # there is no x86_64 fallback to exclude down to any more. Declaring them
+  # makes every iOS simulator build fail at link time, including for screens
+  # that have nothing to do with the camera.
+  #
+  # They come back when the scan screen is ported from cprwire. That work has
+  # to be verified on a physical device regardless: a simulator has no camera,
+  # so object detection could never be tested there anyway.
+  #
+  #   camera, google_mlkit_object_detection, tflite_flutter, image
 
   permission_handler: ^11.3.0
-  flutter_contacts: ^1.1.9+2
+  # flutter_contacts is deliberately NOT declared. Its iOS plugin registration
+  # is:
+  #
+  #   UIApplication.shared.delegate!.window!!.rootViewController!
+  #
+  # Three force-unwraps, and since iOS 13 windows belong to scenes rather than
+  # the app delegate, so `delegate.window` is nil. It crashes on launch in any
+  # app that merely includes the plugin, whether or not the app ever calls it.
+  #
+  # When the emergency contact picker is built, prefer the *system* picker -
+  # CNContactPickerViewController on iOS, ACTION_PICK on Android. It needs no
+  # contacts permission at all, because the user chooses the one contact
+  # themselves rather than granting the app their whole address book. For an app
+  # handling data about disabled people, that is the better design anyway.
   url_launcher: ^6.3.1
   shared_preferences: ^2.5.3
   intl: ^0.20.3
