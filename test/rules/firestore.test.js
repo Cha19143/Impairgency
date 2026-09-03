@@ -265,6 +265,66 @@ describe('pairings', () => {
     );
   });
 
+  it('cannot be self-issued without redeeming a code', async () => {
+    // The hole: without this, any signed-in account writes
+    // pairings/{ownUid}_{victimId} and is thereafter a "paired guardian" with
+    // read access to that user's document - and to their location, once the
+    // user turns location consent on for someone they actually trust.
+    await assertFails(
+      setDoc(doc(as(STRANGER), 'pairings', pairingId(STRANGER, VI)), {
+        guardianId: STRANGER,
+        viUserId: VI,
+      }),
+    );
+  });
+
+  it('is allowed only for a code that user issued and this guardian redeemed',
+    async () => {
+      const CODE = 'HJ42KX';
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'pairing_codes', CODE), {
+          ownerId: VI,
+          usedBy: STRANGER,
+          expiresAt: hoursFromNow(1),
+        });
+      });
+      // Redeemed by STRANGER, so GUARDIAN cannot ride on it.
+      await assertFails(
+        setDoc(doc(as(GUARDIAN), 'pairings', pairingId(GUARDIAN, VI)), {
+          guardianId: GUARDIAN,
+          viUserId: VI,
+          code: CODE,
+        }),
+      );
+      await assertSucceeds(
+        setDoc(doc(as(STRANGER), 'pairings', pairingId(STRANGER, VI)), {
+          guardianId: STRANGER,
+          viUserId: VI,
+          code: CODE,
+        }),
+      );
+    });
+
+  it('cannot reuse a code issued by a different user', async () => {
+    const CODE = 'HJ42KX';
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      // A code STRANGER issued for themselves, redeemed by themselves, does
+      // not let them pair with VI.
+      await setDoc(doc(ctx.firestore(), 'pairing_codes', CODE), {
+        ownerId: STRANGER,
+        usedBy: STRANGER,
+        expiresAt: hoursFromNow(1),
+      });
+    });
+    await assertFails(
+      setDoc(doc(as(STRANGER), 'pairings', pairingId(STRANGER, VI)), {
+        guardianId: STRANGER,
+        viUserId: VI,
+        code: CODE,
+      }),
+    );
+  });
+
   it('a pairing cannot be edited, only made or broken', async () => {
     await assertFails(
       updateDoc(doc(as(GUARDIAN), 'pairings', pairingId(GUARDIAN, VI)), {

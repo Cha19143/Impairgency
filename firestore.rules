@@ -40,6 +40,23 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
 
+    function codeDoc(code) {
+      return get(/databases/$(database)/documents/pairing_codes/$(code)).data;
+    }
+
+    // A pairing is only legitimate if it points at a code the target user
+    // issued and this guardian already redeemed. Without this, guardianId ==
+    // request.auth.uid is self-certifying: anyone signed in could write
+    // pairings/{ownUid}_{victimId} and become a "paired guardian" of a
+    // stranger, with read access to their user document and - once that user
+    // grants location consent to someone they actually trust - their location.
+    function redeemedCodeFor(code, ownerId) {
+      return code is string
+             && exists(/databases/$(database)/documents/pairing_codes/$(code))
+             && codeDoc(code).ownerId == ownerId
+             && codeDoc(code).usedBy == request.auth.uid;
+    }
+
     // Consent is stored on the user document as a map of booleans. Absent means
     // withheld - never assume consent from a missing field.
     function hasConsent(userId, key) {
@@ -105,7 +122,9 @@ service cloud.firestore {
 
       allow create: if signedIn()
                     && request.resource.data.guardianId == request.auth.uid
-                    && pairingId == request.auth.uid + '_' + request.resource.data.viUserId;
+                    && pairingId == request.auth.uid + '_' + request.resource.data.viUserId
+                    && redeemedCodeFor(request.resource.data.code,
+                                       request.resource.data.viUserId);
 
       allow delete: if signedIn()
                     && (resource.data.guardianId == request.auth.uid
