@@ -19,11 +19,17 @@ class EmergencyContactScreen extends StatefulWidget {
     super.key,
     required this.onSave,
     required this.onSkip,
+    this.onPickContact,
     this.speaker = const SilentSpeaker(),
   });
 
   final void Function(String name, String number) onSave;
   final VoidCallback onSkip;
+
+  /// Opens the system contact picker. Null hides the option — a web build, or
+  /// a test.
+  final Future<({String name, String number})?> Function()? onPickContact;
+
   final Speaker speaker;
 
   @override
@@ -69,6 +75,24 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
     widget.speaker.speak(message);
   }
 
+  Future<void> _pick() async {
+    final picked = await widget.onPickContact?.call();
+    if (!mounted) return;
+    if (picked == null) {
+      // Cancelled, or a contact with no number on it. Not an error.
+      await widget.speaker.speak('No contact was chosen. You can type one '
+          'instead.');
+      return;
+    }
+    setState(() {
+      _name.text = picked.name;
+      _number.text = picked.number;
+      _error = null;
+    });
+    await widget.speaker
+        .speak('${picked.name}, ${picked.number}. Save this contact?');
+  }
+
   Future<void> _skip() async {
     if (!_confirmingSkip) {
       // Said before it is done, not after. A warning that arrives once the
@@ -94,7 +118,10 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
       extra: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
+          Semantics(
+            textField: true,
+            label: 'Their name',
+            child: TextField(
             controller: _name,
             textInputAction: TextInputAction.next,
             textCapitalization: TextCapitalization.words,
@@ -108,8 +135,12 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
                   EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             ),
           ),
+          ),
           const SizedBox(height: 14),
-          TextField(
+          Semantics(
+            textField: true,
+            label: 'Their phone number',
+            child: TextField(
             controller: _number,
             focusNode: _numberFocus,
             keyboardType: TextInputType.phone,
@@ -125,6 +156,7 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             ),
+          ),
           ),
           if (_confirmingSkip) ...[
             const SizedBox(height: 18),
@@ -144,6 +176,14 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
         ],
       ),
       actions: [
+        if (widget.onPickContact != null)
+          ViButton(
+            label: 'Choose from my contacts',
+            detail: 'Picks one person. The app never reads your address book.',
+            icon: Icons.contacts_outlined,
+            kind: ViButtonKind.secondary,
+            onPressed: _pick,
+          ),
         ViButton(
           label: 'Save this contact',
           icon: Icons.check,

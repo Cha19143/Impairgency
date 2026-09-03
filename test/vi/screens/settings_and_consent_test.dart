@@ -27,6 +27,18 @@ class RecordingSpeaker implements Speaker {
   Future<void> stop() async {}
 }
 
+/// Scrolls a control into view before tapping it.
+///
+/// The actions area scrolls when a screen has more choices than fit, so a
+/// finder can resolve to something off-screen. A real user scrolls; so does
+/// this.
+Future<void> tapAction(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pump();
+}
+
 Future<void> pump(WidgetTester tester, Widget child) async {
   tester.view.physicalSize = const Size(390 * 3, 900 * 3);
   tester.view.devicePixelRatio = 3.0;
@@ -50,8 +62,7 @@ void main() {
           onSafetyNotice: () {}, onBack: () {},
         ),
       );
-      await tester.tap(find.text('Connect a device'));
-      await tester.pump();
+      await tapAction(tester, find.text('Connect a device'));
       expect(tapped, isTrue);
     });
 
@@ -84,8 +95,7 @@ void main() {
           onSafetyNotice: () => opened = true, onBack: () {},
         ),
       );
-      await tester.tap(find.text('What this app can and cannot do'));
-      await tester.pump();
+      await tapAction(tester, find.text('What this app can and cannot do'));
       expect(opened, isTrue);
     });
   });
@@ -130,10 +140,8 @@ void main() {
           onBack: () {},
         ),
       );
-      await tester.tap(find.text('Turn everything off'));
-      await tester.pump();
-      await tester.tap(find.text('Save'));
-      await tester.pump();
+      await tapAction(tester, find.text('Turn everything off'));
+      await tapAction(tester, find.text('Save'));
 
       expect(saved!.values.every((v) => v == false), isTrue);
     });
@@ -166,8 +174,7 @@ void main() {
           onBack: () => backed = true,
         ),
       );
-      await tester.tap(find.text('Back without saving'));
-      await tester.pump();
+      await tapAction(tester, find.text('Back without saving'));
 
       expect(backed, isTrue);
       expect(saved, isFalse);
@@ -231,12 +238,10 @@ void main() {
           onBack: () {},
         ),
       );
-      await tester.tap(find.text('Forget this place'));
-      await tester.pump();
+      await tapAction(tester, find.text('Forget this place'));
       expect(forgotten, isNotNull);
 
-      await tester.tap(find.text('Forget everything'));
-      await tester.pump();
+      await tapAction(tester, find.text('Forget everything'));
       expect(forgotAll, isTrue);
     });
 

@@ -93,27 +93,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 10),
               Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ViButton(
-                      label: 'SCAN ENVIRONMENT',
-                      icon: Icons.document_scanner_outlined,
-                      onPressed: widget.onScan,
-                    ),
-                    ViButton(
-                      label: 'SMART ASSISTANCE',
-                      icon: Icons.auto_awesome,
-                      kind: ViButtonKind.secondary,
-                      onPressed: widget.onAssist,
-                    ),
-                    ViButton(
-                      label: 'EMERGENCY SOS',
-                      icon: Icons.emergency_outlined,
-                      kind: ViButtonKind.emergency,
-                      onPressed: widget.onSos,
-                    ),
-                  ],
+                // Scrollable, not centred. At 2.0x text scale three 88dp
+                // buttons plus their detail lines are taller than the screen,
+                // and a Column that cannot scroll simply cuts the SOS button
+                // off the bottom.
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      ViButton(
+                        label: 'SCAN ENVIRONMENT',
+                        icon: Icons.document_scanner_outlined,
+                        onPressed: widget.onScan,
+                      ),
+                      ViButton(
+                        label: 'SMART ASSISTANCE',
+                        icon: Icons.auto_awesome,
+                        kind: ViButtonKind.secondary,
+                        onPressed: widget.onAssist,
+                      ),
+                      ViButton(
+                        label: 'EMERGENCY SOS',
+                        icon: Icons.emergency_outlined,
+                        kind: ViButtonKind.emergency,
+                        onPressed: widget.onSos,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               // Visible consent state. §7 asks for consent; a user who cannot

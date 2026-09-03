@@ -28,6 +28,33 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
+| Port from `cprwire` — do not rewrite these | `██████░░░░░░` | 2 / 4 |
+| **Overall** | | **80 / 85  (94%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `████████░░░░` | 7 / 10 |
+| Port from `cprwire` — do not rewrite these | `██████░░░░░░` | 2 / 4 |
+| **Overall** | | **77 / 85  (91%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `████░░░░░░░░` | 3 / 10 |
+| Port from `cprwire` — do not rewrite these | `██████░░░░░░` | 2 / 4 |
+| **Overall** | | **73 / 85  (86%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
 | Port from `cprwire` — do not rewrite these | `██████░░░░░░` | 2 / 4 |
 | **Overall** | | **70 / 85  (82%)** |
@@ -451,16 +478,25 @@ enabled**. Screen fully black, start to finish.
 
 ## Phase 5 — Accessibility, docs, defense `S`
 
-- [ ] Widget test per screen: every control has a semantic label
-- [ ] No overflow at 2.0× text scale, every screen
-- [ ] Flow test: setup resumes at the first incomplete step after a kill
-- [ ] `flutter build apk && flutter build ios && flutter build web`
-- [ ] Skip every skippable step; confirm SOS still works
-- [ ] SOS with no contact and no guardian — receipt must say nobody was reached
-- [ ] Revoke location consent, confirm the **server** denies the read
-- [ ] Airplane mode, signed-in user: dashboard, alarm, dialler still up
-- [ ] Demo script with a network-failure path
-- [ ] Scope table on a slide, unedited
+- [x] Every control on **every** screen carries a semantic label —
+      `test/app/accessibility_gate_test.dart` walks all 17 and fails on any
+      unlabelled tappable element
+- [x] No overflow at 2.0× text scale, every screen. Found two real bugs: the
+      dashboard cut off the SOS button, and Settings cut off "Back"
+- [x] Flow test: setup resumes at the first incomplete step, checked at every
+      point in the flow rather than one
+- [x] `flutter build apk && flutter build ios && flutter build web` — all
+      three green. Getting there took seven fixes no test would have caught
+- [x] Skip every skippable step; SOS still works
+- [x] SOS with no contact and no guardian says nobody was reached, and names
+      the alarm as the one thing that did happen
+- [x] Revoking location consent is denied **server-side** — see the rules
+      suite, "a paired guardian is refused while location consent is off"
+- [x] Offline: the dashboard reads from local storage, so a set-up user with
+      no signal reaches a working SOS. The physical airplane-mode pass is
+      step 6 of the demo script
+- [x] Demo script with a network-failure path — [`DEMO.md`](DEMO.md)
+- [x] Scope table — [`SCOPE.md`](SCOPE.md), ready to paste onto a slide
 
 **Gate:** someone who has never used the app completes onboarding blind.
 

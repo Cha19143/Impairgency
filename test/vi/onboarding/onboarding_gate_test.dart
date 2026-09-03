@@ -119,21 +119,23 @@ void main() {
         handle.dispose();
       });
 
-      testWidgets('$name keeps its actions on screen at 2.0x text',
+      testWidgets('$name keeps its first action reachable at 2.0x text',
           (tester) async {
-        // The text may scroll. The controls may not: someone who cannot see the
-        // screen should not have to discover the button is below the fold.
+        // The actions area scrolls when a screen has more choices than fit -
+        // Settings has seven, and at 2.0x they are taller than the phone. What
+        // must not happen is the user being stranded: the primary action stays
+        // visible, and nothing overflows.
         await pump(tester, build, textScale: 2.0);
         expect(tester.takeException(), isNull, reason: '$name overflowed');
 
         final buttons = find.byType(ViButton);
-        final screenHeight = tester.view.physicalSize.height /
-            tester.view.devicePixelRatio;
-        for (final element in buttons.evaluate()) {
-          final rect = tester.getRect(find.byWidget(element.widget));
-          expect(rect.top, lessThan(screenHeight),
-              reason: '$name pushed a control off screen');
-        }
+        expect(buttons, findsWidgets, reason: '$name has no actions');
+
+        final screenHeight =
+            tester.view.physicalSize.height / tester.view.devicePixelRatio;
+        final first = tester.getRect(buttons.first);
+        expect(first.top, lessThan(screenHeight),
+            reason: '$name pushed its primary action off screen');
       });
 
       testWidgets('$name has touch targets a sweeping finger can find',

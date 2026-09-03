@@ -100,7 +100,10 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
                 style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 24),
-              TextField(
+              Semantics(
+                textField: true,
+                label: 'Invitation code, eight characters',
+                child: TextField(
                 controller: _controller,
                 autofocus: true,
                 enabled: !_busy,
@@ -133,6 +136,7 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
                   border: const OutlineInputBorder(),
                 ),
                 onSubmitted: (_) => _submit(),
+              ),
               ),
               const SizedBox(height: 20),
               FilledButton(

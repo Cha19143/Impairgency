@@ -89,7 +89,7 @@ class _ViScreenState extends State<ViScreen> {
                   ),
                 ),
               ),
-            Expanded(
+            Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
                 child: Column(
@@ -126,11 +126,23 @@ class _ViScreenState extends State<ViScreen> {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: widget.actions,
+            // The actions are pinned, but they still have to fit. A screen
+            // with seven choices at 2.0x text scale is taller than the phone,
+            // and a Column that cannot scroll silently cuts the last one off -
+            // which on Settings was "Back".
+            //
+            // Flexible, not ConstrainedBox: a ConstrainedBox does not take part
+            // in the Column's flex, so it kept its full height and pushed
+            // itself below the fold. Flexible makes the body and the actions
+            // share what there is, and the actions win because they come with
+            // a tighter bound.
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: widget.actions,
+                ),
               ),
             ),
           ],

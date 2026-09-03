@@ -20,7 +20,12 @@ dependencies:
   firebase_auth: ^5.6.0
   cloud_firestore: ^5.6.9
   firebase_messaging: ^15.1.0      # §3.2 guardian SOS alerts
-  firebase_performance: ^0.10.1+7  # §1.4 system monitoring
+  # firebase_performance is deliberately NOT declared. Its Gradle plugin still
+  # uses com.android.build.api.transform.Transform, which AGP 8 removed, so it
+  # fails the Android build outright. Nothing is lost: the dashboard links to
+  # the Firebase console for performance data rather than mirroring it, because
+  # reading it back needs a service account and therefore a paid plan. See
+  # docs/EMERGENCY_DELIVERY.md and the System health screen.
   firebase_crashlytics: ^4.1.0     # §1.4 crashes
 
   # §3.2 guardian alerts. Raised locally by the guardian app from a Firestore
@@ -42,7 +47,7 @@ dependencies:
   # and never used it: the scan screen ran an SSD MobileNet through TFLite. ML
   # Kit's MLImage.framework ships no arm64 simulator slice and breaks every iOS
   # simulator build, so leaving it out is both correct and free.
-  camera: ^0.11.0+2
+  camera: ^0.12.0
   tflite_flutter: ^0.11.0
   image: ^4.2.0
 
@@ -65,7 +70,6 @@ dependencies:
   shared_preferences: ^2.5.3
   intl: ^0.20.3
   cupertino_icons: ^1.0.8
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

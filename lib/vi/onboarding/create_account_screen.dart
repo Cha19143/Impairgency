@@ -95,7 +95,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       extra: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
+          Semantics(
+            textField: true,
+            label: 'Email address',
+            child: TextField(
             controller: _email,
             enabled: !_busy,
             keyboardType: TextInputType.emailAddress,
@@ -112,8 +115,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             ),
           ),
+          ),
           const SizedBox(height: 14),
-          TextField(
+          Semantics(
+            textField: true,
+            label: 'Password, at least eight characters',
+            child: TextField(
             controller: _password,
             focusNode: _passwordFocus,
             enabled: !_busy,
@@ -133,6 +140,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             ),
+          ),
           ),
         ],
       ),
