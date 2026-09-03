@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the Firestore security rules suite against the local emulator.
+# Runs the Firestore and Storage security rules suites against the local emulator.
 #
 #   tool/test_rules.sh
 #
@@ -30,5 +30,5 @@ fi
 
 [ -d test/rules/node_modules ] || npm --prefix test/rules install --silent
 
-exec firebase emulators:exec --only firestore --project demo-impairgency \
+exec firebase emulators:exec --only firestore,storage --project demo-impairgency \
   "npm --prefix test/rules test"

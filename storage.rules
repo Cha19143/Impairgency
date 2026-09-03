@@ -8,9 +8,18 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == userId
-                         && request.resource.size < 25 * 1024 * 1024;
+
+      // `request.resource` describes the *incoming* object, so it is null on a
+      // read and on a delete. A combined `read, write` allow carrying the size
+      // check therefore raised a null-value error and denied the owner their
+      // own files. Split by operation so the cap applies only where an
+      // incoming object exists. Asserted in test/rules/storage.test.js.
+      allow read, delete: if request.auth != null
+                          && request.auth.uid == userId;
+
+      allow create, update: if request.auth != null
+                            && request.auth.uid == userId
+                            && request.resource.size < 25 * 1024 * 1024;
     }
 
     match /{allPaths=**} {
