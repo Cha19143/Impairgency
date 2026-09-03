@@ -23,6 +23,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 
 | Phase | | Done |
 |---|---|---|
+| Phase 0 — Security and integrity `S` | `████░░░░░░░░` | 6 / 18 |
+| Phase 1 — Location, push, pairing `M` | `░░░░░░░░░░░░` | 0 / 9 |
+| Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **7 / 81  (9%)** |
+|---|---|---|
 | Phase 0 — Security and integrity `S` | `███░░░░░░░░░` | 5 / 18 |
 | Phase 1 — Location, push, pairing `M` | `░░░░░░░░░░░░` | 0 / 9 |
 | Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
@@ -55,7 +64,7 @@ Blocking. Nothing else should store data until this is deployed.
 - [x] `firebase.json` — `firestore`, `storage`, `functions`, `hosting`, emulators
 - [x] Router redirect: platform split + auth guard (`lib/app/routes.dart`)
 - [x] Contrast defect fixed **and asserted** (`test/core/contrast_test.dart`) — §4
-- [ ] Safety notice — spoken on first run, reachable afterwards — §7
+- [x] Safety notice — spoken on first run, reachable afterwards — §7
       *"AI guidance should assist users but should not guarantee that an
       environment is completely safe."*
 - [ ] `flutterfire configure` against the new Firebase project

@@ -2,19 +2,51 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/session_store.dart';
+import '../core/speech/speaker.dart';
 import '../shared/widgets/pending_screen.dart';
+import '../vi/screens/safety_notice_screen.dart';
 import 'routes.dart';
 
 /// Live session, fed by FirebaseAuth once `flutterfire configure` has been run
 /// against the new project. Until then it reports signed out, which is the
 /// correct default: the guard fails closed.
 class AppSession extends ChangeNotifier {
+  AppSession({SessionStore? store, Speaker? speaker})
+      : store = store ?? InMemorySessionStore(),
+        speaker = speaker ?? const SilentSpeaker();
+
+  final SessionStore store;
+  final Speaker speaker;
+
   SessionState _state = const SessionState();
   SessionState get state => _state;
+
+  /// Reads what was persisted before the first frame decides where to go.
+  Future<void> load() async {
+    update(SessionState(
+      signedIn: _state.signedIn,
+      isAdmin: _state.isAdmin,
+      isGuardian: _state.isGuardian,
+      safetyAcknowledged: await store.safetyAcknowledged(),
+      completedSteps: await store.completedSteps(),
+    ));
+  }
 
   void update(SessionState next) {
     _state = next;
     notifyListeners();
+  }
+
+  Future<void> acknowledgeSafety() async {
+    await store.acknowledgeSafety();
+    update(SessionState(
+      signedIn: _state.signedIn,
+      isAdmin: _state.isAdmin,
+      isGuardian: _state.isGuardian,
+      safetyAcknowledged: true,
+      completedSteps: _state.completedSteps,
+    ));
   }
 }
 
@@ -27,6 +59,15 @@ GoRouter createRouter(AppSession session) => GoRouter(
         session: session.state,
       ),
       routes: [
+        GoRoute(
+          path: Routes.safety,
+          builder: (_, __) => SafetyNoticeScreen(
+            speaker: session.speaker,
+            alreadyAcknowledged: session.state.safetyAcknowledged,
+            onAcknowledge: session.acknowledgeSafety,
+          ),
+        ),
+
         // ---- visually impaired user app (mobile) ----
         _page(Routes.welcome, 'Welcome', 'Phase 4', '§4'),
         _page(Routes.createAccount, 'Create account', 'Phase 4', '§4'),

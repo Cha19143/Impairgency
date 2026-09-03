@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../data/prefs_session_store.dart';
+import '../data/tts_speaker.dart';
 import 'router.dart';
 import 'theme.dart';
 
@@ -11,8 +13,17 @@ class ImpairGencyApp extends StatefulWidget {
 }
 
 class _ImpairGencyAppState extends State<ImpairGencyApp> {
-  late final AppSession _session = AppSession();
+  late final AppSession _session = AppSession(
+    store: PrefsSessionStore(),
+    speaker: TtsSpeaker(),
+  );
   late final _router = createRouter(_session);
+
+  @override
+  void initState() {
+    super.initState();
+    _session.load();
+  }
 
   @override
   void dispose() {

@@ -3,6 +3,10 @@
 library;
 
 abstract final class Routes {
+  /// The limitation notice required by §7. Before everything on mobile, and
+  /// reachable again afterwards.
+  static const safety = '/safety';
+
   // Visually impaired user app (mobile)
   static const welcome = '/';
   static const createAccount = '/onboarding/account';
@@ -42,12 +46,18 @@ class SessionState {
     this.signedIn = false,
     this.isAdmin = false,
     this.isGuardian = false,
+    this.safetyAcknowledged = false,
     this.completedSteps = const <String>{},
   });
 
   final bool signedIn;
   final bool isAdmin;
   final bool isGuardian;
+
+  /// Whether the §7 limitation notice has been seen and acknowledged.
+  /// Defaults to false, so a fresh install always hears it.
+  final bool safetyAcknowledged;
+
   final Set<String> completedSteps;
 
   bool get setupComplete =>
@@ -93,6 +103,16 @@ String? resolveRedirect({
 
   // Mobile: the dashboard is not reachable, signed in or not.
   if (_isAdminRoute(location)) return Routes.welcome;
+
+  // The safety notice comes before everything, including sign-in. Someone who
+  // opens this app for the first time hears what it cannot do before they hear
+  // what it can.
+  if (!session.safetyAcknowledged) {
+    return location == Routes.safety ? null : Routes.safety;
+  }
+  // Still reachable once acknowledged - the notice says so, so the router has
+  // to honour it.
+  if (location == Routes.safety) return null;
 
   if (!session.signedIn) {
     return _isOnboardingRoute(location) ? null : Routes.welcome;
