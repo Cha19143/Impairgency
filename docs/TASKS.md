@@ -25,6 +25,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 |---|---|---|
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `█████░░░░░░░` | 3 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **32 / 85  (38%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
@@ -210,10 +219,13 @@ in **release** mode, not debug.
 *Blocked by: Phase 1 (location).* Can run alongside Phase 4.
 
 - [ ] `location_history/{userId}/fixes/{fixId}` writer, consent-gated
-- [ ] Proximity clustering → named places — §2.B.2 environment learning
-- [ ] Hour/weekday buckets over clusters — §2.B.1 routine learning
+- [x] Stay-point detection then centroid-linkage clustering → places — §2.B.2.
+      Never invents a name; the user labels them or nobody does
+- [x] Median arrival/departure with a spread gate, plus weekday/weekend
+      patterns — §2.B.1. Refuses to claim a typical time it cannot support
 - [ ] Session path replay — §2.A.7 travel recording
-- [ ] Frequent-locations count aggregation — §1.3
+- [x] Frequent-locations count aggregation — §1.3, `frequentPlaces` ordered
+      most-visited first, one visit not counted as a frequency
 - [ ] Detection + SOS event log, stamped against the session path
 - [ ] **Event timeline** replacing video review — §1.1, and record the
       substitution in the documentation rather than leaving §1.1 looking unmet
