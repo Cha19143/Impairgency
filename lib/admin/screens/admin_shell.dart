@@ -13,7 +13,9 @@ class AdminSection {
 const adminSections = <AdminSection>[
   AdminSection('Overview', Icons.insights_outlined, '/admin/overview'),
   AdminSection('Users', Icons.people_outline, '/admin/users'),
-  AdminSection('Sessions', Icons.timeline_outlined, '/admin/sessions'),
+  // No "Sessions" entry until there is a screen behind it. A nav item that
+  // goes nowhere is the same defect as the audits button that audited nothing.
+  AdminSection('System health', Icons.monitor_heart_outlined, '/admin/health'),
   AdminSection('Accessibility', Icons.accessibility_new_outlined,
       '/admin/accessibility'),
 ];

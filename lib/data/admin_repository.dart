@@ -2,6 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/places/session_summary.dart';
 
+/// An account an administrator has asked for, not yet registered.
+class UserInvite {
+  const UserInvite({required this.email, required this.role, this.deviceId});
+
+  final String email;
+  final String role;
+  final String? deviceId;
+}
+
 /// One row of §1.2's user management table.
 class AdminUserRow {
   const AdminUserRow({
@@ -92,20 +101,81 @@ class AdminRepository {
     return snap.docs.map(_toSummary).toList();
   }
 
-  /// §1.2's user table.
+  /// §1.2's user table: visually impaired users, guardians, administrators,
+  /// and the device each is linked to.
   Future<List<AdminUserRow>> users() async {
-    final snap = await _db.collection('users').limit(500).get();
-    return snap.docs.map((doc) {
+    final results = await Future.wait([
+      _db.collection('users').limit(500).get(),
+      _db.collection('admins').limit(100).get(),
+      _db.collection('pairings').limit(1000).get(),
+    ]);
+
+    final admins = {
+      for (final doc in (results[1]).docs) doc.id,
+    };
+
+    final links = <String, List<String>>{};
+    for (final doc in (results[2]).docs) {
+      final data = doc.data();
+      final guardian = data['guardianId'] as String?;
+      final viUser = data['viUserId'] as String?;
+      if (guardian == null || viUser == null) continue;
+      links.putIfAbsent(guardian, () => []).add(viUser);
+      links.putIfAbsent(viUser, () => []).add(guardian);
+    }
+
+    return (results[0]).docs.map((doc) {
       final data = doc.data();
       return AdminUserRow(
         uid: doc.id,
-        role: data['role'] as String? ?? 'vi',
+        // Administrator status comes from the roster, not from a field on the
+        // user document - a role a client can write is not a role.
+        role: admins.contains(doc.id)
+            ? 'admin'
+            : (data['role'] as String? ?? 'vi'),
         displayName: data['displayName'] as String?,
         email: data['email'] as String?,
         deviceId: data['deviceId'] as String?,
+        linkedTo: links[doc.id] ?? const [],
       );
-    }).toList();
+    }).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
+
+  /// Invitations not yet taken up.
+  Future<List<UserInvite>> pendingInvites() async {
+    final snap = await _db.collection('user_invites').limit(200).get();
+    return snap.docs
+        .map((doc) => UserInvite(
+              email: doc.id,
+              role: doc.data()['role'] as String? ?? 'vi',
+              deviceId: doc.data()['deviceId'] as String?,
+            ))
+        .toList()
+      ..sort((a, b) => a.email.compareTo(b.email));
+  }
+
+  /// §1.2, without an administrator ever choosing somebody's password.
+  ///
+  /// Creating the Firebase Auth account from here would need either a server
+  /// or the admin picking a password and signing themselves out doing it. The
+  /// invited person registers themselves and picks this up on the way in.
+  Future<void> invite({
+    required String email,
+    required String role,
+    String? deviceId,
+    String? invitedBy,
+  }) =>
+      _db.collection('user_invites').doc(email.trim().toLowerCase()).set({
+        'role': role,
+        if (deviceId != null && deviceId.trim().isNotEmpty)
+          'deviceId': deviceId.trim(),
+        if (invitedBy != null) 'invitedBy': invitedBy,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+  Future<void> withdrawInvite(String email) =>
+      _db.collection('user_invites').doc(email.trim().toLowerCase()).delete();
 
   /// Writes a summary for the session that just ended.
   ///

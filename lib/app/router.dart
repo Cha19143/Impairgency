@@ -7,8 +7,15 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import '../core/alerts/alert_presenter.dart';
 import '../core/session_store.dart';
 import '../core/speech/speaker.dart';
-import '../admin/screens/admin_overview_page.dart';
+import '../admin/screens/accessibility_screen.dart';
+import '../admin/screens/admin_page.dart';
+import '../admin/screens/admin_shell.dart';
 import '../admin/screens/admin_sign_in_screen.dart';
+import '../admin/screens/invite_dialog.dart';
+import '../admin/screens/overview_screen.dart';
+import '../admin/screens/system_health_screen.dart';
+import '../admin/screens/users_screen.dart';
+import '../core/places/session_summary.dart';
 import '../data/admin_repository.dart';
 import '../data/auth_service.dart';
 import '../data/geolocator_location_source.dart';
@@ -187,10 +194,92 @@ GoRouter createRouter(AppSession session) => GoRouter(
         ),
         GoRoute(
           path: Routes.adminOverview,
-          builder: (context, _) => AdminOverviewPage(
-            repository: session.admin,
-            onSelect: (section) => appNavigate(context, section.route),
-            onSignOut: () => session.auth.signOut(),
+          builder: (context, _) => AdminPage<UsageOverview>(
+            route: Routes.adminOverview,
+            title: 'Overview',
+            subtitle: 'Last 30 days',
+            load: session.admin.overview,
+            isEmpty: (data) => data.sessions == 0,
+            emptyTitle: 'No sessions yet',
+            builder: (_, data) => OverviewScreen(overview: data),
+            onSelect: (s) => appNavigate(context, s.route),
+            onSignOut: session.auth.signOut,
+          ),
+        ),
+        GoRoute(
+          path: Routes.adminUsers,
+          builder: (context, _) => AdminPage<
+              ({List<AdminUserRow> users, List<UserInvite> invites})>(
+            route: Routes.adminUsers,
+            title: 'Users',
+            subtitle: 'Visually impaired users, guardians and administrators',
+            load: () async {
+              final results = await Future.wait([
+                session.admin.users(),
+                session.admin.pendingInvites(),
+              ]);
+              return (
+                users: results[0] as List<AdminUserRow>,
+                invites: results[1] as List<UserInvite>,
+              );
+            },
+            builder: (context, data) => UsersScreen(
+              users: data.users,
+              invites: data.invites,
+              onInvite: () async {
+                final request = await showInviteDialog(context);
+                if (request == null) return;
+                await session.admin.invite(
+                  email: request.email,
+                  role: request.role,
+                  deviceId: request.deviceId,
+                  invitedBy: session.state.uid,
+                );
+                if (context.mounted) appNavigate(context, Routes.adminUsers);
+              },
+              onWithdraw: (invite) async {
+                await session.admin.withdrawInvite(invite.email);
+                if (context.mounted) appNavigate(context, Routes.adminUsers);
+              },
+            ),
+            onSelect: (s) => appNavigate(context, s.route),
+            onSignOut: session.auth.signOut,
+          ),
+        ),
+        GoRoute(
+          path: Routes.adminHealth,
+          builder: (context, _) => AdminPage<
+              ({UsageOverview overview, List<SessionSummary> flagged})>(
+            route: Routes.adminHealth,
+            title: 'System health',
+            subtitle: 'What can be measured without a server',
+            load: () async {
+              final results = await Future.wait([
+                session.admin.overview(),
+                session.admin.sessionsNeedingAttention(),
+              ]);
+              return (
+                overview: results[0] as UsageOverview,
+                flagged: results[1] as List<SessionSummary>,
+              );
+            },
+            builder: (_, data) => SystemHealthScreen(
+              overview: data.overview,
+              sessionsNeedingAttention: data.flagged,
+            ),
+            onSelect: (s) => appNavigate(context, s.route),
+            onSignOut: session.auth.signOut,
+          ),
+        ),
+        GoRoute(
+          path: Routes.adminAccessibility,
+          builder: (context, _) => AdminShell(
+            current: Routes.adminAccessibility,
+            title: 'Accessibility results',
+            subtitle: 'Measured, not audited',
+            onSelect: (s) => appNavigate(context, s.route),
+            onSignOut: session.auth.signOut,
+            child: const AccessibilityScreen(),
           ),
         ),
       ],

@@ -26,6 +26,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **48 / 85  (56%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `████████░░░░` | 8 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
@@ -309,11 +318,23 @@ just do not populate it with fabricated figures.
         summaries carry no coordinates, enforced in the rules
   - [x] detection performance — counts and positioning quality, with the
         caveat printed on screen that counts are not accuracy
-- [ ] **Users** — VI users, guardians, **admin accounts**, device links — §1.2
-- [ ] Add-user form gains email and role; Device ID becomes optional
-- [ ] **System health** — read `firebase_performance`, add Crashlytics — §1.4
-- [ ] Rename *Accessibility Audits* → *Accessibility Results*, wired to real
-      test output
+- [x] **Users** — VI users, guardians, admin accounts, device links — §1.2.
+      Admin status comes from the roster, not a field on the user document
+- [x] Add-user replaced by an **invitation**: email and role in, Device ID
+      optional, and **no password field at all**. Creating the auth account
+      here would mean a server or an admin choosing someone else's password
+      and signing themselves out doing it. The invited person registers
+      themselves and picks the role up on the way in
+- [x] **System health** — §1.4, split honestly. Positioning quality, flagged
+      sessions and emergencies are measured from real data; crashes and
+      response times are **linked to the console rather than mirrored**,
+      because reading them back needs a service account and therefore a
+      paid plan. A made-up crash-free percentage would repeat exactly the
+      defect this dashboard exists to fix
+- [x] *Accessibility Audits* → **Accessibility results**, showing the measured
+      contrast of every pair the app renders, computed live from the same
+      constant the app paints with and the tests assert against. All eight
+      pass AA; the three large action buttons clear AAA
 
 **Gate:** the deployed URL shows only the dashboard; a mobile build cannot reach
 it; a signed-in non-admin cannot reach it.

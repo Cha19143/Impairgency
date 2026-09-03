@@ -568,6 +568,62 @@ describe('one-time login codes', () => {
   });
 });
 
+describe('invitations — managing accounts without knowing passwords', () => {
+  const INVITE = 'newuser@example.com';
+
+  it('only an admin can issue one', async () => {
+    await assertFails(
+      setDoc(doc(as(VI), 'user_invites', INVITE), { role: 'vi' }),
+    );
+    await makeAdmin();
+    await assertSucceeds(
+      setDoc(doc(asAdmin(), 'user_invites', INVITE), { role: 'vi' }),
+    );
+  });
+
+  it('the invited person can read their own', async () => {
+    await makeAdmin();
+    await setDoc(doc(asAdmin(), 'user_invites', INVITE), { role: 'guardian' });
+
+    const invitee = env
+      .authenticatedContext('newbie', { email: 'NewUser@Example.com' })
+      .firestore();
+    // Their token's email is mixed case; the document id is lowercased.
+    await assertSucceeds(getDoc(doc(invitee, 'user_invites', INVITE)));
+  });
+
+  it('nobody can read an invitation meant for someone else', async () => {
+    await makeAdmin();
+    await setDoc(doc(asAdmin(), 'user_invites', INVITE), { role: 'vi' });
+
+    const other = env
+      .authenticatedContext('other', { email: 'other@example.com' })
+      .firestore();
+    await assertFails(getDoc(doc(other, 'user_invites', INVITE)));
+    await assertFails(getDoc(doc(anon(), 'user_invites', INVITE)));
+  });
+
+  it('the invited person cannot edit their own role', async () => {
+    // Otherwise an invitation to be a guardian becomes an invitation to be an
+    // administrator.
+    await makeAdmin();
+    await setDoc(doc(asAdmin(), 'user_invites', INVITE), { role: 'guardian' });
+
+    const invitee = env
+      .authenticatedContext('newbie', { email: INVITE })
+      .firestore();
+    await assertFails(
+      updateDoc(doc(invitee, 'user_invites', INVITE), { role: 'admin' }),
+    );
+  });
+
+  it('an admin can withdraw one', async () => {
+    await makeAdmin();
+    await setDoc(doc(asAdmin(), 'user_invites', INVITE), { role: 'vi' });
+    await assertSucceeds(deleteDoc(doc(asAdmin(), 'user_invites', INVITE)));
+  });
+});
+
 describe('session summaries — the admin-readable aggregate', () => {
   const grantHistory = () =>
     env.withSecurityRulesDisabled(async (ctx) => {

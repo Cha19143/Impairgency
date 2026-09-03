@@ -1,47 +1,60 @@
 import 'package:flutter/material.dart';
 
-import '../../core/places/session_summary.dart';
-import '../../data/admin_repository.dart';
 import '../admin_theme.dart';
 import 'admin_shell.dart';
-import 'overview_screen.dart';
 
-/// Loads §1.3's metrics and hands them to [OverviewScreen].
+/// Loads something, then shows it inside the shell.
 ///
-/// Split from the screen so the screen can be tested against fixed data, and so
-/// an empty dashboard is visibly empty rather than quietly showing zeroes that
-/// look like measurements.
-class AdminOverviewPage extends StatefulWidget {
-  const AdminOverviewPage({
+/// The three failure states are spelled out rather than collapsed into a
+/// spinner that never resolves: still loading, refused, and genuinely empty.
+/// The last one matters most — an empty dashboard has to look empty rather
+/// than showing zeroes that read as measurements.
+class AdminPage<T> extends StatefulWidget {
+  const AdminPage({
     super.key,
-    required this.repository,
+    required this.route,
+    required this.title,
+    required this.load,
+    required this.builder,
+    this.subtitle,
+    this.isEmpty,
+    this.emptyTitle = 'Nothing here yet',
+    this.emptyDetail =
+        'Numbers appear once the app has been used with history turned on. '
+        'Nothing is estimated in the meantime.',
     this.onSelect,
     this.onSignOut,
   });
 
-  final AdminRepository repository;
+  final String route;
+  final String title;
+  final String? subtitle;
+  final Future<T> Function() load;
+  final Widget Function(BuildContext, T) builder;
+  final bool Function(T)? isEmpty;
+  final String emptyTitle;
+  final String emptyDetail;
   final void Function(AdminSection)? onSelect;
   final VoidCallback? onSignOut;
 
   @override
-  State<AdminOverviewPage> createState() => _AdminOverviewPageState();
+  State<AdminPage<T>> createState() => _AdminPageState<T>();
 }
 
-class _AdminOverviewPageState extends State<AdminOverviewPage> {
-  late Future<UsageOverview> _future = widget.repository.overview();
+class _AdminPageState<T> extends State<AdminPage<T>> {
+  late Future<T> _future = widget.load();
 
-  void _reload() =>
-      setState(() => _future = widget.repository.overview());
+  void _reload() => setState(() => _future = widget.load());
 
   @override
   Widget build(BuildContext context) {
     return AdminShell(
-      current: '/admin/overview',
-      title: 'Overview',
-      subtitle: 'Last 30 days',
+      current: widget.route,
+      title: widget.title,
+      subtitle: widget.subtitle,
       onSelect: widget.onSelect,
       onSignOut: widget.onSignOut,
-      child: FutureBuilder<UsageOverview>(
+      child: FutureBuilder<T>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
@@ -51,31 +64,35 @@ class _AdminOverviewPageState extends State<AdminOverviewPage> {
             );
           }
           if (snapshot.hasError) {
-            return _Message(
-              title: 'Could not load the dashboard',
+            return AdminMessage(
+              title: 'Could not load this page',
               detail: 'The database refused the read. This usually means the '
                   'signed-in account is not on the admin roster.',
               onRetry: _reload,
             );
           }
-          final data = snapshot.data!;
-          if (data.sessions == 0) {
-            return _Message(
-              title: 'No sessions yet',
-              detail: 'Numbers appear here once someone has used the app with '
-                  'history turned on. Nothing is estimated in the meantime.',
+          final data = snapshot.data as T;
+          if (widget.isEmpty?.call(data) ?? false) {
+            return AdminMessage(
+              title: widget.emptyTitle,
+              detail: widget.emptyDetail,
               onRetry: _reload,
             );
           }
-          return OverviewScreen(overview: data);
+          return widget.builder(context, data);
         },
       ),
     );
   }
 }
 
-class _Message extends StatelessWidget {
-  const _Message({required this.title, required this.detail, this.onRetry});
+class AdminMessage extends StatelessWidget {
+  const AdminMessage({
+    super.key,
+    required this.title,
+    required this.detail,
+    this.onRetry,
+  });
 
   final String title;
   final String detail;

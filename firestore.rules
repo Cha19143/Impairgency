@@ -225,6 +225,28 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- invitations -------------------------------------------------------
+
+    // §1.2 asks administrators to manage accounts. It does not ask them to know
+    // anyone's password, and they must not.
+    //
+    // Creating a Firebase Auth account from the dashboard would mean either a
+    // server (a billing account this project does not have) or the admin
+    // choosing someone else's password and signing themselves out doing it. So
+    // an administrator issues an invitation instead: the role and any device
+    // assignment, keyed by email. The person registers themselves, chooses
+    // their own password, and picks the invitation up on the way in.
+    //
+    // Document id is the lowercased email, so the invitee can find their own.
+    match /user_invites/{email} {
+      allow read: if isAdmin()
+                  || (signedIn()
+                      && request.auth.token.email != null
+                      && email == request.auth.token.email.lower());
+
+      allow create, update, delete: if isAdmin();
+    }
+
     // ---- session summaries -------------------------------------------------
 
     // The aggregate layer administrators read for §1.3, so they never need a
