@@ -54,8 +54,16 @@ then uncomment the `Firebase.initializeApp` block in `lib/main.dart`.
 ### Deploying rules — do this before storing any real data
 
 ```bash
-firebase deploy --only firestore:rules,storage:rules
+firebase deploy --only firestore:rules
 ```
+
+Firestore rules only. **`storage:rules` is deliberately not deployed:** a Cloud
+Storage bucket requires the Blaze plan, and this project runs on the free tier.
+Nothing in scope stores a file, so there is no bucket to protect. The rules are
+still written and still verified — the Storage emulator provisions a local
+bucket at no cost, so `tool/test_rules.sh` proves them without a billing
+account. Adding `storage:rules` to the command above will fail until a bucket
+exists.
 
 `firestore.rules` and `storage.rules` are in version control on purpose. The
 previous project had neither, which meant nobody on the team could review who

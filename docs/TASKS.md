@@ -23,15 +23,14 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 
 | Phase | | Done |
 |---|---|---|
-| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 0 — Security and integrity `S` | `████████████` | 19 / 19 |
 | Phase 1 — Location, push, pairing `M` | `████████████` | 10 / 10 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
-| **Overall** | | **82 / 83  (99%)** |
-
+| **Overall** | | **83 / 83  (100%)** |
 
 ---
 

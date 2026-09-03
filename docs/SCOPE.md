@@ -35,6 +35,7 @@ the point.
 | **Video session recording** §1.1 | Substituted by an event timeline that serves the requirement's stated purpose — *"analyse navigation performance and identify possible system improvements"* — at no storage cost and none of the consent burden of recording a blind person's home. |
 | **Server-side push fan-out** | Cloud Functions need a billing account. The guardian app holds a Firestore listener and raises a local notification instead: reliable on Android, time-limited on iOS. `functions/index.js` is the production path, written and waiting. |
 | **iOS remote push** | Needs a $99/year Apple Developer membership. Android is the demo platform. iOS still does alarm, phone call, location and scan. |
+| **Deployed Storage rules** | A Cloud Storage bucket requires the Blaze plan. Nothing in scope stores a file, so there is no bucket and nothing to protect. `storage.rules` is written and **verified anyway** on the Storage emulator, which provisions a local bucket for free — that test found a real defect the console would have hidden. Free tooling proved a rule that a paid plan would have been needed to deploy. |
 
 ## Partial, and honest about it
 
