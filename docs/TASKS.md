@@ -37,6 +37,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
+| Port from `cprwire` — do not rewrite these | `██████░░░░░░` | 2 / 4 |
+| **Overall** | | **80 / 85  (94%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `████████░░░░` | 7 / 10 |
 | Port from `cprwire` — do not rewrite these | `██████░░░░░░` | 2 / 4 |
 | **Overall** | | **77 / 85  (91%)** |
@@ -286,7 +295,10 @@ Blocking. Nothing else should store data until this is deployed.
 - [x] `flutterfire configure` — project `impairgency-capstone`, one app `ph.impairgency.app` across android/ios/web
 - [x] `Firebase.initializeApp` wired in `lib/main.dart`
 - [x] `firebase deploy --only firestore:rules` — live on `impairgency-capstone`
-- [ ] `firebase deploy --only storage` — blocked: Storage is not provisioned on the
+- [ ] `firebase deploy --only storage` — **the one thing still blocked.**
+      Provisioning a bucket needs a location chosen in the console; there is no
+      CLI path. Nothing in scope stores a file, so this waits until something
+      does. `storage.rules` is written, committed and correct
       project yet (Console → Storage → Get Started). Nothing in scope needs it;
       recording is the substituted item, so this can wait for Phase 2 at the earliest
 - [x] Rules tests on the emulator — `tool/test_rules.sh`, 28 passing
