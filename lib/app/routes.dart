@@ -136,8 +136,26 @@ String? resolveRedirect({
     if (!session.signedIn) {
       return location == Routes.adminSignIn ? null : Routes.adminSignIn;
     }
-    if (!session.isAdmin) return Routes.adminSignIn;
-    return location == Routes.adminRoot ? Routes.adminOverview : null;
+    // Authenticated but not on the roster. Staying is correct - the sign-in
+    // screen renders a "signed in, but not an administrator" state that names
+    // the account and prints the document that would grant it - but say so with
+    // null rather than a redirect to the current location, which is a no-op
+    // dressed up as a decision.
+    if (!session.isAdmin) {
+      return location == Routes.adminSignIn ? null : Routes.adminSignIn;
+    }
+
+    // Signed in, and on the roster. The sign-in page has to be left as well as
+    // the bare /admin root: returning null here means "stay", and go_router
+    // treats a redirect to the current location as a no-op — so a correct
+    // password redisplayed the login form and nothing appeared to happen.
+    //
+    // The same shape of bug as the safety notice: a guard that is right about
+    // permission and silent about where to go next.
+    if (location == Routes.adminRoot || location == Routes.adminSignIn) {
+      return Routes.adminOverview;
+    }
+    return null;
   }
 
   // Mobile: the dashboard is not reachable, signed in or not.

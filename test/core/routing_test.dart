@@ -65,6 +65,68 @@ void main() {
       );
     });
 
+    test('a signed-in admin is moved off the sign-in page', () {
+      // The bug this exists for: the guard was right that the account was
+      // allowed and said nothing about where to go, so go_router kept them on
+      // the form they had just successfully filled in.
+      expect(
+        resolveRedirect(
+            isWeb: true, location: Routes.adminSignIn, session: admin),
+        Routes.adminOverview,
+      );
+    });
+
+    test('every web location resolves somewhere sensible for every session',
+        () {
+      // A matrix rather than one case each, because the two bugs found so far
+      // were both a location that was never paired with a session state.
+      const locations = [
+        Routes.adminRoot,
+        Routes.adminSignIn,
+        Routes.adminOverview,
+        Routes.adminUsers,
+        Routes.adminHealth,
+        Routes.adminAccessibility,
+      ];
+      final sessions = {
+        'anonymous': anon,
+        'signed in, not admin': const SessionState(signedIn: true),
+        'admin': admin,
+      };
+
+      sessions.forEach((label, session) {
+        for (final location in locations) {
+          final target =
+              resolveRedirect(isWeb: true, location: location, session: session);
+
+          // Never bounce a visitor to the page they are already on: that is a
+          // no-op, and it looks to the user like nothing happened.
+          expect(target, isNot(location),
+              reason: '$label at $location redirects to itself');
+
+          if (session.isAdmin) {
+            // An admin never lands on sign-in, and never sits on the bare root.
+            expect(target, isNot(Routes.adminSignIn), reason: '$label $location');
+            if (location == Routes.adminRoot ||
+                location == Routes.adminSignIn) {
+              expect(target, Routes.adminOverview, reason: '$label $location');
+            } else {
+              expect(target, isNull, reason: '$label $location');
+            }
+          } else {
+            // Everyone else ends up at sign-in, or is already there - in which
+            // case the answer is null, not a redirect to where they already
+            // are. The sign-in screen explains the not-an-admin case itself.
+            expect(target ?? location, Routes.adminSignIn,
+                reason: '$label $location');
+            if (location == Routes.adminSignIn) {
+              expect(target, isNull, reason: '$label $location');
+            }
+          }
+        }
+      });
+    });
+
     test('anonymous mobile users are held in onboarding', () {
       expect(
         resolveRedirect(isWeb: false, location: Routes.home, session: anon),
