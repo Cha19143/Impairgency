@@ -34,6 +34,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 |---|---|---|
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **36 / 85  (42%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `█████████░░░` | 5 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
@@ -266,8 +275,10 @@ in **release** mode, not debug.
       that never moved. That is what "identify possible system improvements"
       is actually asking for
 
-**Gate:** one recorded walk produces a named place, a schedule bucket, a
-replayable path and a timeline — from the same collection.
+**Gate:** ✅ **passed** — `test/core/places/phase2_gate_test.dart` feeds a
+fortnight of one plausible life into the fixes collection and gets all four
+back out: two places, a schedule described in local time, a 4 km replayable
+path, and a review timeline. Asserted rather than claimed.
 
 ---
 
