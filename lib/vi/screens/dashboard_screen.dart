@@ -1,0 +1,183 @@
+import 'package:flutter/material.dart';
+
+import '../../app/theme.dart';
+import '../../core/speech/speaker.dart';
+import '../widgets/vi_button.dart';
+
+/// Three buttons, kept exactly as `ui.pdf` drew them.
+///
+/// This screen is the best thing in the submitted design and it is left alone.
+/// Real subtraction is rare; three enormous, unambiguous choices is the right
+/// answer for someone operating a phone by ear.
+///
+/// Two additions only: consent state that can be seen and changed, and a way
+/// into the vocabulary the microphone icons keep implying.
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({
+    super.key,
+    required this.onScan,
+    required this.onAssist,
+    required this.onSos,
+    required this.onWhatCanISay,
+    required this.onSettings,
+    this.consent = const {},
+    this.speaker = const SilentSpeaker(),
+  });
+
+  final VoidCallback onScan;
+  final VoidCallback onAssist;
+  final VoidCallback onSos;
+  final VoidCallback onWhatCanISay;
+  final VoidCallback onSettings;
+  final Map<String, bool> consent;
+  final Speaker speaker;
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.speaker.speak('Say scan, navigate, or help.');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.speaker.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final on = widget.consent.entries.where((e) => e.value).map((e) => e.key);
+
+    return Scaffold(
+      backgroundColor: AppColors.navy,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'ImpairGency',
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Semantics(
+                    button: true,
+                    label: 'Settings',
+                    child: ExcludeSemantics(
+                      child: IconButton(
+                        iconSize: 34,
+                        onPressed: widget.onSettings,
+                        icon: const Icon(Icons.settings_outlined,
+                            color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ViButton(
+                      label: 'SCAN ENVIRONMENT',
+                      icon: Icons.document_scanner_outlined,
+                      onPressed: widget.onScan,
+                    ),
+                    ViButton(
+                      label: 'SMART ASSISTANCE',
+                      icon: Icons.auto_awesome,
+                      kind: ViButtonKind.secondary,
+                      onPressed: widget.onAssist,
+                    ),
+                    ViButton(
+                      label: 'EMERGENCY SOS',
+                      icon: Icons.emergency_outlined,
+                      kind: ViButtonKind.emergency,
+                      onPressed: widget.onSos,
+                    ),
+                  ],
+                ),
+              ),
+              // Visible consent state. §7 asks for consent; a user who cannot
+              // see a settings screen has no other way to know what is on.
+              Semantics(
+                button: true,
+                label: on.isEmpty
+                    ? 'Nothing is being shared. Open settings to change it.'
+                    : 'Currently sharing: ${on.join(', ')}. Open settings to '
+                        'change it.',
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    onTap: widget.onSettings,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          for (final entry in widget.consent.entries)
+                            _ConsentChip(name: entry.key, on: entry.value),
+                          if (widget.consent.isEmpty)
+                            const _ConsentChip(name: 'nothing shared', on: false),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              ViButton(
+                label: 'What can I say?',
+                kind: ViButtonKind.quiet,
+                onPressed: widget.onWhatCanISay,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConsentChip extends StatelessWidget {
+  const _ConsentChip({required this.name, required this.on});
+
+  final String name;
+  final bool on;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(
+              color: on ? AppColors.green : AppColors.hairline, width: 1.5),
+          borderRadius: BorderRadius.circular(8),
+          color: on ? AppColors.green.withValues(alpha: 0.12) : null,
+        ),
+        child: Text(
+          '$name ${on ? 'on' : 'off'}',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: on ? AppColors.green : AppColors.textSecondary,
+          ),
+        ),
+      );
+}

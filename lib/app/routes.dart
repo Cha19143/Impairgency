@@ -21,6 +21,9 @@ abstract final class Routes {
   static const device = '/onboarding/device';
   static const allSet = '/onboarding/done';
   static const home = '/home';
+  static const sos = '/sos';
+  static const whatCanISay = '/what-can-i-say';
+  static const settings = '/settings';
 
   // Guardian app (mobile)
   static const guardianHome = '/guardian';
@@ -57,6 +60,10 @@ class SessionState {
     this.isGuardian = false,
     this.safetyAcknowledged = false,
     this.completedSteps = const <String>{},
+    this.consent = const {},
+    this.contactName,
+    this.contactNumber,
+    this.guardianCount = 0,
   });
 
   /// The signed-in account, or null. Present so screens that write on the
@@ -72,6 +79,18 @@ class SessionState {
   final bool safetyAcknowledged;
 
   final Set<String> completedSteps;
+
+  /// What the user has agreed to, read from their user document. Shown on the
+  /// dashboard so consent is visible without opening a settings screen.
+  final Map<String, bool> consent;
+
+  /// The emergency contact, so SOS does not have to fetch it mid-emergency.
+  final String? contactName;
+  final String? contactNumber;
+
+  /// How many guardians are paired. Zero means the SOS receipt says so rather
+  /// than reporting a failure that was never attempted.
+  final int guardianCount;
 
   bool get setupComplete =>
       Routes.onboardingFlow.every(completedSteps.contains);

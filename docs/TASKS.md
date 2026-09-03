@@ -27,6 +27,24 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `███████░░░░░` | 13 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **61 / 85  (72%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `██████░░░░░░` | 10 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **58 / 85  (68%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `█████░░░░░░░` | 8 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
 | Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
@@ -372,17 +390,22 @@ it; a signed-in non-admin cannot reach it.
 
 **SOS**
 
-- [ ] Arming countdown before anything dials — §7 reliability
-- [ ] Cancel keywords wired to the countdown (`kCancellationCommands`)
-- [ ] Receipt naming every leg's outcome, spoken and shown
-- [ ] Failed legs named as failed, never implied as success
+- [x] Arming countdown before anything dials — §7. Three ways to stop it:
+      say cancel, touch anywhere on the screen, or press the button
+- [x] Cancel keywords wired to the countdown. Saying **help** during it does
+      *not* cancel — that would be the opposite of what was asked for
+- [x] Receipt naming every leg's outcome, spoken and shown from one wording,
+      so what is heard and what is read cannot drift
+- [x] Failed legs named as failed. "No contact saved" reads differently from
+      "the call did not connect" — different remedies, different sentences
 
 **Voice** — the parser and its tests already exist; these are the handlers
 
 - [ ] `whereAmI` handler — §2.C
 - [ ] `callGuardian` handler — §2.C
 - [ ] `connectDevice` handler — §2.C, honest about §5 being out of scope
-- [ ] "What can I say?" screen, generated from `kCommandDescriptions`
+- [x] "What can I say?" — generated from `kVoiceKeywords`, so it cannot drift
+      from what the parser accepts. Lists the Filipino variants too
 
 **Other**
 

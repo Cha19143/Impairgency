@@ -21,6 +21,7 @@ import '../data/auth_service.dart';
 import '../data/geolocator_location_source.dart';
 import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
+import '../data/sos_engine.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
 import '../shared/widgets/pending_screen.dart';
 import '../vi/onboarding/all_set_screen.dart';
@@ -32,7 +33,10 @@ import '../vi/onboarding/invite_guardian_screen.dart';
 import '../vi/onboarding/onboarding_controller.dart';
 import '../vi/onboarding/preferences_screen.dart';
 import '../vi/onboarding/welcome_screen.dart';
+import '../vi/screens/dashboard_screen.dart';
 import '../vi/screens/location_debug_screen.dart';
+import '../vi/screens/sos_flow.dart';
+import '../vi/screens/what_can_i_say_screen.dart';
 import '../vi/screens/safety_notice_screen.dart';
 import '../vi/widgets/vi_button.dart';
 import '../vi/widgets/vi_screen.dart';
@@ -63,6 +67,9 @@ class AppSession extends ChangeNotifier {
 
   AuthService? _auth;
   AuthService get auth => _auth ??= AuthService();
+
+  SosEngine? _sos;
+  SosEngine get sos => _sos ??= SosEngine(speaker: speaker);
 
   OnboardingController? _onboarding;
   OnboardingController get onboarding => _onboarding ??= OnboardingController(
@@ -291,7 +298,37 @@ GoRouter createRouter(AppSession session) => GoRouter(
             },
           ),
         ),
-        _page(Routes.home, 'Dashboard', 'Phase 4', '§2.C'),
+        GoRoute(
+          path: Routes.home,
+          builder: (context, _) => DashboardScreen(
+            speaker: session.speaker,
+            consent: session.state.consent,
+            onScan: () => appNavigate(context, Routes.home),
+            onAssist: () => appNavigate(context, Routes.home),
+            onSos: () => appNavigate(context, Routes.sos),
+            onWhatCanISay: () => appNavigate(context, Routes.whatCanISay),
+            onSettings: () => appNavigate(context, Routes.settings),
+          ),
+        ),
+        GoRoute(
+          path: Routes.sos,
+          builder: (context, _) => SosFlow(
+            engine: session.sos,
+            userId: session.state.uid ?? 'unknown',
+            speaker: session.speaker,
+            contactName: session.state.contactName,
+            contactNumber: session.state.contactNumber,
+            guardianCount: session.state.guardianCount,
+            onFinished: () => appNavigate(context, Routes.home),
+          ),
+        ),
+        GoRoute(
+          path: Routes.whatCanISay,
+          builder: (context, _) => WhatCanISayScreen(
+            speaker: session.speaker,
+            onBack: () => appNavigate(context, Routes.home),
+          ),
+        ),
 
         // ---- guardian app (mobile) ----
         _page(Routes.guardianHome, 'Guardian', 'Phase 1', '§3.1, §3.2'),
