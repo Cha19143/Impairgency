@@ -43,12 +43,17 @@ abstract final class Routes {
 /// Everything the redirect rule needs to know.
 class SessionState {
   const SessionState({
+    this.uid,
     this.signedIn = false,
     this.isAdmin = false,
     this.isGuardian = false,
     this.safetyAcknowledged = false,
     this.completedSteps = const <String>{},
   });
+
+  /// The signed-in account, or null. Present so screens that write on the
+  /// user's behalf do not have to reach for FirebaseAuth themselves.
+  final String? uid;
 
   final bool signedIn;
   final bool isAdmin;

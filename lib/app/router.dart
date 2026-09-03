@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../core/session_store.dart';
 import '../core/speech/speaker.dart';
+import '../data/pairing_repository.dart';
+import '../guardian/screens/accept_invitation_screen.dart';
 import '../shared/widgets/pending_screen.dart';
 import '../vi/screens/safety_notice_screen.dart';
 import 'routes.dart';
@@ -12,12 +14,18 @@ import 'routes.dart';
 /// against the new project. Until then it reports signed out, which is the
 /// correct default: the guard fails closed.
 class AppSession extends ChangeNotifier {
-  AppSession({SessionStore? store, Speaker? speaker})
+  AppSession({SessionStore? store, Speaker? speaker, PairingRepository? pairing})
       : store = store ?? InMemorySessionStore(),
-        speaker = speaker ?? const SilentSpeaker();
+        speaker = speaker ?? const SilentSpeaker(),
+        _pairing = pairing;
 
   final SessionStore store;
   final Speaker speaker;
+
+  // Constructed lazily so a widget test that never opens a Firestore-backed
+  // screen does not need Firebase initialised.
+  PairingRepository? _pairing;
+  PairingRepository get pairing => _pairing ??= PairingRepository();
 
   SessionState _state = const SessionState();
   SessionState get state => _state;
@@ -81,7 +89,13 @@ GoRouter createRouter(AppSession session) => GoRouter(
 
         // ---- guardian app (mobile) ----
         _page(Routes.guardianHome, 'Guardian', 'Phase 1', '§3.1, §3.2'),
-        _page(Routes.guardianAccept, 'Accept invitation', 'Phase 1', '§3'),
+        GoRoute(
+          path: Routes.guardianAccept,
+          builder: (context, _) => AcceptInvitationScreen(
+            onRedeem: (code) => _redeem(session, code),
+            onAccepted: () => appNavigate(context, Routes.guardianHome),
+          ),
+        ),
 
         // ---- admin dashboard (web) ----
         _page(Routes.adminRoot, 'Admin', 'Phase 3', 'Overview'),
@@ -96,3 +110,25 @@ GoRoute _page(String path, String title, String phase, String requirement) =>
       builder: (_, __) =>
           PendingScreen(title: title, phase: phase, requirement: requirement),
     );
+
+
+/// Redeems a code as the signed-in guardian.
+///
+/// Returns null on success, or the sentence to show. Lives here rather than in
+/// the screen so the screen stays testable without Firestore.
+Future<String?> _redeem(AppSession session, String code) async {
+  final guardianId = session.state.uid;
+  if (guardianId == null) {
+    return 'Sign in first, then enter the code they gave you.';
+  }
+  final result = await session.pairing.redeem(code, guardianId: guardianId);
+  return switch (result) {
+    RedeemSucceeded() => null,
+    RedeemFailed(:final spoken) => spoken,
+  };
+}
+
+/// Extracted so the navigation on success is one named thing rather than an
+/// inline closure inside a route table.
+void appNavigate(BuildContext context, String location) =>
+    GoRouter.of(context).go(location);
