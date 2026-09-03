@@ -10,9 +10,66 @@ are corrected here; see [Corrections](#corrections-to-the-previous-plan) at the 
 
 ---
 
-## Where the project actually stands
+## Status
 
-One FlutterFlow app at `cprwire/`, 25 screens, Firebase backend, `main` branch.
+**This repository is the rebuild.** The `cprwire` FlutterFlow project is retained
+only as a reference to port from.
+
+Three decisions, taken:
+
+- **Hand-written Flutter**, not FlutterFlow. §6 names FlutterFlow as a
+  possibility, not a requirement. Generated widget/model pairs are what made the
+  old repo hard to restructure, and regeneration overwrites hand edits — which
+  would fight every custom thing this project needs: location, push, the web
+  split, the ML pipeline.
+- **A new Firebase project.** This resolves the largest finding for free: rules
+  are written from scratch on day one rather than inherited in an unknown,
+  possibly-expiring state.
+- **`ph.impairgency.app`** as the bundle identifier. The old package was named
+  `cprwire` — in every import, both bundle IDs, and the web title.
+
+### Already done
+
+| | |
+|---|---|
+| Project scaffolded | `android`, `ios`, `web` targets; all three build |
+| `firestore.rules` | Written and committed. Guardian access via accepted pairing only; location reads additionally gated on consent; admin is a **custom claim**, never a client-writable field; `otp_verification` unreachable from any client path; default deny |
+| `storage.rules` | Owner-only. The old rules paired a blanket deny with `allow read: if true` on `/users/**`, so every user file was public |
+| `firebase.json` | Declares `firestore`, `storage`, `functions`, `hosting` and emulator ports — the old one declared none, so rules were undeployable and the web build had no target |
+| Router guard + platform split | `lib/app/routes.dart`. On web the app *is* the dashboard; on mobile the dashboard is unreachable. Onboarding resumes at the first incomplete step |
+| Contrast defect | Fixed and **asserted in a test**. `lib/core/a11y/contrast.dart` + `test/core/contrast_test.dart` |
+| Voice vocabulary | Ported and extended from three commands to all six §2.C names, plus context-scoped cancellation |
+| Tests | **34, all green**, up from 8 |
+
+### What was ported, and what was left
+
+**Ported:** the voice command vocabulary and its eight tests; the palette; the
+object-detection approach (ML Kit + `tflite_flutter`).
+
+**Left behind:** FlutterFlow's `lib/flutter_flow/` scaffolding and its generated
+widget/model pairs; the `cprwire` package name; the mocked screens
+(`analytics` with its hardcoded `15.4K`, `guardian_location` with its hardcoded
+address); the fabricated device-ID counter.
+
+**Still to port from `cprwire/`:** the camera and detection loop in
+`scan_environment_widget.dart`, the contact picker, and the OTP Cloud Functions
+in `firebase/functions/`. All three work and none should be rewritten from
+scratch — but none should be pasted in with their FlutterFlow scaffolding either.
+
+### Next
+
+Phase 0 items 1–5 are done. **Item 6 (the safety notice) and all of Phase 1
+remain.** Run `flutterfire configure` against the new project, uncomment the
+`Firebase.initializeApp` block in `lib/main.dart`, and deploy the rules before
+storing any real data.
+
+---
+
+## Where the old project stood
+
+The audit that produced this plan. One FlutterFlow app at `cprwire/`, 25 screens,
+Firebase backend. Everything below is the reference being ported *from*, not the
+state of this repository.
 
 **Works, and is worth defending:**
 - On-device object detection — `google_mlkit_object_detection` + `tflite_flutter`
@@ -91,29 +148,30 @@ into the documentation rather than hidden:
 
 ---
 
-## Phase 0 — Security and integrity
+## Phase 0 — Security and integrity  ·  *items 1–5 done*
 
-Blocking. Small. Everything else writes data that these rules protect.
+Blocking. Small. Everything else writes data that these rules protect. In the old
+repo these were repairs; here they are simply how the project starts.
 
-1. **Write `cprwire/firebase/firestore.rules` and commit it.** A user document is
+1. ~~Write `firestore.rules` and commit it.~~ **Done.** A user document is
    readable and writable by its owner; a guardian reads only the users who have
    accepted their pairing; admins are identified by a custom claim, never by a
    field the client can write. `otp_verification` is **writable by nobody from the
    client** — codes are issued and checked in `firebase/functions/`, because a
    collection of live login codes that any authenticated session can read is an
    account takeover.
-2. **Fix `storage.rules`.** Remove the public-read match. Owner-only.
-3. **Add `firestore`, `storage` and `hosting` to `firebase.json`** so rules are
+2. ~~Fix `storage.rules`.~~ **Done.** Remove the public-read match. Owner-only.
+3. ~~Add `firestore`, `storage` and `hosting` to `firebase.json`~~ **Done.** so rules are
    deployable from the repo and the web build has a target.
-4. **Add a `redirect` to `createRouter`.** Signed out → HomePage. Signed in without
+4. ~~Add a `redirect` to `createRouter`.~~ **Done** — `lib/app/routes.dart`, 12 tests. Signed out → HomePage. Signed in without
    completed setup → resume onboarding. Admin routes require the admin claim. This
    is one function and it closes the URL hole before the web build exists.
-5. **Fix the contrast defect.** The cyan buttons set their label to
+5. ~~Fix the contrast defect.~~ **Done** — and asserted, so it cannot come back. The cyan buttons set their label to
    `FlutterFlowTheme.of(context).secondaryBackground`, which is `#FFFFFF` in the
    light theme — white on `#00FFFF`, about **1.1:1**. Requirements §4 asks for high
    contrast in as many words. Use a fixed dark ink on cyan. It is a one-line change
    in each of `main_dashboard`, `scan_environment` and the register screens.
-6. **Add the safety notice.** §7: *"AI guidance should assist users but should not
+6. **Add the safety notice.** *Still to do.* §7: *"AI guidance should assist users but should not
    guarantee that an environment is completely safe."* Spoken once on first run,
    and reachable afterwards from the dashboard. One screen. It is also the sentence
    that justifies every scoping decision below.
