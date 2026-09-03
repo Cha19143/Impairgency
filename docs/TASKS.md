@@ -42,7 +42,11 @@ Blocking. Nothing else should store data until this is deployed.
 - [x] `firestore.rules` written and committed — guardian access via accepted
       pairing only, location reads additionally gated on consent, admin as a
       custom claim, `otp_verification` unreachable from any client, default deny
-- [x] `storage.rules` — owner-only, size-capped, no public-read match
+- [x] `storage.rules` — owner-only, size-capped, no public-read match, and
+      **proved on the emulator**. Writing the tests found a live defect: the
+      size cap sat on a combined `read, write` allow, but `request.resource`
+      is null on reads and deletes, so the owner was locked out of their own
+      files. Split by operation and asserted
 - [x] `firebase.json` — `firestore`, `storage`, `functions`, `hosting`, emulators
 - [x] Router redirect: platform split + auth guard (`lib/app/routes.dart`)
 - [x] Contrast defect fixed **and asserted** (`test/core/contrast_test.dart`) — §4
@@ -52,13 +56,16 @@ Blocking. Nothing else should store data until this is deployed.
 - [x] `flutterfire configure` — project `impairgency-capstone`, one app `ph.impairgency.app` across android/ios/web
 - [x] `Firebase.initializeApp` wired in `lib/main.dart`
 - [x] `firebase deploy --only firestore:rules` — live on `impairgency-capstone`
-- [ ] `firebase deploy --only storage` — **the one thing still blocked.**
-      Provisioning a bucket needs a location chosen in the console; there is no
-      CLI path. Nothing in scope stores a file, so this waits until something
-      does. `storage.rules` is written, committed and correct
-      project yet (Console → Storage → Get Started). Nothing in scope needs it;
-      recording is the substituted item, so this can wait for Phase 2 at the earliest
-- [x] Rules tests on the emulator — `tool/test_rules.sh`, 28 passing
+- [x] `firebase deploy --only storage` — **not blocked. Out of scope, on purpose.**
+      A Cloud Storage bucket requires the **Blaze plan**, which this project has
+      no budget for. This was previously recorded as "needs a location chosen in
+      the console"; that was wrong, and it mattered, because it framed a hard
+      budget boundary as thirty seconds of clicking. These rules cannot be
+      deployed on this project at all. They are *proved* instead, on the Storage
+      emulator, which provisions a local bucket for free — see
+      `test/rules/storage.test.js`. Nothing in scope stores a file; recording is
+      the substituted item. Defended in `docs/SCOPE.md`
+- [x] Rules tests on the emulator — `tool/test_rules.sh`, 74 passing (64 Firestore, 10 Storage)
   - [x] owner reads and writes own document
   - [x] guardian reads a paired user
   - [x] guardian is refused an unpaired user

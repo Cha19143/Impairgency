@@ -20,7 +20,18 @@ const adminSections = <AdminSection>[
       '/admin/accessibility'),
 ];
 
-/// Sidebar and content. Web only — the router never registers these on mobile.
+/// Below this the sidebar becomes a drawer.
+const double kAdminSidebarBreakpoint = 900;
+
+/// Content stops growing here. On a very wide monitor a table row stretched to
+/// the full window puts the number a long way from the label it belongs to.
+const double kAdminMaxContentWidth = 1180;
+
+/// Sidebar and content, or a drawer and content.
+///
+/// The narrow layout used to drop the sidebar and put nothing in its place,
+/// which left every section but the current one unreachable. A responsive
+/// layout that hides navigation is not responsive, it is broken.
 class AdminShell extends StatelessWidget {
   const AdminShell({
     super.key,
@@ -41,22 +52,63 @@ class AdminShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final narrow = MediaQuery.sizeOf(context).width < 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final narrow = width < kAdminSidebarBreakpoint;
+    final tight = width < 520;
 
     return Scaffold(
+      drawer: narrow
+          ? Drawer(
+              backgroundColor: AdminColors.chrome,
+              child: SafeArea(
+                child: AdminNav(
+                  current: current,
+                  onSignOut: onSignOut,
+                  onSelect: (section) {
+                    // Close the drawer first: leaving it open over the page it
+                    // just navigated to hides the thing the user asked for.
+                    Navigator.of(context).pop();
+                    onSelect?.call(section);
+                  },
+                ),
+              ),
+            )
+          : null,
+      appBar: narrow
+          ? AppBar(
+              backgroundColor: AdminColors.chrome,
+              foregroundColor: Colors.white,
+              title: const Text('ImpairGency',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            )
+          : null,
       body: Row(
         children: [
-          if (!narrow) _Sidebar(current: current, onSelect: onSelect, onSignOut: onSignOut),
+          if (!narrow)
+            SizedBox(
+              width: 224,
+              child: ColoredBox(
+                color: AdminColors.chrome,
+                child: AdminNav(
+                  current: current,
+                  onSelect: onSelect,
+                  onSignOut: onSignOut,
+                ),
+              ),
+            ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 26, 28, 14),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+            child: SafeArea(
+              top: !narrow,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxWidth: kAdminMaxContentWidth),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                            tight ? 16 : 28, narrow ? 18 : 26, tight ? 16 : 28, 14),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -64,8 +116,8 @@ class AdminShell extends StatelessWidget {
                               header: true,
                               child: Text(
                                 title,
-                                style: const TextStyle(
-                                  fontSize: 26,
+                                style: TextStyle(
+                                  fontSize: tight ? 22 : 26,
                                   fontWeight: FontWeight.bold,
                                   color: AdminColors.ink,
                                 ),
@@ -84,18 +136,17 @@ class AdminShell extends StatelessWidget {
                           ],
                         ),
                       ),
-                      if (narrow && onSignOut != null)
-                        TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.fromLTRB(
+                              tight ? 16 : 28, 0, tight ? 16 : 28, 32),
+                          child: child,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(28, 0, 28, 32),
-                    child: child,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -104,8 +155,14 @@ class AdminShell extends StatelessWidget {
   }
 }
 
-class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.current, this.onSelect, this.onSignOut});
+/// The nav itself, shared by the sidebar and the drawer.
+class AdminNav extends StatelessWidget {
+  const AdminNav({
+    super.key,
+    required this.current,
+    this.onSelect,
+    this.onSignOut,
+  });
 
   final String current;
   final void Function(AdminSection)? onSelect;
@@ -113,9 +170,7 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 224,
-      color: AdminColors.chrome,
+    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -176,7 +231,7 @@ class _NavItem extends StatelessWidget {
           highlightColor: Colors.transparent,
           hoverColor: AdminColors.accent.withValues(alpha: 0.06),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
             child: Row(
               children: [
                 Icon(section.icon,

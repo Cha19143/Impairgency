@@ -25,33 +25,48 @@ class OverviewScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _Kpi(
-              label: 'Active users',
-              value: '${overview.activeUsers}',
-              note: 'with a session in this period',
-            ),
-            _Kpi(
-              label: 'Navigation sessions',
-              value: '${overview.sessions}',
-            ),
-            _Kpi(
-              label: 'SOS incidents',
-              value: '${overview.sosIncidents}',
-              alert: overview.sosIncidents > 0,
-            ),
-            _Kpi(
-              label: 'Positioning quality',
-              value: overview.sessions == 0
-                  ? '—'
-                  : '${((1 - overview.medianDiscardedFraction) * 100).round()}%',
-              note: 'median usable readings',
-            ),
-          ],
-        ),
+        LayoutBuilder(builder: (context, constraints) {
+          // Cards fill the row rather than sitting at a fixed 208 px with dead
+          // space beside them. Four across on a desktop, two on a tablet, one
+          // on a phone.
+          final columns = constraints.maxWidth >= 880
+              ? 4
+              : (constraints.maxWidth >= 460 ? 2 : 1);
+          final cardWidth =
+              (constraints.maxWidth - 12 * (columns - 1)) / columns;
+
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _Kpi(
+                width: cardWidth,
+                label: 'Active users',
+                value: '${overview.activeUsers}',
+                note: 'with a session in this period',
+              ),
+              _Kpi(
+                width: cardWidth,
+                label: 'Navigation sessions',
+                value: '${overview.sessions}',
+              ),
+              _Kpi(
+                width: cardWidth,
+                label: 'SOS incidents',
+                value: '${overview.sosIncidents}',
+                alert: overview.sosIncidents > 0,
+              ),
+              _Kpi(
+                width: cardWidth,
+                label: 'Positioning quality',
+                value: overview.sessions == 0
+                    ? '—'
+                    : '${((1 - overview.medianDiscardedFraction) * 100).round()}%',
+                note: 'median usable readings',
+              ),
+            ],
+          );
+        }),
         const SizedBox(height: 20),
         LayoutBuilder(builder: (context, constraints) {
           final stacked = constraints.maxWidth < 780;
@@ -126,12 +141,14 @@ class _Kpi extends StatelessWidget {
   const _Kpi({
     required this.label,
     required this.value,
+    required this.width,
     this.note,
     this.alert = false,
   });
 
   final String label;
   final String value;
+  final double width;
   final String? note;
   final bool alert;
 
@@ -141,7 +158,7 @@ class _Kpi extends StatelessWidget {
       label: '$label: $value',
       child: ExcludeSemantics(
         child: Container(
-          width: 208,
+          width: width,
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
           decoration: BoxDecoration(
             color: alert ? const Color(0xFFFDF4F5) : AdminColors.card,

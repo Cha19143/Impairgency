@@ -134,56 +134,82 @@ class _Row extends StatelessWidget {
             ? null
             : const Border(bottom: BorderSide(color: Color(0xFFEDF0F6))),
       ),
-      child: Row(
-        children: [
-          // The sample is the point: a number nobody can see is easy to argue
-          // with, and this is what the pair actually looks like.
-          Container(
-            width: 74,
-            height: 34,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: background,
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: AdminColors.line),
-            ),
-            child: Text('Sample',
-                style: TextStyle(
-                    color: foreground,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold)),
+      child: LayoutBuilder(builder: (context, constraints) {
+        // Below this the four columns crush the name into two characters, so
+        // the ratio and verdict move under it instead.
+        final stacked = constraints.maxWidth < 460;
+
+        // The sample is the point: a number nobody can see is easy to argue
+        // with, and this is what the pair actually looks like.
+        final sample = Container(
+          width: 74,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: AdminColors.line),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(name,
-                style: const TextStyle(fontSize: 13.5, color: AdminColors.ink)),
-          ),
-          SizedBox(
-            width: 74,
-            child: Text(
-              '${ratio.toStringAsFixed(1)}:1',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-                fontFeatures: [FontFeature.tabularFigures()],
-                color: AdminColors.ink,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 120,
-            child: Text(
-              verdict.$1,
-              textAlign: TextAlign.right,
+          child: Text('Sample',
               style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: verdict.$2),
-            ),
+                  color: foreground, fontSize: 11, fontWeight: FontWeight.bold)),
+        );
+
+        final label = Text(name,
+            style: const TextStyle(fontSize: 13.5, color: AdminColors.ink));
+
+        final measurement = Text(
+          '${ratio.toStringAsFixed(1)}:1',
+          textAlign: stacked ? TextAlign.left : TextAlign.right,
+          style: const TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            fontFeatures: [FontFeature.tabularFigures()],
+            color: AdminColors.ink,
           ),
-        ],
-      ),
+        );
+
+        final grade = Text(
+          verdict.$1,
+          textAlign: stacked ? TextAlign.left : TextAlign.right,
+          style: TextStyle(
+              fontSize: 12.5, fontWeight: FontWeight.w600, color: verdict.$2),
+        );
+
+        if (stacked) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              sample,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    label,
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      measurement,
+                      const SizedBox(width: 10),
+                      grade,
+                    ]),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            sample,
+            const SizedBox(width: 14),
+            Expanded(child: label),
+            SizedBox(width: 74, child: measurement),
+            SizedBox(width: 120, child: grade),
+          ],
+        );
+      }),
     );
   }
 }

@@ -41,11 +41,17 @@ class SystemHealthScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
+        LayoutBuilder(builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 720
+              ? 3
+              : (constraints.maxWidth >= 460 ? 2 : 1);
+          final w = (constraints.maxWidth - 12 * (columns - 1)) / columns;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
             _Stat(
+              width: w,
               label: 'Positioning quality',
               value: quality == null ? '—' : '${quality.round()}%',
               note: 'median usable readings per session',
@@ -54,19 +60,22 @@ class SystemHealthScreen extends StatelessWidget {
                   : (quality >= 80 ? _State.good : _State.warn),
             ),
             _Stat(
+              width: w,
               label: 'Sessions flagged',
               value: '$flagged',
               note: 'of ${overview.sessions} in this period',
               state: flagged == 0 ? _State.good : _State.warn,
             ),
             _Stat(
+              width: w,
               label: 'Emergencies',
               value: '${overview.sosIncidents}',
               note: 'SOS sent',
               state: overview.sosIncidents == 0 ? _State.good : _State.bad,
             ),
           ],
-        ),
+          );
+        }),
         const SizedBox(height: 16),
         if (sessionsNeedingAttention.isNotEmpty)
           _Card(
@@ -145,11 +154,13 @@ class _Stat extends StatelessWidget {
     required this.label,
     required this.value,
     required this.state,
+    required this.width,
     this.note,
   });
 
   final String label;
   final String value;
+  final double width;
   final String? note;
   final _State state;
 
@@ -166,7 +177,7 @@ class _Stat extends StatelessWidget {
       label: '$label: $value',
       child: ExcludeSemantics(
         child: Container(
-          width: 218,
+          width: width,
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
           decoration: BoxDecoration(
             color: AdminColors.card,

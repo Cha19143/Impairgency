@@ -83,12 +83,19 @@ class UsersScreen extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 13, color: AdminColors.inkMuted)),
                 )
-              : Column(
-                  children: [
-                    const _HeaderRow(),
-                    for (final user in users) _UserRow(user: user),
-                  ],
-                ),
+              : LayoutBuilder(builder: (context, constraints) {
+                  // Four columns need room. Below this they crush the name to
+                  // an ellipsis and the device id to nothing, so each account
+                  // becomes a small block instead.
+                  final stacked = constraints.maxWidth < 560;
+                  return Column(
+                    children: [
+                      if (!stacked) const _HeaderRow(),
+                      for (final user in users)
+                        _UserRow(user: user, stacked: stacked),
+                    ],
+                  );
+                }),
         ),
       ],
     );
@@ -129,12 +136,71 @@ class _H extends StatelessWidget {
 }
 
 class _UserRow extends StatelessWidget {
-  const _UserRow({required this.user});
+  const _UserRow({required this.user, this.stacked = false});
 
   final AdminUserRow user;
+  final bool stacked;
+
+  Widget get _name => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(user.name,
+              style: const TextStyle(
+                  fontSize: 13.5, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis),
+          if (user.email != null && user.email != user.name)
+            Text(user.email!,
+                style: const TextStyle(
+                    fontSize: 12, color: AdminColors.inkMuted),
+                overflow: TextOverflow.ellipsis),
+        ],
+      );
+
+  /// One block per account, for a phone.
+  Widget _stackedRow() => Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Color(0xFFEDF0F6))),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: _name),
+                const SizedBox(width: 10),
+                _RolePill(user.role),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Labelled here, because there is no header row to read them
+            // against once the columns are gone.
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
+              children: [
+                Text(
+                  'Device: ${user.deviceId ?? 'None'}',
+                  style: const TextStyle(
+                      fontSize: 12.5, color: AdminColors.inkMuted),
+                ),
+                Text(
+                  user.linkedTo.isEmpty
+                      ? 'Linked to nobody'
+                      : 'Linked to ${user.linkedTo.length}',
+                  style: const TextStyle(
+                      fontSize: 12.5, color: AdminColors.inkMuted),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
+    if (stacked) return _stackedRow();
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: const BoxDecoration(
@@ -142,23 +208,7 @@ class _UserRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(
-            flex: 4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(user.name,
-                    style: const TextStyle(
-                        fontSize: 13.5, fontWeight: FontWeight.w500),
-                    overflow: TextOverflow.ellipsis),
-                if (user.email != null && user.email != user.name)
-                  Text(user.email!,
-                      style: const TextStyle(
-                          fontSize: 12, color: AdminColors.inkMuted),
-                      overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
+          Expanded(flex: 4, child: _name),
           Expanded(flex: 2, child: Align(
             alignment: Alignment.centerLeft,
             child: _RolePill(user.role),
