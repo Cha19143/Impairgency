@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// The previous project's rules paired a blanket deny with an
+// `allow read: if true` on /users/**. Firebase grants on any matching allow, so
+// every user file was world-readable. Owner-only here, explicitly.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId
+                         && request.resource.size < 25 * 1024 * 1024;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

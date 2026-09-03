@@ -1,0 +1,53 @@
+name: impairgency
+description: Assistive navigation, environment awareness and emergency contact for visually impaired users, with a guardian app and a web admin dashboard.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Routing. One codebase, three platforms - the web/mobile split lives in
+  # lib/app/router.dart.
+  go_router: ^14.0.0
+  provider: ^6.1.5
+
+  # Firebase
+  firebase_core: ^3.14.0
+  firebase_auth: ^5.6.0
+  cloud_firestore: ^5.6.9
+  firebase_messaging: ^15.1.0      # §3.2 guardian SOS alerts
+  firebase_performance: ^0.10.1+7  # §1.4 system monitoring
+  firebase_crashlytics: ^4.1.0     # §1.4 crashes
+
+  # Location. §2.A.4 sharing, §2.A.5 SOS, §3.1 guardian tracking, and the
+  # location_history collection Phase 2 aggregates for the learning features.
+  geolocator: ^13.0.0
+
+  # Voice
+  speech_to_text: ^7.4.0
+  flutter_tts: ^4.0.2
+
+  # Vision - §2.A.1 object detection, §2.A.3 environment
+  camera: ^0.11.0+2
+  google_mlkit_object_detection: ^0.13.0
+  tflite_flutter: ^0.11.0
+  image: ^4.2.0
+
+  permission_handler: ^11.3.0
+  flutter_contacts: ^1.1.9+2
+  url_launcher: ^6.3.1
+  shared_preferences: ^2.5.3
+  intl: ^0.20.3
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

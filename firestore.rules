@@ -1,0 +1,182 @@
+rules_version = '2';
+
+// ImpairGency Firestore rules.
+//
+// The previous project had no rules file in version control at all. These exist
+// so that the access model is reviewable, testable, and cannot silently expire.
+//
+// Two principles:
+//   1. A guardian sees a user only through an accepted pairing, and only what
+//      that user has consented to share.
+//   2. Admin is a custom claim set by a Cloud Function. It is never a field the
+//      client can write, because a client-writable role field is not a role.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers -------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    // Pairing documents use a deterministic id so this is one lookup, not a
+    // query: {guardianUid}_{viUserId}.
+    function isPairedGuardianOf(userId) {
+      return signedIn() && exists(
+        /databases/$(database)/documents/pairings/$(request.auth.uid + '_' + userId)
+      );
+    }
+
+    function userDoc(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    // Consent is stored on the user document as a map of booleans. Absent means
+    // withheld - never assume consent from a missing field.
+    function hasConsent(userId, key) {
+      return userDoc(userId).consent[key] == true;
+    }
+
+    // Fields the client must never set on itself.
+    function noPrivilegeEscalation() {
+      return !request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasAny(['role', 'admin', 'createdAt']);
+    }
+
+    // ---- users ---------------------------------------------------------
+
+    match /users/{userId} {
+      allow read: if isOwner(userId)
+                  || isAdmin()
+                  || isPairedGuardianOf(userId);
+
+      allow create: if isOwner(userId)
+                    && request.resource.data.role in ['vi', 'guardian']
+                    && request.resource.data.uid == userId;
+
+      allow update: if (isOwner(userId) && noPrivilegeEscalation()) || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ---- pairing -------------------------------------------------------
+
+    // A code is written by the user who owns it and redeemed by whoever is
+    // given it. Single use, and it expires. Readable by any signed-in account
+    // because a guardian must be able to look one up before a link exists.
+    match /pairing_codes/{code} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+
+      allow create: if signedIn()
+                    && request.resource.data.ownerId == request.auth.uid
+                    && request.resource.data.usedBy == null
+                    && request.resource.data.expiresAt > request.time;
+
+      // The only permitted update is a guardian claiming an unused,
+      // unexpired code exactly once.
+      allow update: if signedIn()
+                    && resource.data.usedBy == null
+                    && resource.data.expiresAt > request.time
+                    && request.resource.data.usedBy == request.auth.uid
+                    && request.resource.data.ownerId == resource.data.ownerId;
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Deterministic id: {guardianUid}_{viUserId}. Either side can read it,
+    // either side can break the link, and only the redeeming guardian can
+    // create it.
+    match /pairings/{pairingId} {
+      allow read: if signedIn()
+                  && (resource.data.guardianId == request.auth.uid
+                      || resource.data.viUserId == request.auth.uid
+                      || isAdmin());
+
+      allow create: if signedIn()
+                    && request.resource.data.guardianId == request.auth.uid
+                    && pairingId == request.auth.uid + '_' + request.resource.data.viUserId;
+
+      allow delete: if signedIn()
+                    && (resource.data.guardianId == request.auth.uid
+                        || resource.data.viUserId == request.auth.uid
+                        || isAdmin());
+
+      allow update: if false;
+    }
+
+    // ---- location history ----------------------------------------------
+
+    // The collection Phase 2 aggregates for environment learning, routine
+    // learning, travel recording and the admin dashboard's frequent locations.
+    // A guardian reads it only while location consent is switched on, so
+    // revoking consent in the app is enforced by the server and not just by
+    // hiding a button.
+    match /location_history/{userId}/fixes/{fixId} {
+      allow read: if isOwner(userId)
+                  || isAdmin()
+                  || (isPairedGuardianOf(userId) && hasConsent(userId, 'location'));
+
+      allow create: if isOwner(userId);
+      allow update: if false;
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ---- SOS -------------------------------------------------------------
+
+    // Written by the user, read by their guardians regardless of location
+    // consent: consenting to be tracked is a different question from being
+    // told that someone has called for help.
+    match /sos_events/{eventId} {
+      allow read: if signedIn()
+                  && (resource.data.userId == request.auth.uid
+                      || isPairedGuardianOf(resource.data.userId)
+                      || isAdmin());
+
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid;
+
+      // Legs are appended by the Cloud Function that performs them, and by the
+      // owner cancelling. Nobody else edits an emergency record.
+      allow update: if signedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // ---- devices -----------------------------------------------------------
+
+    match /devices/{deviceId} {
+      allow read: if isAdmin()
+                  || (signedIn() && resource.data.assignedTo == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ---- server-only ---------------------------------------------------
+
+    // Live one-time login codes. No client path reads or writes these; they are
+    // issued and verified in functions/ with the Admin SDK. A collection of
+    // valid OTPs that any signed-in session can read is an account takeover.
+    match /otp_verification/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /app_counters/{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---- default deny ----------------------------------------------------
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
