@@ -15,6 +15,7 @@ class AuthService {
   final FirebaseAuth _auth;
 
   String? get uid => _auth.currentUser?.uid;
+  String? get email => _auth.currentUser?.email;
   bool get isSignedIn => _auth.currentUser != null;
   bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
 

@@ -176,6 +176,13 @@ GoRouter createRouter(AppSession session) => GoRouter(
           path: Routes.adminSignIn,
           builder: (_, __) => AdminSignInScreen(
             onSignIn: (email, password) => session.auth.signIn(email, password),
+            // Present only when authentication worked and the roster check did
+            // not. The screen explains itself instead of silently reappearing.
+            signedInAs: session.state.signedIn && !session.state.isAdmin
+                ? (session.auth.email ?? 'this account')
+                : null,
+            signedInUid: session.state.uid,
+            onSignOut: () => session.auth.signOut(),
           ),
         ),
         GoRoute(
