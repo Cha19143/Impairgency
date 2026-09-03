@@ -41,6 +41,7 @@ import '../vi/onboarding/welcome_screen.dart';
 import '../vi/screens/consent_centre_screen.dart';
 import '../vi/screens/dashboard_screen.dart';
 import '../vi/screens/learned_data_screen.dart';
+import '../vi/screens/scan_screen.dart';
 import '../vi/screens/settings_screen.dart';
 import '../vi/screens/location_debug_screen.dart';
 import '../vi/screens/sos_flow.dart';
@@ -355,11 +356,18 @@ GoRouter createRouter(AppSession session) => GoRouter(
           builder: (context, _) => DashboardScreen(
             speaker: session.speaker,
             consent: session.state.consent,
-            onScan: () => appNavigate(context, Routes.home),
+            onScan: () => appNavigate(context, Routes.scan),
             onAssist: () => appNavigate(context, Routes.home),
             onSos: () => appNavigate(context, Routes.sos),
             onWhatCanISay: () => appNavigate(context, Routes.whatCanISay),
             onSettings: () => appNavigate(context, Routes.settings),
+          ),
+        ),
+        GoRoute(
+          path: Routes.scan,
+          builder: (context, _) => ScanScreen(
+            speaker: session.speaker,
+            onBack: () => appNavigate(context, Routes.home),
           ),
         ),
         GoRoute(

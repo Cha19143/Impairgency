@@ -21,6 +21,7 @@ abstract final class Routes {
   static const device = '/onboarding/device';
   static const allSet = '/onboarding/done';
   static const home = '/home';
+  static const scan = '/scan';
   static const sos = '/sos';
   static const whatCanISay = '/what-can-i-say';
   static const settings = '/settings';

@@ -38,17 +38,13 @@ dependencies:
 
   # Vision - §2.A.1 object detection, §2.A.3 environment.
   #
-  # Deliberately NOT declared yet. Google's MLImage.framework ships no arm64
-  # simulator slice, and Xcode 26 simulators are arm64-only on Apple Silicon -
-  # there is no x86_64 fallback to exclude down to any more. Declaring them
-  # makes every iOS simulator build fail at link time, including for screens
-  # that have nothing to do with the camera.
-  #
-  # They come back when the scan screen is ported from cprwire. That work has
-  # to be verified on a physical device regardless: a simulator has no camera,
-  # so object detection could never be tested there anyway.
-  #
-  #   camera, google_mlkit_object_detection, tflite_flutter, image
+  # tflite_flutter, not ML Kit. cprwire declared google_mlkit_object_detection
+  # and never used it: the scan screen ran an SSD MobileNet through TFLite. ML
+  # Kit's MLImage.framework ships no arm64 simulator slice and breaks every iOS
+  # simulator build, so leaving it out is both correct and free.
+  camera: ^0.11.0+2
+  tflite_flutter: ^0.11.0
+  image: ^4.2.0
 
   permission_handler: ^11.3.0
   # flutter_contacts is deliberately NOT declared. Its iOS plugin registration
@@ -77,3 +73,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/models/

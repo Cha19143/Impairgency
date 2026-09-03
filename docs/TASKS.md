@@ -27,6 +27,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `██████░░░░░░` | 2 / 4 |
+| **Overall** | | **70 / 85  (82%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `███████████░` | 20 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
 | Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
@@ -421,7 +430,9 @@ it; a signed-in non-admin cannot reach it.
 
 **Other**
 
-- [ ] Repeat button on Scan
+- [x] Repeat on Scan — as a button, as a tap anywhere on the camera view, and
+      as the spoken command "repeat". Three routes, because a user mid-walk
+      may have only one of them free
 - [x] Consent centre — inspect and revoke, in the same words onboarding used.
       Revocation is enforced by the rules, not by hiding a button
 - [x] What the app has learned — list and delete, backed by Phase 2. Wording
@@ -459,12 +470,11 @@ enabled**. Screen fully black, start to finish.
 
 The old repo at `~/kokey/CapstoneImpairgency/cprwire/` is reference-only.
 
-- [ ] Camera + detection loop from `scan_environment_widget.dart` — without its
-      FlutterFlow scaffolding. **Note:** `camera`, `google_mlkit_object_detection`,
-      `tflite_flutter` and `image` are deliberately not declared yet — ML Kit
-      ships no arm64 simulator slice and breaks every iOS simulator build. Add
-      them back with this, and verify on a physical device (a simulator has no
-      camera anyway)
+- [x] Camera + detection loop ported. **ML Kit was never used** — cprwire
+      declared `google_mlkit_object_detection` and ran an SSD MobileNet
+      through TFLite instead. Leaving ML Kit out keeps iOS simulator builds
+      working. The guidance policy is now pure and tested in
+      `core/vision/`; only the camera and interpreter plumbing is in `data/`
 - [ ] Contact picker. **Do not use `flutter_contacts`** — its iOS registration
       force-unwraps `UIApplication.shared.delegate!.window!!`, which has been nil
       since iOS 13, so it crashes on launch in any app that includes it. Prefer

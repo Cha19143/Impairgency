@@ -1,0 +1,146 @@
+/// What the camera found, and how urgently to say it.
+///
+/// Ported from `cprwire`'s scan screen, which got this part right. Kept pure so
+/// the decisions — which object to mention, how urgent it is, when to stay
+/// quiet — can be tested without a camera or a model.
+library;
+
+import 'dart:math' as math;
+
+enum Proximity { veryClose, close, far }
+
+class Detection {
+  const Detection({
+    required this.label,
+    required this.score,
+    required this.centerX,
+    required this.extent,
+  });
+
+  final String label;
+
+  /// Model confidence, 0 to 1.
+  final double score;
+
+  /// Horizontal centre in the frame, 0 (left edge) to 1 (right edge).
+  final double centerX;
+
+  /// The larger of the box's width and height, as a fraction of the frame.
+  /// Bigger means nearer — the only depth cue a single camera has.
+  final double extent;
+
+  Proximity get proximity {
+    if (extent > 0.55) return Proximity.veryClose;
+    if (extent > 0.30) return Proximity.close;
+    return Proximity.far;
+  }
+
+  String get direction {
+    if (centerX < 0.35) return 'on your left';
+    if (centerX > 0.65) return 'on your right';
+    return 'ahead';
+  }
+
+  /// Centred obstacles are the ones you walk into, so they outrank something
+  /// equally near but off to the side.
+  double get risk {
+    final centrality = 1.0 - (centerX - 0.5).abs() * 2.0;
+    return extent * (1.0 + centrality);
+  }
+
+  String get phrase => switch (proximity) {
+        Proximity.veryClose => direction == 'ahead'
+            ? 'Stop. $label right in front of you'
+            : '$label very close $direction',
+        Proximity.close => '$label close, $direction',
+        Proximity.far => '$label $direction',
+      };
+}
+
+/// What to say about a frame, or null to stay silent.
+class Guidance {
+  const Guidance({required this.phrase, required this.urgent});
+
+  final String phrase;
+
+  /// Something is close enough to walk into. Interrupts, and buzzes.
+  final bool urgent;
+}
+
+const String kPathClear = 'Path looks clear';
+
+/// Confidence below which a detection is noise rather than an object.
+const double kMinScore = 0.5;
+
+/// Chooses what to say about one frame.
+///
+/// Mentions a second object only when it is near enough to matter. Listing
+/// everything in view is what makes these apps unusable — a user walking gets
+/// one useful sentence per few seconds, not an inventory.
+Guidance guidanceFor(List<Detection> detections) {
+  final real = detections.where((d) => d.score >= kMinScore).toList()
+    ..sort((a, b) => b.risk.compareTo(a.risk));
+
+  if (real.isEmpty) {
+    return const Guidance(phrase: kPathClear, urgent: false);
+  }
+
+  final primary = real.first;
+  var phrase = primary.phrase;
+
+  final secondary = real.skip(1).where(
+        (d) => d.proximity != Proximity.far && d.label != primary.label,
+      );
+  if (secondary.isNotEmpty) {
+    final other = secondary.first;
+    phrase = '$phrase. ${other.label} ${other.direction}';
+  }
+
+  return Guidance(
+    phrase: phrase,
+    urgent: primary.proximity == Proximity.veryClose,
+  );
+}
+
+/// How long to stay quiet after saying something ordinary.
+const Duration kSpeechCooldown = Duration(seconds: 3);
+
+/// Whether to actually speak [phrase] now.
+///
+/// Two rules, both about not talking over yourself. The same sentence is not
+/// repeated until it has been quiet for a while; anything urgent goes through
+/// immediately, because "stop" arriving three seconds late is worse than not
+/// arriving.
+bool shouldSpeak({
+  required String phrase,
+  required bool urgent,
+  required String? lastPhrase,
+  required DateTime? lastSpokenAt,
+  required DateTime now,
+  Duration cooldown = kSpeechCooldown,
+}) {
+  if (urgent) return true;
+  if (lastSpokenAt == null) return true;
+  if (phrase != lastPhrase) {
+    // A different sentence still waits a moment, or a scene with two objects
+    // alternating would produce a stream of chatter.
+    return now.difference(lastSpokenAt) >= const Duration(milliseconds: 900);
+  }
+  return now.difference(lastSpokenAt) >= cooldown;
+}
+
+/// Converts a model box to a [Detection].
+Detection detectionFrom({
+  required String label,
+  required double score,
+  required double xMin,
+  required double yMin,
+  required double xMax,
+  required double yMax,
+}) =>
+    Detection(
+      label: label,
+      score: score,
+      centerX: (xMin + xMax) / 2,
+      extent: math.max(xMax - xMin, yMax - yMin),
+    );
