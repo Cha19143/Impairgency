@@ -71,11 +71,18 @@ shipped, turned into a failing test.
 | `test/core/contrast_test.dart` | Button labels that fail WCAG AA. The old app rendered white on `#00FFFF`, about 1.1:1. |
 | `test/core/routing_test.dart` | An admin route reachable without an admin. Onboarding that cannot resume after a crash. A completion screen that routes back to sign-in. |
 | `test/core/voice_commands_test.dart` | The vocabulary screen drifting from what the parser accepts. Cancel words that hijack everyday speech. |
+| `test/core/safety_notice_test.dart` | Copy that hedges instead of naming what the app misses, or claims the environment is safe. |
+| `test/rules/firestore.test.js` | A guardian reading a user they were never paired with. Location leaking after consent is revoked. A client making itself an admin. A pairing code redeemed twice. |
 
 ```bash
-flutter test
+flutter test                 # 55 unit and widget tests
+tool/test_rules.sh           # 28 security rules tests, on the emulator
 flutter build apk && flutter build ios && flutter build web
 ```
+
+`tool/test_rules.sh` needs no Firebase project and no network — it runs against
+the emulator with a demo project id. It does need a JDK 21+; the script points
+itself at a Homebrew `openjdk@21` if your default `java` is older.
 
 All three builds, every time. Defects this project's predecessor hit were
 invisible to `analyze` and `test`.

@@ -23,6 +23,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 
 | Phase | | Done |
 |---|---|---|
+| Phase 0 — Security and integrity `S` | `██████████░░` | 15 / 18 |
+| Phase 1 — Location, push, pairing `M` | `░░░░░░░░░░░░` | 0 / 9 |
+| Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **16 / 81  (20%)** |
+|---|---|---|
 | Phase 0 — Security and integrity `S` | `████░░░░░░░░` | 6 / 18 |
 | Phase 1 — Location, push, pairing `M` | `░░░░░░░░░░░░` | 0 / 9 |
 | Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
@@ -70,15 +79,15 @@ Blocking. Nothing else should store data until this is deployed.
 - [ ] `flutterfire configure` against the new Firebase project
 - [ ] Uncomment `Firebase.initializeApp` in `lib/main.dart`
 - [ ] `firebase deploy --only firestore:rules,storage:rules`
-- [ ] Rules tests on the emulator:
-  - [ ] owner reads and writes own document
-  - [ ] guardian reads a paired user
-  - [ ] guardian is refused an unpaired user
-  - [ ] guardian is refused location fixes when consent is off
-  - [ ] client is refused `otp_verification` entirely
-  - [ ] a client cannot set its own `role` or `admin`
-  - [ ] a pairing code cannot be redeemed twice
-  - [ ] an expired pairing code is refused
+- [x] Rules tests on the emulator — `tool/test_rules.sh`, 28 passing
+  - [x] owner reads and writes own document
+  - [x] guardian reads a paired user
+  - [x] guardian is refused an unpaired user
+  - [x] guardian is refused location fixes when consent is off
+  - [x] client is refused `otp_verification` entirely
+  - [x] a client cannot set its own `role` or `admin`
+  - [x] a pairing code cannot be redeemed twice
+  - [x] an expired pairing code is refused
 
 **Gate:** rules deployed, emulator suite green, `flutter test` green.
 
