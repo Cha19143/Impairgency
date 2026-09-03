@@ -24,6 +24,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase | | Done |
 |---|---|---|
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **29 / 85  (34%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `█████████░░░` | 9 / 12 |
 | Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
@@ -170,7 +179,9 @@ configuration is what bites late.
 - [x] `lib/core/location/` — fix type, source interface, and the decision policy
       as a pure function. Foreground only; background needs a Play justification
       the project does not have — §2.A.4
-- [ ] Throwaway debug screen proving a real fix on a real device
+- [x] Debug screen proving a real fix on a real device — verified on an iPhone
+      (iOS 26.6): permission → ready, GNSS fix at ±11 m, `trust: fresh`, and the
+      local alert delivered. Debug builds only
 - [x] Android `IMPORTANCE_HIGH` channel declared — `impairgency_emergency`
 - [ ] ~~APNs key~~ — **won't do**: needs a $99/year Apple Developer Program
       membership. Android is the demo platform; declared on the scope table
