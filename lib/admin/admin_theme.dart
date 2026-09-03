@@ -28,6 +28,26 @@ abstract final class AdminColors {
   static const Color bad = Color(0xFF9C1F2B);
 }
 
+/// No animation between panes.
+///
+/// A dashboard is a set of views, not a stack of pages. Sliding one over
+/// another suggests a journey the user is not making, and after a sidebar click
+/// the animation is pure latency: the destination is already decided and the
+/// user is waiting to read it.
+class _InstantPageTransitions extends PageTransitionsBuilder {
+  const _InstantPageTransitions();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) =>
+      child;
+}
+
 ThemeData buildAdminTheme() {
   final base = ThemeData(
     useMaterial3: true,
@@ -38,6 +58,12 @@ ThemeData buildAdminTheme() {
     scaffoldBackgroundColor: AdminColors.canvas,
   );
   return base.copyWith(
+    pageTransitionsTheme: PageTransitionsTheme(
+      builders: {
+        for (final platform in TargetPlatform.values)
+          platform: const _InstantPageTransitions(),
+      },
+    ),
     textTheme: base.textTheme.apply(
       bodyColor: AdminColors.ink,
       displayColor: AdminColors.ink,

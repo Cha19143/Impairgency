@@ -161,11 +161,20 @@ class _NavItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
       child: Material(
-        color: selected ? AdminColors.accent.withValues(alpha: 0.12) : Colors.transparent,
+        color: selected
+            ? AdminColors.accent.withValues(alpha: 0.12)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(7),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(7),
+          // No ripple. A sidebar is navigation, not a control being operated,
+          // and an ink splash that plays out after the pane has already changed
+          // reads as lag rather than feedback.
+          splashFactory: NoSplash.splashFactory,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: AdminColors.accent.withValues(alpha: 0.06),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             child: Row(
