@@ -50,6 +50,11 @@ const Map<String, (int foreground, int background)> kContrastPairs = {
   'label on raised surface': (0xFFFFFFFF, 0xFF122A5C),
   'success text on ground': (0xFF3ED598, 0xFF0A1A3F),
   'warning text on ground': (0xFFF9CF58, 0xFF0A1A3F),
+  // The dashboard is a different surface with a different palette, and it was
+  // auditing everything except itself.
+  'admin: supporting text on a card': (0xFF616E88, 0xFFFFFFFF),
+  'admin: supporting text on chrome': (0xFF93A7D4, 0xFF0A1A3F),
+  'admin: a refusal on its banner': (0xFF9C1F2B, 0xFFFEF1F2),
 };
 
 /// Minimum touch target. The platform floor is 48dp; this app's users are

@@ -16,16 +16,30 @@ abstract final class AdminColors {
   static const Color chromeText = Color(0xFF93A7D4);
   static const Color accent = AppColors.cyan;
 
+  /// Ink for use *on* [accent]. The pairing the app already uses, at 14.8:1.
+  static const Color inkOnAccent = AppColors.inkOnLight;
+
   static const Color canvas = Color(0xFFF2F5FA);
   static const Color card = Color(0xFFFFFFFF);
   static const Color line = Color(0xFFDEE4EF);
+
+  /// The ground inside a form field, and behind a line of code.
+  static const Color field = Color(0xFFF7F9FC);
+
   static const Color ink = Color(0xFF0E1626);
-  static const Color inkMuted = Color(0xFF6B7893);
+
+  /// Supporting text. Darkened from #6B7893, which measured 4.4:1 on a white
+  /// card and 4.2:1 inside a field — under AA, on the one surface in the
+  /// project that audits its own contrast.
+  static const Color inkMuted = Color(0xFF616E88);
 
   /// Semantic, and separate from the accent. Nothing decorative is ever red.
   static const Color good = Color(0xFF0F6B3F);
   static const Color warn = Color(0xFF8A5600);
   static const Color bad = Color(0xFF9C1F2B);
+
+  /// The ground [bad] is written on when a whole banner has to carry it.
+  static const Color badTint = Color(0xFFFEF1F2);
 }
 
 /// No animation between panes.
