@@ -86,6 +86,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Device tokens for §3.2 guardian alerts. Owner-writable; nothing on the
+    // client ever reads someone else's. The Cloud Function that sends the alert
+    // uses the Admin SDK and bypasses rules entirely, which is why no read is
+    // granted here at all - a token another account can read is a token another
+    // account can impersonate a device with.
+    match /users/{userId}/push_tokens/{tokenId} {
+      allow read, write: if isOwner(userId);
+    }
+
     // ---- pairing -------------------------------------------------------
 
     // A code is written by the user who owns it and redeemed by whoever is

@@ -51,6 +51,13 @@
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <!-- §3.2 asks alerts to "prioritize emergency delivery". Without a
+             declared default channel, FCM notifications land at default
+             importance: no sound, no heads-up, easy to miss. The channel
+             itself is created at runtime with IMPORTANCE_HIGH. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="impairgency_emergency"/>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

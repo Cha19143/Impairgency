@@ -334,6 +334,33 @@ describe('pairings', () => {
   });
 });
 
+describe('push tokens', () => {
+  const tokenRef = (db, uid = VI) =>
+    doc(db, 'users', uid, 'push_tokens', 'device-token-abc');
+
+  it('the owner registers their own device', async () => {
+    await assertSucceeds(
+      setDoc(tokenRef(as(VI)), { token: 'abc', platform: 'ios' }),
+    );
+  });
+
+  it('nobody else can read them, not even a paired guardian', async () => {
+    // A token another account can read is a token another account can send
+    // notifications to. The sending function uses the Admin SDK and bypasses
+    // rules, so no client needs read access at all.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(tokenRef(ctx.firestore()), { token: 'abc' });
+    });
+    await assertFails(getDoc(tokenRef(as(GUARDIAN))));
+    await assertFails(getDoc(tokenRef(as(STRANGER))));
+    await assertFails(getDoc(tokenRef(anon())));
+  });
+
+  it('nobody else can register a device against your account', async () => {
+    await assertFails(setDoc(tokenRef(as(STRANGER)), { token: 'evil' }));
+  });
+});
+
 describe('the whole guardian onboarding, end to end', () => {
   // Exercises exactly what PairingRepository does, in the order it does it,
   // against the real rules. If this passes, a guardian can actually get in -
