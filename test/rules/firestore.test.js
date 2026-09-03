@@ -242,6 +242,52 @@ describe('recording history is a separate consent from sharing location', () => 
   });
 });
 
+describe('session events — the review timeline', () => {
+  const ev = (db, id = 'ev1') =>
+    doc(db, 'location_history', VI, 'events', id);
+
+  const grantHistory = () =>
+    env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'users', VI), {
+        'consent.history': true,
+      });
+    });
+
+  it('follows the same consent as the fixes it is stamped against', async () => {
+    await assertFails(setDoc(ev(as(VI)), { kind: 'obstacleDetected' }));
+    await grantHistory();
+    await assertSucceeds(setDoc(ev(as(VI)), { kind: 'obstacleDetected' }));
+  });
+
+  it('is readable by the user and by an admin', async () => {
+    await grantHistory();
+    await setDoc(ev(as(VI)), { kind: 'stairsDetected' });
+    await assertSucceeds(getDoc(ev(as(VI))));
+    await makeAdmin();
+    await assertSucceeds(getDoc(ev(asAdmin())));
+  });
+
+  it('is not readable by a paired guardian', async () => {
+    // §3 grants a guardian location and emergency alerts, not a feed of
+    // everything the user walked past.
+    await grantHistory();
+    await setDoc(ev(as(VI)), { kind: 'textRead', detail: 'medicine bottle' });
+    await assertFails(getDoc(ev(as(GUARDIAN))));
+  });
+
+  it('is append-only', async () => {
+    await grantHistory();
+    await setDoc(ev(as(VI)), { kind: 'obstacleDetected' });
+    await assertFails(updateDoc(ev(as(VI)), { kind: 'sosFired' }));
+  });
+
+  it('can be deleted by the user regardless of consent', async () => {
+    await grantHistory();
+    await setDoc(ev(as(VI)), { kind: 'obstacleDetected' });
+    await assertSucceeds(deleteDoc(ev(as(VI))));
+  });
+});
+
 describe('pairing codes', () => {
   const CODE = '7K429P';
   const codeRef = (db) => doc(db, 'pairing_codes', CODE);

@@ -190,6 +190,21 @@ service cloud.firestore {
       allow delete: if isOwner(userId) || isAdmin();
     }
 
+    // What the app detected during a session: obstacles, stairs, text read,
+    // SOS armed or cancelled. This is the collection the §1.1 review timeline
+    // is built from - the substitute for storing video.
+    //
+    // Owner and admin only. A guardian is deliberately not given it: §3 grants
+    // them location and emergency alerts, not a feed of everything the user
+    // walked past. An activity feed for guardians would be a separate feature
+    // and a separate consent.
+    match /location_history/{userId}/events/{eventId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && hasConsent(userId, 'history');
+      allow update: if false;
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
     // ---- SOS -------------------------------------------------------------
 
     // Written by the user, read by their guardians regardless of location

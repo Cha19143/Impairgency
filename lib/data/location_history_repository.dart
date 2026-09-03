@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/location/location_fix.dart';
 import '../core/places/journey.dart';
 import '../core/places/place.dart';
+import '../core/places/session_event.dart';
 import '../core/places/stay.dart';
+import '../core/places/timeline.dart';
 
 /// The one collection four requirements are built on.
 ///
@@ -30,6 +32,9 @@ class LocationHistoryRepository {
   CollectionReference<Map<String, dynamic>> _fixes(String uid) =>
       _db.collection('location_history').doc(uid).collection('fixes');
 
+  CollectionReference<Map<String, dynamic>> _events(String uid) =>
+      _db.collection('location_history').doc(uid).collection('events');
+
   /// Records one reading against a session.
   ///
   /// Vague readings are dropped here rather than stored and filtered later.
@@ -45,6 +50,48 @@ class LocationHistoryRepository {
       'at': Timestamp.fromDate(fix.at),
       'sessionId': sessionId,
     });
+  }
+
+  /// Records something the app noticed — §2.A.7, and the source of the §1.1
+  /// review timeline.
+  Future<void> recordEvent(
+    String uid, {
+    required String sessionId,
+    required SessionEventKind kind,
+    String? detail,
+    LocationFix? at,
+  }) async {
+    await _events(uid).add({
+      'sessionId': sessionId,
+      'kind': kind.name,
+      if (detail != null) 'detail': detail,
+      if (at != null) ...{
+        'lat': at.latitude,
+        'lng': at.longitude,
+      },
+      'at': Timestamp.fromDate(at?.at ?? DateTime.now()),
+    });
+  }
+
+  Future<List<SessionEvent>> eventsForSession(
+      String uid, String sessionId) async {
+    final snap = await _events(uid)
+        .where('sessionId', isEqualTo: sessionId)
+        .orderBy('at')
+        .get();
+    return snap.docs.map(_toEvent).toList();
+  }
+
+  /// The review a §1.1 administrator opens instead of a video player.
+  Future<SessionTimeline> timeline(String uid, String sessionId) async {
+    final results = await Future.wait([
+      journey(uid, sessionId),
+      eventsForSession(uid, sessionId),
+    ]);
+    return buildTimeline(
+      results[0] as Journey,
+      results[1] as List<SessionEvent>,
+    );
   }
 
   /// Everything recorded in one session, for a replay — §2.A.7.
@@ -108,16 +155,21 @@ class LocationHistoryRepository {
   /// of rows and Firestore caps a batch at 500.
   Future<int> forgetAll(String uid) async {
     var deleted = 0;
-    while (true) {
-      final page = await _fixes(uid).limit(400).get();
-      if (page.docs.isEmpty) return deleted;
-      final batch = _db.batch();
-      for (final doc in page.docs) {
-        batch.delete(doc.reference);
+    // Events as well as fixes. Forgetting where someone went while keeping a
+    // log of what they walked past would not be forgetting.
+    for (final collection in [_fixes(uid), _events(uid)]) {
+      while (true) {
+        final page = await collection.limit(400).get();
+        if (page.docs.isEmpty) break;
+        final batch = _db.batch();
+        for (final doc in page.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+        deleted += page.docs.length;
       }
-      await batch.commit();
-      deleted += page.docs.length;
     }
+    return deleted;
   }
 
   /// Forgets one place, by deleting the readings that produced it.
@@ -157,6 +209,23 @@ class LocationHistoryRepository {
     }
     await batch.commit();
     return page.docs.length;
+  }
+
+  static SessionEvent _toEvent(
+      QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    return SessionEvent(
+      id: doc.id,
+      sessionId: data['sessionId'] as String? ?? '',
+      at: (data['at'] as Timestamp).toDate(),
+      kind: SessionEventKind.values.firstWhere(
+        (k) => k.name == data['kind'],
+        orElse: () => SessionEventKind.guidanceGiven,
+      ),
+      detail: data['detail'] as String?,
+      latitude: (data['lat'] as num?)?.toDouble(),
+      longitude: (data['lng'] as num?)?.toDouble(),
+    );
   }
 
   static ({LocationFix fix, String? sessionId}) _toRow(
