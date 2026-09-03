@@ -24,6 +24,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase | | Done |
 |---|---|---|
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `████░░░░░░░░` | 3 / 9 |
+| Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **22 / 82  (27%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `███░░░░░░░░░` | 2 / 9 |
 | Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
@@ -130,7 +139,8 @@ configuration is what bites late.
 - [ ] `firebase_messaging` token registration and refresh
 - [ ] Cloud Function: SOS write → high-priority message to paired guardian tokens
 - [ ] Documented fallback when critical alerts are unavailable — §7 reliability
-- [ ] `pairing_codes` write + redeem repository — single-use, expiring
+- [x] `pairing_codes` write + redeem repository — single-use, expiring, with a
+      speak-safe alphabet, and an end-to-end rules test of the whole flow
 - [ ] Guardian **Accept invitation** screen — §3
 
 **Gate:** a real push lands on a second physical device from a real SOS write,

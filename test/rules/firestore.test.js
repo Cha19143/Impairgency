@@ -334,6 +334,72 @@ describe('pairings', () => {
   });
 });
 
+describe('the whole guardian onboarding, end to end', () => {
+  // Exercises exactly what PairingRepository does, in the order it does it,
+  // against the real rules. If this passes, a guardian can actually get in -
+  // which is the thing the submitted design had no screen for at all.
+  it('issue, redeem, pair, then read', async () => {
+    const CODE = 'FH29MR47';
+
+    // 1. The user issues a code.
+    await assertSucceeds(
+      setDoc(doc(as(VI), 'pairing_codes', CODE), {
+        ownerId: VI,
+        usedBy: null,
+        expiresAt: hoursFromNow(0.5),
+      }),
+    );
+
+    // 2. A guardian who has never met this user before cannot read them yet.
+    await assertFails(getDoc(doc(as(STRANGER), 'users', VI)));
+
+    // 3. They look the code up - any signed-in account may, which is why the
+    //    code space has to be large.
+    await assertSucceeds(getDoc(doc(as(STRANGER), 'pairing_codes', CODE)));
+
+    // 4. They redeem it.
+    await assertSucceeds(
+      updateDoc(doc(as(STRANGER), 'pairing_codes', CODE), {
+        usedBy: STRANGER,
+        ownerId: VI,
+      }),
+    );
+
+    // 5. And only now can they create the pairing.
+    await assertSucceeds(
+      setDoc(doc(as(STRANGER), 'pairings', pairingId(STRANGER, VI)), {
+        guardianId: STRANGER,
+        viUserId: VI,
+        code: CODE,
+      }),
+    );
+
+    // 6. Which is what grants the read.
+    await assertSucceeds(getDoc(doc(as(STRANGER), 'users', VI)));
+
+    // 7. But not the location, until consent is given separately. Being
+    //    someone's guardian and being allowed to track them are two decisions.
+    await assertFails(
+      getDoc(doc(as(STRANGER), 'location_history', VI, 'fixes', 'fix-1')),
+    );
+
+    // 8. And the code is spent - nobody else can ride in behind them.
+    await assertFails(
+      updateDoc(doc(as(GUARDIAN), 'pairing_codes', CODE), {
+        usedBy: GUARDIAN,
+        ownerId: VI,
+      }),
+    );
+  });
+
+  it('the user can cut the link afterwards', async () => {
+    await assertSucceeds(
+      deleteDoc(doc(as(VI), 'pairings', pairingId(GUARDIAN, VI))),
+    );
+    await assertFails(getDoc(doc(as(GUARDIAN), 'users', VI)));
+  });
+});
+
 describe('one-time login codes', () => {
   it('no client can read them, signed in or not', async () => {
     // A collection of live OTPs that any session can read is an account
