@@ -25,6 +25,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 |---|---|---|
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **36 / 85  (42%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `█████████░░░` | 5 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
@@ -247,9 +256,15 @@ in **release** mode, not debug.
       accuracies worse than 200 m, and reports how many it threw away
 - [x] Frequent-locations count aggregation — §1.3, `frequentPlaces` ordered
       most-visited first, one visit not counted as a frequency
-- [ ] Detection + SOS event log, stamped against the session path
-- [ ] **Event timeline** replacing video review — §1.1, and record the
-      substitution in the documentation rather than leaving §1.1 looking unmet
+- [x] Session event log — obstacles, stairs, text read, SOS armed/fired/
+      cancelled — same consent and retention as the fixes, owner and admin
+      only. A guardian is deliberately not given a feed of what the user
+      walked past
+- [x] **Event timeline** replacing video review — §1.1. Stamped against the
+      session start, and it surfaces **concerns** rather than only events:
+      cancelled SOS, repeated stairs warnings, poor positioning, a session
+      that never moved. That is what "identify possible system improvements"
+      is actually asking for
 
 **Gate:** one recorded walk produces a named place, a schedule bucket, a
 replayable path and a timeline — from the same collection.
