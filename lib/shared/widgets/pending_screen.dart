@@ -1,4 +1,8 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../app/routes.dart';
 import '../../app/theme.dart';
 
 /// A screen that has a route and a place in the plan but no implementation yet.
@@ -25,7 +29,19 @@ class PendingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('ImpairGency')),
+      appBar: AppBar(
+        title: const Text('ImpairGency'),
+        actions: [
+          // Scaffolding on scaffolding: both this screen and the debug screen
+          // go away once Phase 4 builds the real ones.
+          if (kDebugMode)
+            IconButton(
+              tooltip: 'Location & alerts debug',
+              icon: const Icon(Icons.bug_report_outlined),
+              onPressed: () => GoRouter.of(context).go(Routes.debug),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),

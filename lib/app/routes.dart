@@ -3,6 +3,10 @@
 library;
 
 abstract final class Routes {
+  /// Debug-only proving ground for a real GPS fix and a real notification.
+  /// Registered only in debug builds - see router.dart.
+  static const debug = '/debug';
+
   /// The limitation notice required by §7. Before everything on mobile, and
   /// reachable again afterwards.
   static const safety = '/safety';
@@ -97,6 +101,10 @@ String? resolveRedirect({
   required String location,
   required SessionState session,
 }) {
+  // The debug screen is registered only in debug builds, so if the route
+  // exists at all it is meant to be reachable.
+  if (location == Routes.debug) return null;
+
   if (isWeb) {
     if (!_isAdminRoute(location)) return Routes.adminRoot;
     if (!session.signedIn) {

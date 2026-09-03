@@ -2,11 +2,17 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
+
+import '../core/alerts/alert_presenter.dart';
 import '../core/session_store.dart';
 import '../core/speech/speaker.dart';
+import '../data/geolocator_location_source.dart';
+import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
 import '../shared/widgets/pending_screen.dart';
+import '../vi/screens/location_debug_screen.dart';
 import '../vi/screens/safety_notice_screen.dart';
 import 'routes.dart';
 
@@ -26,6 +32,9 @@ class AppSession extends ChangeNotifier {
   // screen does not need Firebase initialised.
   PairingRepository? _pairing;
   PairingRepository get pairing => _pairing ??= PairingRepository();
+
+  AlertPresenter? _alerts;
+  AlertPresenter get alerts => _alerts ??= LocalAlertPresenter();
 
   SessionState _state = const SessionState();
   SessionState get state => _state;
@@ -58,8 +67,17 @@ class AppSession extends ChangeNotifier {
   }
 }
 
+/// Lets a device run start somewhere specific without editing code:
+///
+///     flutter run --dart-define=START=/debug
+///
+/// Empty by default, so nothing about the normal launch changes.
+const String _startOverride = String.fromEnvironment('START');
+
 GoRouter createRouter(AppSession session) => GoRouter(
-      initialLocation: kIsWeb ? Routes.adminRoot : Routes.welcome,
+      initialLocation: _startOverride.isNotEmpty
+          ? _startOverride
+          : (kIsWeb ? Routes.adminRoot : Routes.welcome),
       refreshListenable: session,
       redirect: (context, state) => resolveRedirect(
         isWeb: kIsWeb,
@@ -67,6 +85,16 @@ GoRouter createRouter(AppSession session) => GoRouter(
         session: session.state,
       ),
       routes: [
+        // Debug builds only. Never reachable in a release binary.
+        if (kDebugMode)
+          GoRoute(
+            path: Routes.debug,
+            builder: (_, __) => LocationDebugScreen(
+              source: const GeolocatorLocationSource(),
+              presenter: session.alerts,
+              bestEffort: bestEffortFix,
+            ),
+          ),
         GoRoute(
           path: Routes.safety,
           builder: (context, _) {
