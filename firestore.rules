@@ -162,13 +162,31 @@ service cloud.firestore {
     // A guardian reads it only while location consent is switched on, so
     // revoking consent in the app is enforced by the server and not just by
     // hiding a button.
+    // Two consents, not one, and they are genuinely different questions.
+    //
+    //   consent.location  - my guardian may see where I am
+    //   consent.history   - the app may remember where I have been
+    //
+    // Someone may want a guardian able to find them without the app building a
+    // record of their life; someone else may want the learning features
+    // without anyone watching. Conflating the two would take a decision away
+    // from the person it belongs to.
+    //
+    // Writing is gated server-side rather than only in the app, so revoking
+    // `history` actually stops the recording instead of hiding a switch.
     match /location_history/{userId}/fixes/{fixId} {
       allow read: if isOwner(userId)
                   || isAdmin()
                   || (isPairedGuardianOf(userId) && hasConsent(userId, 'location'));
 
-      allow create: if isOwner(userId);
+      allow create: if isOwner(userId) && hasConsent(userId, 'history');
+
+      // Append-only. A history that can be edited is not a history.
       allow update: if false;
+
+      // Deletable at any time, consent or not - "what the app has learned"
+      // has to be able to forget, and revoking consent must not lock the
+      // record in place.
       allow delete: if isOwner(userId) || isAdmin();
     }
 

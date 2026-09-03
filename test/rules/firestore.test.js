@@ -54,7 +54,12 @@ beforeEach(async () => {
       uid: VI,
       role: 'vi',
       email: 'vi@example.com',
-      consent: { location: false, recording: false, faces: false },
+      consent: {
+        location: false,
+        history: false,
+        recording: false,
+        faces: false,
+      },
     });
     await setDoc(doc(db, 'users', GUARDIAN), {
       uid: GUARDIAN,
@@ -176,6 +181,64 @@ describe('location history', () => {
 
   it('nobody can rewrite history, not even the owner', async () => {
     await assertFails(updateDoc(fix(as(VI)), { lat: 0 }));
+  });
+});
+
+describe('recording history is a separate consent from sharing location', () => {
+  const fix = (db, id = 'new-fix') =>
+    doc(db, 'location_history', VI, 'fixes', id);
+
+  const grant = (key) =>
+    env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'users', VI), {
+        [`consent.${key}`]: true,
+      });
+    });
+
+  it('the app cannot record anything until history consent is on', async () => {
+    // Gated on the server, so revoking it stops the recording rather than
+    // hiding a switch in the UI.
+    await assertFails(setDoc(fix(as(VI)), { lat: 1, lng: 2 }));
+  });
+
+  it('it can record once history consent is on', async () => {
+    await grant('history');
+    await assertSucceeds(setDoc(fix(as(VI)), { lat: 1, lng: 2 }));
+  });
+
+  it('location consent alone does not permit recording', async () => {
+    // Letting a guardian see where you are is not agreeing to be logged.
+    await grant('location');
+    await assertFails(setDoc(fix(as(VI)), { lat: 1, lng: 2 }));
+  });
+
+  it('history consent alone does not let a guardian read it', async () => {
+    // And agreeing to be logged is not agreeing to be watched.
+    await grant('history');
+    await assertFails(
+      getDoc(doc(as(GUARDIAN), 'location_history', VI, 'fixes', 'fix-1')),
+    );
+  });
+
+  it('nobody else can record against your account', async () => {
+    await grant('history');
+    await assertFails(setDoc(fix(as(STRANGER)), { lat: 1, lng: 2 }));
+  });
+
+  it('history is append-only', async () => {
+    await grant('history');
+    await assertFails(
+      updateDoc(doc(as(VI), 'location_history', VI, 'fixes', 'fix-1'),
+        { lat: 0 }),
+    );
+  });
+
+  it('can always be deleted, consent or not', async () => {
+    // "What the app has learned" must be able to forget, and revoking consent
+    // must not lock the record in place.
+    await assertSucceeds(
+      deleteDoc(doc(as(VI), 'location_history', VI, 'fixes', 'fix-1')),
+    );
   });
 });
 
