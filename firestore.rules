@@ -225,6 +225,31 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- session summaries -------------------------------------------------
+
+    // The aggregate layer administrators read for §1.3, so they never need a
+    // collection-group read of everybody's raw coordinates.
+    //
+    // The no-coordinates property is enforced *here*, not only in the Dart type
+    // that writes it. A future client bug that started attaching a position
+    // would otherwise quietly turn this into the map of blind people's homes
+    // the design went out of its way to avoid.
+    match /session_summaries/{summaryId} {
+      allow read: if isAdmin()
+                  || (signedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasConsent(request.auth.uid, 'history')
+                    && !request.resource.data.keys().hasAny(
+                         ['lat', 'lng', 'latitude', 'longitude', 'path', 'fixes']);
+
+      allow update: if false;
+
+      allow delete: if isAdmin()
+                    || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
     // ---- devices -----------------------------------------------------------
 
     match /devices/{deviceId} {

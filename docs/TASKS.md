@@ -26,6 +26,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████░░░░` | 8 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **44 / 85  (52%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
@@ -287,14 +296,19 @@ path, and a review timeline. Asserted rather than claimed.
 *Blocked by: Phase 2 for real numbers.* The shell can be built in parallel;
 just do not populate it with fabricated figures.
 
-- [ ] Firebase Hosting target + `flutter build web` deploy step
-- [ ] Admin sign-in; custom claim set by a Cloud Function, never by a client
-- [ ] **Overview** — all five metrics §1.3 names:
-  - [ ] active users
-  - [ ] navigation sessions
-  - [ ] SOS incidents
-  - [ ] frequently visited locations
-  - [ ] detection performance
+- [x] Firebase Hosting — **live at https://impairgency-capstone.web.app**.
+      Free on Spark; `firebase deploy --only hosting` after `flutter build web`
+- [x] Admin sign-in, gated on the `admins` collection rather than a custom
+      claim — same property, no billing account. Verified live: an
+      unauthenticated visit to the site lands on sign-in, not the app
+- [x] **Overview** — all five metrics §1.3 names, from `session_summaries`:
+  - [x] active users
+  - [x] navigation sessions
+  - [x] SOS incidents
+  - [x] frequently visited locations — counted from names *users typed*; the
+        summaries carry no coordinates, enforced in the rules
+  - [x] detection performance — counts and positioning quality, with the
+        caveat printed on screen that counts are not accuracy
 - [ ] **Users** — VI users, guardians, **admin accounts**, device links — §1.2
 - [ ] Add-user form gains email and role; Device ID becomes optional
 - [ ] **System health** — read `firebase_performance`, add Crashlytics — §1.4

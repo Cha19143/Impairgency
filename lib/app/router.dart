@@ -7,6 +7,10 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import '../core/alerts/alert_presenter.dart';
 import '../core/session_store.dart';
 import '../core/speech/speaker.dart';
+import '../admin/screens/admin_overview_page.dart';
+import '../admin/screens/admin_sign_in_screen.dart';
+import '../data/admin_repository.dart';
+import '../data/auth_service.dart';
 import '../data/geolocator_location_source.dart';
 import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
@@ -35,6 +39,34 @@ class AppSession extends ChangeNotifier {
 
   AlertPresenter? _alerts;
   AlertPresenter get alerts => _alerts ??= LocalAlertPresenter();
+
+  AdminRepository? _admin;
+  AdminRepository get admin => _admin ??= AdminRepository();
+
+  AuthService? _auth;
+  AuthService get auth => _auth ??= AuthService();
+
+  /// Follows Firebase auth so the router's guard reflects who is signed in.
+  ///
+  /// Called from app.dart once Firebase is up. Left uncalled in tests, where
+  /// the session stays signed out - which is the guard failing closed.
+  Future<void> bindAuth() async {
+    auth.changes.listen((user) async {
+      if (user == null) {
+        update(SessionState(safetyAcknowledged: _state.safetyAcknowledged));
+        return;
+      }
+      final isAdmin = await admin.isAdmin(user.uid);
+      update(SessionState(
+        uid: user.uid,
+        signedIn: true,
+        isAdmin: isAdmin,
+        isGuardian: _state.isGuardian,
+        safetyAcknowledged: _state.safetyAcknowledged,
+        completedSteps: _state.completedSteps,
+      ));
+    });
+  }
 
   SessionState _state = const SessionState();
   SessionState get state => _state;
@@ -140,8 +172,20 @@ GoRouter createRouter(AppSession session) => GoRouter(
 
         // ---- admin dashboard (web) ----
         _page(Routes.adminRoot, 'Admin', 'Phase 3', 'Overview'),
-        _page(Routes.adminSignIn, 'Admin sign-in', 'Phase 3', '§1.2'),
-        _page(Routes.adminOverview, 'Overview', 'Phase 3', '§1.3, §1.4'),
+        GoRoute(
+          path: Routes.adminSignIn,
+          builder: (_, __) => AdminSignInScreen(
+            onSignIn: (email, password) => session.auth.signIn(email, password),
+          ),
+        ),
+        GoRoute(
+          path: Routes.adminOverview,
+          builder: (context, _) => AdminOverviewPage(
+            repository: session.admin,
+            onSelect: (section) => appNavigate(context, section.route),
+            onSignOut: () => session.auth.signOut(),
+          ),
+        ),
       ],
     );
 

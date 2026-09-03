@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../data/prefs_session_store.dart';
 import '../data/tts_speaker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+import '../admin/admin_theme.dart';
 import 'router.dart';
 import 'theme.dart';
 
@@ -23,6 +26,7 @@ class _ImpairGencyAppState extends State<ImpairGencyApp> {
   void initState() {
     super.initState();
     _session.load();
+    _session.bindAuth();
   }
 
   @override
@@ -34,9 +38,14 @@ class _ImpairGencyAppState extends State<ImpairGencyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'ImpairGency',
+      // MaterialApp's title becomes the browser tab title on web, overriding
+      // the one in index.html.
+      title: kIsWeb ? 'ImpairGency Admin' : 'ImpairGency',
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
+      // The dashboard is the one surface not built under the app's
+      // constraints - §4 allows it a denser interface, and it is read with
+      // eyes rather than ears.
+      theme: kIsWeb ? buildAdminTheme() : buildAppTheme(),
       routerConfig: _router,
       builder: (context, child) {
         // Text scaling is honoured rather than clamped - §4 asks for large text

@@ -568,6 +568,88 @@ describe('one-time login codes', () => {
   });
 });
 
+describe('session summaries — the admin-readable aggregate', () => {
+  const grantHistory = () =>
+    env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'users', VI), {
+        'consent.history': true,
+      });
+    });
+
+  const summary = (extra = {}) => ({
+    userId: VI,
+    sessionId: 's1',
+    minutes: 14,
+    metres: 1200,
+    eventCounts: { obstacleDetected: 3 },
+    discardedFraction: 0.02,
+    concernCount: 0,
+    placeLabels: ['Home'],
+    ...extra,
+  });
+
+  it('needs the same history consent as the data it summarises', async () => {
+    await assertFails(
+      setDoc(doc(as(VI), 'session_summaries', 'sum1'), summary()),
+    );
+    await grantHistory();
+    await assertSucceeds(
+      setDoc(doc(as(VI), 'session_summaries', 'sum1'), summary()),
+    );
+  });
+
+  it('refuses anything carrying a coordinate', async () => {
+    // The property the whole design rests on, enforced by the server rather
+    // than trusted to the client type that writes it.
+    await grantHistory();
+    for (const leak of [
+      { lat: 14.79 },
+      { lng: 120.92 },
+      { latitude: 14.79 },
+      { longitude: 120.92 },
+      { path: [{ lat: 14.79, lng: 120.92 }] },
+      { fixes: ['14.79,120.92'] },
+    ]) {
+      await assertFails(
+        setDoc(doc(as(VI), 'session_summaries', 'leak'), summary(leak)),
+        `should refuse ${JSON.stringify(leak)}`,
+      );
+    }
+  });
+
+  it('cannot be written on someone else behalf', async () => {
+    await grantHistory();
+    await assertFails(
+      setDoc(doc(as(STRANGER), 'session_summaries', 'sum2'), summary()),
+    );
+  });
+
+  it('is readable by its owner and by an admin, not by others', async () => {
+    await grantHistory();
+    await setDoc(doc(as(VI), 'session_summaries', 'sum1'), summary());
+
+    await assertSucceeds(getDoc(doc(as(VI), 'session_summaries', 'sum1')));
+    await makeAdmin();
+    await assertSucceeds(getDoc(doc(asAdmin(), 'session_summaries', 'sum1')));
+    await assertFails(getDoc(doc(as(STRANGER), 'session_summaries', 'sum1')));
+    await assertFails(getDoc(doc(as(GUARDIAN), 'session_summaries', 'sum1')));
+  });
+
+  it('is append-only', async () => {
+    await grantHistory();
+    await setDoc(doc(as(VI), 'session_summaries', 'sum1'), summary());
+    await assertFails(
+      updateDoc(doc(as(VI), 'session_summaries', 'sum1'), { minutes: 0 }),
+    );
+  });
+
+  it('can be deleted by its owner', async () => {
+    await grantHistory();
+    await setDoc(doc(as(VI), 'session_summaries', 'sum1'), summary());
+    await assertSucceeds(deleteDoc(doc(as(VI), 'session_summaries', 'sum1')));
+  });
+});
+
 describe('the admin roster', () => {
   it('cannot be joined by the client that wants to join it', async () => {
     // The whole point: this replaces a custom claim, so it has to be exactly as
