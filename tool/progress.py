@@ -25,7 +25,14 @@ def main() -> int:
             continue
         done = len(re.findall(r"^\s*- \[x\]", chunk, re.M))
         started = len(re.findall(r"^\s*- \[~\]", chunk, re.M))
-        todo = len(re.findall(r"^\s*- \[ \]", chunk, re.M))
+        # A struck-through item is a decision not to build something, not
+        # outstanding work. Counting it as todo makes a finished phase look
+        # unfinished for as long as the reasoning stays on the page - and the
+        # reasoning is the part worth keeping.
+        todo = len([
+            line for line in re.findall(r"^\s*- \[ \].*$", chunk, re.M)
+            if "~~" not in line
+        ])
         total = done + started + todo
         if not total:
             continue
@@ -42,7 +49,9 @@ def main() -> int:
     )
 
     head, _, tail = text.partition("<!-- PROGRESS -->")
-    tail = re.sub(r"\A\n*(\| Phase \|.*?\n)+", "", tail)
+    # Strip the whole previous table, not just its header row: every line that
+    # starts with a pipe, plus the blank line after it.
+    tail = re.sub(r"\A\n*(?:\|.*\n)+\n?", "", tail)
     TASKS.write_text(f"{head}<!-- PROGRESS -->\n\n{table}\n{tail}")
     print(f"{totals[0]} / {totals[1]} ({pct}%)")
     return 0
