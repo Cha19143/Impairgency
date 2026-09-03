@@ -9,6 +9,28 @@ class TtsSpeaker implements Speaker {
   final FlutterTts _tts;
   bool _ready = false;
 
+  String? _last;
+
+  @override
+  String? get lastSpoken => _last;
+
+  @override
+  Future<void> repeat() async {
+    final last = _last;
+    // Deliberately does not overwrite _last, so repeat can be said twice.
+    if (last == null) {
+      await _say(kNothingToRepeat);
+      return;
+    }
+    await _say(last);
+  }
+
+  Future<void> _say(String text) async {
+    await _ensureReady();
+    await _tts.stop();
+    await _tts.speak(text);
+  }
+
   Future<void> _ensureReady() async {
     if (_ready) return;
     await _tts.setLanguage('en-US');
@@ -22,13 +44,13 @@ class TtsSpeaker implements Speaker {
 
   @override
   Future<void> speak(String text) async {
-    await _ensureReady();
-    await _tts.stop();
-    await _tts.speak(text);
+    _last = text;
+    await _say(text);
   }
 
   @override
   Future<void> speakLines(List<String> lines) async {
+    _last = lines.join(' ');
     await _ensureReady();
     await _tts.stop();
     for (final line in lines) {

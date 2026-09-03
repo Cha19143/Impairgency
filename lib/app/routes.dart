@@ -24,6 +24,8 @@ abstract final class Routes {
   static const sos = '/sos';
   static const whatCanISay = '/what-can-i-say';
   static const settings = '/settings';
+  static const consentCentre = '/settings/consent';
+  static const learned = '/settings/learned';
 
   // Guardian app (mobile)
   static const guardianHome = '/guardian';

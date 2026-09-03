@@ -8,6 +8,15 @@ import 'package:impairgency/vi/screens/safety_notice_screen.dart';
 /// Records what the app said, which for this app is most of what matters.
 class RecordingSpeaker implements Speaker {
   final List<String> said = [];
+
+  @override
+  String? get lastSpoken => said.isEmpty ? null : said.last;
+
+  @override
+  Future<void> repeat() async {
+    if (lastSpoken != null) said.add(lastSpoken!);
+  }
+
   int stops = 0;
 
   @override

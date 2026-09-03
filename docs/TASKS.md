@@ -27,6 +27,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `███████████░` | 20 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **68 / 85  (80%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `███████░░░░░` | 13 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
 | Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
@@ -401,20 +410,28 @@ it; a signed-in non-admin cannot reach it.
 
 **Voice** — the parser and its tests already exist; these are the handlers
 
-- [ ] `whereAmI` handler — §2.C
-- [ ] `callGuardian` handler — §2.C
-- [ ] `connectDevice` handler — §2.C, honest about §5 being out of scope
+- [x] `whereAmI` handler — §2.C, reporting the *quality* of the answer, not
+      just an answer
+- [x] `callGuardian` handler — §2.C. Never quietly rings the emergency
+      contact instead; a user who asked for their guardian would not know
+- [x] `connectDevice` handler — §2.C, honest about §5 being out of scope
+      rather than pretending to search for hardware that does not exist
 - [x] "What can I say?" — generated from `kVoiceKeywords`, so it cannot drift
       from what the parser accepts. Lists the Filipino variants too
 
 **Other**
 
 - [ ] Repeat button on Scan
-- [ ] Consent centre — inspect and revoke, revocation enforced server-side
-- [ ] What the app has learned — list and delete, backed by Phase 2
-- [ ] Device connect reachable from settings, not only onboarding — §5
-- [ ] **Offline-tolerant first run** — cached credential so a returning user
-      still reaches the dashboard with alarm and dialler live
+- [x] Consent centre — inspect and revoke, in the same words onboarding used.
+      Revocation is enforced by the rules, not by hiding a button
+- [x] What the app has learned — list and delete, backed by Phase 2. Wording
+      stays modest: it has counted something, not learned something
+- [x] Device connect reachable from settings — §5. So are the emergency
+      contact, the guardian invite and the safety notice
+- [x] **Offline-tolerant first run** — consent, contact and guardian count
+      cached locally, so a returning user with no signal reaches a working
+      dashboard. A corrupt cache reads as empty, understating what is set up
+      rather than overstating it
 
 **Gate:** all of onboarding completed with VoiceOver on and **Screen Curtain
 enabled**. Screen fully black, start to finish.

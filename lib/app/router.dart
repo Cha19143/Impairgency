@@ -2,9 +2,13 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../core/alerts/alert_presenter.dart';
+import '../core/places/place.dart';
 import '../core/session_store.dart';
 import '../core/speech/speaker.dart';
 import '../admin/screens/accessibility_screen.dart';
@@ -21,6 +25,7 @@ import '../data/auth_service.dart';
 import '../data/geolocator_location_source.dart';
 import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
+import '../data/location_history_repository.dart';
 import '../data/sos_engine.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
 import '../shared/widgets/pending_screen.dart';
@@ -33,7 +38,10 @@ import '../vi/onboarding/invite_guardian_screen.dart';
 import '../vi/onboarding/onboarding_controller.dart';
 import '../vi/onboarding/preferences_screen.dart';
 import '../vi/onboarding/welcome_screen.dart';
+import '../vi/screens/consent_centre_screen.dart';
 import '../vi/screens/dashboard_screen.dart';
+import '../vi/screens/learned_data_screen.dart';
+import '../vi/screens/settings_screen.dart';
 import '../vi/screens/location_debug_screen.dart';
 import '../vi/screens/sos_flow.dart';
 import '../vi/screens/what_can_i_say_screen.dart';
@@ -68,6 +76,10 @@ class AppSession extends ChangeNotifier {
   AuthService? _auth;
   AuthService get auth => _auth ??= AuthService();
 
+  LocationHistoryRepository? _history;
+  LocationHistoryRepository get history =>
+      _history ??= LocationHistoryRepository();
+
   SosEngine? _sos;
   SosEngine get sos => _sos ??= SosEngine(speaker: speaker);
 
@@ -91,12 +103,18 @@ class AppSession extends ChangeNotifier {
       final isAdmin = await admin.isAdmin(user.uid);
       update(SessionState(
         uid: user.uid,
+        consent: _state.consent,
+        contactName: _state.contactName,
+        contactNumber: _state.contactNumber,
+        guardianCount: _state.guardianCount,
         signedIn: true,
         isAdmin: isAdmin,
         isGuardian: _state.isGuardian,
         safetyAcknowledged: _state.safetyAcknowledged,
         completedSteps: _state.completedSteps,
       ));
+      // Best effort, and deliberately not awaited by the guard.
+      unawaited(refreshProfile());
     });
   }
 
@@ -104,14 +122,48 @@ class AppSession extends ChangeNotifier {
   SessionState get state => _state;
 
   /// Reads what was persisted before the first frame decides where to go.
+  ///
+  /// Everything here is local. A returning user with no signal reaches their
+  /// dashboard with the alarm and the dialler live, because nothing on this
+  /// path needs Firestore.
   Future<void> load() async {
+    final profile = await store.cachedProfile();
     update(SessionState(
+      uid: _state.uid,
       signedIn: _state.signedIn,
       isAdmin: _state.isAdmin,
       isGuardian: _state.isGuardian,
       safetyAcknowledged: await store.safetyAcknowledged(),
       completedSteps: await store.completedSteps(),
+      consent: profile.consent,
+      contactName: profile.contactName,
+      contactNumber: profile.contactNumber,
+      guardianCount: profile.guardianCount,
     ));
+  }
+
+  /// Re-reads the profile from Firestore and caches it.
+  ///
+  /// Failure is not an error: the cached values stay, which is the whole point.
+  Future<void> refreshProfile() async {
+    final uid = _state.uid;
+    if (uid == null) return;
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = snapshot.data();
+      if (data == null) return;
+      final contact = data['emergencyContact'] as Map<String, dynamic>?;
+      await store.cacheProfile(CachedProfile(
+        consent: Map<String, bool>.from(data['consent'] as Map? ?? const {}),
+        contactName: contact?['name'] as String?,
+        contactNumber: contact?['number'] as String?,
+        guardianCount: (data['guardianCount'] as num?)?.toInt() ?? 0,
+      ));
+      await load();
+    } catch (_) {
+      // Offline. The cache is what the app runs on until the network returns.
+    }
   }
 
   void update(SessionState next) {
@@ -323,6 +375,55 @@ GoRouter createRouter(AppSession session) => GoRouter(
           ),
         ),
         GoRoute(
+          path: Routes.settings,
+          builder: (context, _) => SettingsScreen(
+            speaker: session.speaker,
+            hasContact: session.state.contactNumber != null,
+            hasGuardian: session.state.guardianCount > 0,
+            onConsent: () => appNavigate(context, Routes.consentCentre),
+            onLearned: () => appNavigate(context, Routes.learned),
+            onDevice: () => appNavigate(context, Routes.device),
+            onEmergencyContact: () =>
+                appNavigate(context, Routes.emergencyContact),
+            onInviteGuardian: () => appNavigate(context, Routes.inviteGuardian),
+            onSafetyNotice: () => appNavigate(context, Routes.safety),
+            onBack: () => appNavigate(context, Routes.home),
+          ),
+        ),
+        GoRoute(
+          path: Routes.consentCentre,
+          builder: (context, _) => ConsentCentreScreen(
+            speaker: session.speaker,
+            current: session.state.consent,
+            onSave: (values) async {
+              await session.onboarding.saveConsent(values);
+              await session.refreshProfile();
+            },
+            onBack: () => appNavigate(context, Routes.settings),
+          ),
+        ),
+        GoRoute(
+          path: Routes.learned,
+          builder: (context, _) => AdminFreeFuture<List<Place>>(
+            load: () => session.history.places(session.state.uid ?? ''),
+            builder: (_, places) => LearnedDataScreen(
+              speaker: session.speaker,
+              places: places,
+              offset: DateTime.now().timeZoneOffset,
+              onForgetAll: () async {
+                await session.history.forgetAll(session.state.uid ?? '');
+                if (context.mounted) appNavigate(context, Routes.settings);
+              },
+              onForgetPlace: (place) async {
+                await session.history
+                    .forgetPlace(session.state.uid ?? '', place);
+                if (context.mounted) appNavigate(context, Routes.learned);
+              },
+              onBack: () => appNavigate(context, Routes.settings),
+            ),
+          ),
+        ),
+        GoRoute(
           path: Routes.whatCanISay,
           builder: (context, _) => WhatCanISayScreen(
             speaker: session.speaker,
@@ -504,5 +605,42 @@ class _CouldNotIssueCode extends StatelessWidget {
             onPressed: onSkip,
           ),
         ],
+      );
+}
+
+
+/// Loads something for a screen in the visually impaired app.
+///
+/// Named for what it is not: the dashboard's [AdminPage] shows a spinner and a
+/// refusal message, which is right for a sighted operator. Here a failure falls
+/// through to an empty result instead, because a blind user stuck on a spinner
+/// has no way to know that is what they are looking at.
+class AdminFreeFuture<T> extends StatelessWidget {
+  const AdminFreeFuture({
+    super.key,
+    required this.load,
+    required this.builder,
+  });
+
+  final Future<T> Function() load;
+  final Widget Function(BuildContext, T) builder;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<T>(
+        future: load(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final data = snapshot.data;
+          if (data == null) {
+            // An empty list reads as "nothing learned yet", which is true
+            // enough offline and better than a dead end.
+            return builder(context, <Never>[] as T);
+          }
+          return builder(context, data);
+        },
       );
 }

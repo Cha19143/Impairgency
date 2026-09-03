@@ -17,6 +17,7 @@ library;
 enum VoiceCommand {
   help,
   cancel,
+  repeat,
   scan,
   navigate,
   whereAmI,
@@ -45,6 +46,10 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
     'hindi',
     'huwag',
   ],
+  // Not one of the six functions either. It exists because someone who missed
+  // a spoken warning has no way to see it again - "repeat" is the only route
+  // back to information that has already gone past.
+  VoiceCommand.repeat: ['repeat', 'again', 'ulit', 'ulitin', 'pakiulit'],
   VoiceCommand.scan: ['scan', 'iskan', 'detect', 'nearby', 'tingnan', 'silipin'],
   VoiceCommand.navigate: [
     'navigate',
@@ -68,6 +73,7 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
 /// cancelled - the SOS countdown, chiefly - opt in with [only].
 const Set<VoiceCommand> kEverydayCommands = {
   VoiceCommand.help,
+  VoiceCommand.repeat,
   VoiceCommand.scan,
   VoiceCommand.navigate,
   VoiceCommand.whereAmI,
@@ -118,6 +124,7 @@ VoiceCommand? matchVoiceCommand(String transcript, {Set<VoiceCommand>? only}) {
 const Map<VoiceCommand, String> kCommandDescriptions = {
   VoiceCommand.help: 'Start emergency SOS',
   VoiceCommand.cancel: 'Stop what is happening now',
+  VoiceCommand.repeat: 'Say the last thing again',
   VoiceCommand.scan: 'Describe what is in front of you',
   VoiceCommand.navigate: 'Start guided navigation',
   VoiceCommand.whereAmI: 'Say where you are',

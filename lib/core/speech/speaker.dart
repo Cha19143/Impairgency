@@ -6,6 +6,16 @@
 library;
 
 abstract interface class Speaker {
+  /// The last thing said, or null if nothing has been.
+  ///
+  /// Backs the "repeat" command. Someone who missed a spoken warning has no
+  /// way to see it again; replaying it is the only route back to information
+  /// that has already gone past.
+  String? get lastSpoken;
+
+  /// Says [lastSpoken] again, or explains that there is nothing to repeat.
+  Future<void> repeat();
+
   /// Speaks [text], interrupting anything already in progress.
   Future<void> speak(String text);
 
@@ -24,6 +34,12 @@ class SilentSpeaker implements Speaker {
   const SilentSpeaker();
 
   @override
+  String? get lastSpoken => null;
+
+  @override
+  Future<void> repeat() async {}
+
+  @override
   Future<void> speak(String text) async {}
 
   @override
@@ -32,3 +48,6 @@ class SilentSpeaker implements Speaker {
   @override
   Future<void> stop() async {}
 }
+
+/// What the app says when there is nothing to say again.
+const String kNothingToRepeat = 'There is nothing to repeat yet.';

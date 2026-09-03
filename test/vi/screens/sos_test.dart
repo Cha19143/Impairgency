@@ -11,6 +11,15 @@ import 'package:impairgency/vi/screens/sos_receipt_screen.dart';
 
 class RecordingSpeaker implements Speaker {
   final List<String> said = [];
+
+  @override
+  String? get lastSpoken => said.isEmpty ? null : said.last;
+
+  @override
+  Future<void> repeat() async {
+    if (lastSpoken != null) said.add(lastSpoken!);
+  }
+
   @override
   Future<void> speak(String text) async => said.add(text);
   @override
