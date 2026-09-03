@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart' show kContrastPairs;
 import '../../core/a11y/contrast.dart';
 import '../admin_theme.dart';
+import '../admin_ui.dart';
 
 /// §1.4's button, renamed to what it can actually show.
 ///
@@ -38,44 +39,61 @@ class AccessibilityScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
           decoration: BoxDecoration(
-            color: failing == 0 ? const Color(0xFFEAF6EF) : const Color(0xFFFDF4F5),
+            color: failing == 0
+                ? AdminTone.good.tint
+                : AdminTone.bad.tint,
             border: Border.all(
                 color: failing == 0
                     ? const Color(0xFFB4DCC4)
-                    : const Color(0xFFE8B4BA)),
-            borderRadius: BorderRadius.circular(9),
+                    : const Color(0xFFF0C8CD)),
+            borderRadius: BorderRadius.circular(AdminCard.radius),
           ),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                failing == 0
-                    ? 'Every rendered colour pair meets WCAG AA'
-                    : '$failing colour pair${failing == 1 ? '' : 's'} below WCAG AA',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: failing == 0 ? AdminColors.good : AdminColors.bad,
-                ),
+              AdminIconTile(
+                failing == 0 ? Icons.verified_outlined : Icons.error_outline,
+                tone: failing == 0 ? AdminTone.good : AdminTone.bad,
+                size: 38,
               ),
-              const SizedBox(height: 5),
-              const Text(
-                'Measured from the same constants the app paints with, so this '
-                'page cannot drift from what ships. Requirements §4 asks for '
-                'high contrast; this is the evidence.',
-                style: TextStyle(
-                    fontSize: 13, height: 1.45, color: AdminColors.inkMuted),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      failing == 0
+                          ? 'Every rendered colour pair meets WCAG AA'
+                          : '$failing colour pair${failing == 1 ? '' : 's'} '
+                              'below WCAG AA',
+                      style: TextStyle(
+                        fontSize: 16,
+                        height: 1.3,
+                        fontWeight: FontWeight.bold,
+                        color:
+                            failing == 0 ? AdminColors.good : AdminColors.bad,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    const Text(
+                      'Measured from the same constants the app paints with, '
+                      'so this page cannot drift from what ships. '
+                      'Requirements §4 asks for high contrast; this is the '
+                      'evidence.',
+                      style: TextStyle(
+                          fontSize: 13,
+                          height: 1.45,
+                          color: AdminColors.inkMuted),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: AdminColors.card,
-            border: Border.all(color: AdminColors.line),
-            borderRadius: BorderRadius.circular(9),
-          ),
+        AdminCard(
+          padding: EdgeInsets.zero,
           child: Column(
             children: [
               for (var i = 0; i < rows.length; i++)

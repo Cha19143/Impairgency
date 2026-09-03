@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/admin_repository.dart';
 import '../admin_theme.dart';
+import '../admin_ui.dart';
 
 /// §1.2 — visually impaired users, guardians, administrators, device links.
 ///
@@ -38,43 +39,61 @@ class UsersScreen extends StatelessWidget {
                 icon: const Icon(Icons.person_add_alt, size: 17),
                 label: const Text('Invite someone'),
                 style: FilledButton.styleFrom(
-                    backgroundColor: AdminColors.chrome),
+                  backgroundColor: AdminColors.chrome,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 42),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  textStyle: const TextStyle(
+                      fontSize: 13.5, fontWeight: FontWeight.w600),
+                ),
               ),
           ],
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
         if (invites.isNotEmpty) ...[
-          _Card(
+          AdminPanel(
             title: 'Awaiting registration',
             footnote: 'They choose their own password when they register. '
                 'Nobody here ever sees it.',
             child: Column(
               children: [
-                for (final invite in invites)
+                for (final (i, invite) in invites.indexed) ...[
+                  if (i > 0) const AdminRowDivider(),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(
                       children: [
+                        const _Avatar(pending: true),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Text(invite.email,
-                              style: const TextStyle(fontSize: 13.5)),
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w500)),
                         ),
                         _RolePill(invite.role),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         if (onWithdraw != null)
                           TextButton(
                             onPressed: () => onWithdraw!(invite),
+                            style: TextButton.styleFrom(
+                                foregroundColor: AdminColors.bad),
                             child: const Text('Withdraw'),
                           ),
                       ],
                     ),
                   ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 14),
         ],
-        _Card(
+        AdminPanel(
           title: 'Accounts',
           child: users.isEmpty
               ? const Padding(
@@ -91,8 +110,10 @@ class UsersScreen extends StatelessWidget {
                   return Column(
                     children: [
                       if (!stacked) const _HeaderRow(),
-                      for (final user in users)
+                      for (final (i, user) in users.indexed) ...[
+                        if (i > 0 || !stacked) const AdminRowDivider(),
                         _UserRow(user: user, stacked: stacked),
+                      ],
                     ],
                   );
                 }),
@@ -107,9 +128,10 @@ class _HeaderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Padding(
-        padding: EdgeInsets.only(bottom: 8),
+        padding: EdgeInsets.only(bottom: 10),
         child: Row(
           children: [
+            SizedBox(width: 46),
             Expanded(flex: 4, child: _H('Name')),
             Expanded(flex: 2, child: _H('Role')),
             Expanded(flex: 3, child: _H('Device')),
@@ -157,25 +179,26 @@ class _UserRow extends StatelessWidget {
       );
 
   /// One block per account, for a phone.
-  Widget _stackedRow() => Container(
+  Widget _stackedRow() => Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Color(0xFFEDF0F6))),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
+                _Avatar(name: user.name),
+                const SizedBox(width: 12),
                 Expanded(child: _name),
                 const SizedBox(width: 10),
                 _RolePill(user.role),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             // Labelled here, because there is no header row to read them
             // against once the columns are gone.
-            Wrap(
+            Padding(
+              padding: const EdgeInsets.only(left: 46),
+              child: Wrap(
               spacing: 16,
               runSpacing: 4,
               children: [
@@ -191,7 +214,8 @@ class _UserRow extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 12.5, color: AdminColors.inkMuted),
                 ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -201,13 +225,12 @@ class _UserRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (stacked) return _stackedRow();
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFFEDF0F6))),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 11),
       child: Row(
         children: [
+          _Avatar(name: user.name),
+          const SizedBox(width: 12),
           Expanded(flex: 4, child: _name),
           Expanded(flex: 2, child: Align(
             alignment: Alignment.centerLeft,
@@ -243,6 +266,47 @@ class _UserRow extends StatelessWidget {
   }
 }
 
+/// The initial, so a row of accounts scans as people rather than as text.
+///
+/// Decorative only: the name is right beside it, and the semantics come from
+/// the row. An invitation has no name yet, so it gets an envelope.
+class _Avatar extends StatelessWidget {
+  const _Avatar({this.name, this.pending = false});
+
+  final String? name;
+  final bool pending;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = (name?.trim().isNotEmpty ?? false)
+        ? name!.trim()[0].toUpperCase()
+        : '?';
+
+    return ExcludeSemantics(
+      child: Container(
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AdminTone.neutral.tint,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: pending
+            ? const Icon(Icons.mail_outline,
+                size: 16, color: AdminColors.inkMuted)
+            : Text(
+                initial,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: AdminColors.chrome,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
 class _RolePill extends StatelessWidget {
   const _RolePill(this.role);
 
@@ -255,56 +319,6 @@ class _RolePill extends StatelessWidget {
       'guardian' => ('Guardian', const Color(0xFFE2E8F8), const Color(0xFF1E3A8A)),
       _ => ('VI user', const Color(0xFFD2ECEF), const Color(0xFF0A5A63)),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.4,
-              color: foreground)),
-    );
+    return AdminPill(label, background: background, foreground: foreground);
   }
-}
-
-class _Card extends StatelessWidget {
-  const _Card({required this.title, required this.child, this.footnote});
-
-  final String title;
-  final Widget child;
-  final String? footnote;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-        decoration: BoxDecoration(
-          color: AdminColors.card,
-          border: Border.all(color: AdminColors.line),
-          borderRadius: BorderRadius.circular(9),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(title.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 10.5,
-                  letterSpacing: 1,
-                  fontWeight: FontWeight.w700,
-                  color: AdminColors.inkMuted,
-                )),
-            const SizedBox(height: 12),
-            child,
-            if (footnote != null) ...[
-              const SizedBox(height: 12),
-              Text(footnote!,
-                  style: const TextStyle(
-                      fontSize: 11.5, height: 1.35, color: AdminColors.inkMuted)),
-            ],
-          ],
-        ),
-      );
 }

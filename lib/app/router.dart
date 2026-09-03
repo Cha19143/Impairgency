@@ -475,6 +475,7 @@ GoRouter createRouter(AppSession session) => GoRouter(
             builder: (_, data) => OverviewScreen(overview: data),
             onSelect: (s) => appNavigate(context, s.route),
             onSignOut: session.auth.signOut,
+            account: session.auth.email,
           ),
         ),
         GoRoute(
@@ -515,6 +516,7 @@ GoRouter createRouter(AppSession session) => GoRouter(
             ),
             onSelect: (s) => appNavigate(context, s.route),
             onSignOut: session.auth.signOut,
+            account: session.auth.email,
           ),
         ),
         GoRoute(
@@ -540,6 +542,7 @@ GoRouter createRouter(AppSession session) => GoRouter(
             ),
             onSelect: (s) => appNavigate(context, s.route),
             onSignOut: session.auth.signOut,
+            account: session.auth.email,
           ),
         ),
         GoRoute(
@@ -550,6 +553,7 @@ GoRouter createRouter(AppSession session) => GoRouter(
             subtitle: 'Measured, not audited',
             onSelect: (s) => appNavigate(context, s.route),
             onSignOut: session.auth.signOut,
+            account: session.auth.email,
             child: const AccessibilityScreen(),
           ),
         ),

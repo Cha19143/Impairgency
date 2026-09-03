@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/places/session_summary.dart';
 import '../admin_theme.dart';
+import '../admin_ui.dart';
 
 /// §1.4 — "Monitor application and AI performance. Track errors, crashes,
 /// response times, and system status."
@@ -45,46 +46,53 @@ class SystemHealthScreen extends StatelessWidget {
           final columns = constraints.maxWidth >= 720
               ? 3
               : (constraints.maxWidth >= 460 ? 2 : 1);
-          final w = (constraints.maxWidth - 12 * (columns - 1)) / columns;
+          final w = (constraints.maxWidth - 14 * (columns - 1)) / columns;
           return Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: 14,
+            runSpacing: 14,
             children: [
-            _Stat(
-              width: w,
-              label: 'Positioning quality',
-              value: quality == null ? '—' : '${quality.round()}%',
-              note: 'median usable readings per session',
-              state: quality == null
-                  ? _State.unknown
-                  : (quality >= 80 ? _State.good : _State.warn),
-            ),
-            _Stat(
-              width: w,
-              label: 'Sessions flagged',
-              value: '$flagged',
-              note: 'of ${overview.sessions} in this period',
-              state: flagged == 0 ? _State.good : _State.warn,
-            ),
-            _Stat(
-              width: w,
-              label: 'Emergencies',
-              value: '${overview.sosIncidents}',
-              note: 'SOS sent',
-              state: overview.sosIncidents == 0 ? _State.good : _State.bad,
-            ),
-          ],
+              AdminStat(
+                width: w,
+                label: 'Positioning quality',
+                value: quality == null ? '—' : '${quality.round()}%',
+                note: 'median usable readings per session',
+                icon: Icons.my_location_outlined,
+                tone: quality == null
+                    ? AdminTone.neutral
+                    : (quality >= 80 ? AdminTone.good : AdminTone.warn),
+              ),
+              AdminStat(
+                width: w,
+                label: 'Sessions flagged',
+                value: '$flagged',
+                note: 'of ${overview.sessions} in this period',
+                icon: Icons.flag_outlined,
+                tone: flagged == 0 ? AdminTone.good : AdminTone.warn,
+              ),
+              AdminStat(
+                width: w,
+                label: 'Emergencies',
+                value: '${overview.sosIncidents}',
+                note: 'SOS sent',
+                icon: Icons.emergency_outlined,
+                tone: overview.sosIncidents == 0
+                    ? AdminTone.good
+                    : AdminTone.bad,
+              ),
+            ],
           );
         }),
         const SizedBox(height: 16),
         if (sessionsNeedingAttention.isNotEmpty)
-          _Card(
+          AdminPanel(
             title: 'Sessions worth reviewing',
             child: Column(
               children: [
-                for (final session in sessionsNeedingAttention.take(8))
+                for (final (i, session)
+                    in sessionsNeedingAttention.take(8).indexed) ...[
+                  if (i > 0) const AdminRowDivider(),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    padding: const EdgeInsets.symmetric(vertical: 9),
                     child: Row(
                       children: [
                         Expanded(
@@ -93,20 +101,21 @@ class SystemHealthScreen extends StatelessWidget {
                                   fontSize: 13, fontFamily: 'monospace'),
                               overflow: TextOverflow.ellipsis),
                         ),
-                        Text(
+                        const SizedBox(width: 10),
+                        AdminPill(
                           '${session.concernCount} '
                           'concern${session.concernCount == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                              fontSize: 12.5, color: AdminColors.warn),
+                          tone: AdminTone.warn,
                         ),
                       ],
                     ),
                   ),
+                ],
               ],
             ),
           ),
         const SizedBox(height: 16),
-        _Card(
+        AdminPanel(
           title: 'Crashes and response times',
           footnote:
               'Not mirrored here on purpose. Reading Crashlytics or Performance '
@@ -124,21 +133,11 @@ class SystemHealthScreen extends StatelessWidget {
                     fontSize: 13, height: 1.45, color: AdminColors.ink),
               ),
               const SizedBox(height: 10),
-              SelectableText(
-                'console.firebase.google.com/project/$projectId/crashlytics',
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    fontFamily: 'monospace',
-                    color: AdminColors.ink),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(
-                'console.firebase.google.com/project/$projectId/performance',
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    fontFamily: 'monospace',
-                    color: AdminColors.ink),
-              ),
+              _ConsoleLink(
+                  'console.firebase.google.com/project/$projectId/crashlytics'),
+              const SizedBox(height: 6),
+              _ConsoleLink(
+                  'console.firebase.google.com/project/$projectId/performance'),
             ],
           ),
         ),
@@ -147,123 +146,36 @@ class SystemHealthScreen extends StatelessWidget {
   }
 }
 
-enum _State { good, warn, bad, unknown }
+/// A console address, in a box that says "copy me" without pretending to be a
+/// button that opens it — this dashboard cannot sign anyone into Firebase.
+class _ConsoleLink extends StatelessWidget {
+  const _ConsoleLink(this.url);
 
-class _Stat extends StatelessWidget {
-  const _Stat({
-    required this.label,
-    required this.value,
-    required this.state,
-    required this.width,
-    this.note,
-  });
-
-  final String label;
-  final String value;
-  final double width;
-  final String? note;
-  final _State state;
-
-  @override
-  Widget build(BuildContext context) {
-    final colour = switch (state) {
-      _State.good => AdminColors.good,
-      _State.warn => AdminColors.warn,
-      _State.bad => AdminColors.bad,
-      _State.unknown => AdminColors.inkMuted,
-    };
-
-    return Semantics(
-      label: '$label: $value',
-      child: ExcludeSemantics(
-        child: Container(
-          width: width,
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
-          decoration: BoxDecoration(
-            color: AdminColors.card,
-            border: Border.all(color: AdminColors.line),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration:
-                        BoxDecoration(color: colour, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(label.toUpperCase(),
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          letterSpacing: 1,
-                          fontWeight: FontWeight.w700,
-                          color: AdminColors.inkMuted,
-                        )),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 7),
-              Text(value,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    height: 1.05,
-                    fontWeight: FontWeight.bold,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                    color: AdminColors.ink,
-                  )),
-              if (note != null) ...[
-                const SizedBox(height: 3),
-                Text(note!,
-                    style: const TextStyle(
-                        fontSize: 11.5, color: AdminColors.inkMuted)),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  const _Card({required this.title, required this.child, this.footnote});
-
-  final String title;
-  final Widget child;
-  final String? footnote;
+  final String url;
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: AdminColors.card,
-          border: Border.all(color: AdminColors.line),
+          color: AdminColors.field,
           borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: AdminColors.line),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
           children: [
-            Text(title.toUpperCase(),
+            const Icon(Icons.open_in_new,
+                size: 15, color: AdminColors.inkMuted),
+            const SizedBox(width: 9),
+            Expanded(
+              child: SelectableText(
+                url,
                 style: const TextStyle(
-                  fontSize: 10.5,
-                  letterSpacing: 1,
-                  fontWeight: FontWeight.w700,
-                  color: AdminColors.inkMuted,
-                )),
-            const SizedBox(height: 12),
-            child,
-            if (footnote != null) ...[
-              const SizedBox(height: 12),
-              Text(footnote!,
-                  style: const TextStyle(
-                      fontSize: 11.5, height: 1.4, color: AdminColors.inkMuted)),
-            ],
+                  fontSize: 12.5,
+                  fontFamily: 'monospace',
+                  color: AdminColors.ink,
+                ),
+              ),
+            ),
           ],
         ),
       );
