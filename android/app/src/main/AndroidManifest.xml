@@ -1,6 +1,30 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Location. Foreground only: §2.A.4 sharing, §2.A.5 the SOS location leg,
+         §3.1 guardian tracking. Background location is deliberately not
+         requested - it needs a Play Store justification the project does not
+         have, and nothing in scope needs a fix while the app is closed. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- §3.2 guardian SOS alerts. Android 13+ requires this at runtime, and a
+         guardian who never granted it is a guardian who is never told. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- §2.A.1 and §2.A.3, the camera and detection loop. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- §2.C voice commands. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- The emergency contact picker. Read only; nothing is written back. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
-        android:label="impairgency"
+        android:label="ImpairGency"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -40,6 +64,12 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Without this, package visibility on API 30+ hides the dialer and
+             the SOS call leg silently fails to launch. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
         </intent>
     </queries>
 </manifest>

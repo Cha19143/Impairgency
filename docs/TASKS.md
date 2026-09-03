@@ -24,6 +24,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase | | Done |
 |---|---|---|
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `███░░░░░░░░░` | 2 / 9 |
+| Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **21 / 82  (26%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `░░░░░░░░░░░░` | 0 / 9 |
 | Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
@@ -110,9 +119,12 @@ Blocking. Nothing else should store data until this is deployed.
 *Blocked by: Phase 0 (Firebase configured).* De-risked early because native
 configuration is what bites late.
 
-- [ ] Add `geolocator` permission strings — `Info.plist`, `AndroidManifest.xml`
-- [ ] `LocationService` in `lib/core/location/` — foreground fixes, permission
-      state, graceful denial — §2.A.4
+- [x] Platform permission strings — `Info.plist` (5 purpose strings), `AndroidManifest.xml`
+      (location, notifications, camera, mic, contacts, plus the `tel:` intent query
+      without which the SOS call leg silently fails on API 30+)
+- [x] `lib/core/location/` — fix type, source interface, and the decision policy
+      as a pure function. Foreground only; background needs a Play justification
+      the project does not have — §2.A.4
 - [ ] Throwaway debug screen proving a real fix on a real device
 - [ ] APNs key uploaded; Android `IMPORTANCE_HIGH` notification channel — §3.2
 - [ ] `firebase_messaging` token registration and refresh

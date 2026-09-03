@@ -4,6 +4,18 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Purpose strings are read aloud by VoiceOver at the moment of the
+	     prompt. They say what the app does with the data and who sees it. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>So your guardian can find you, and so an emergency SOS can send where you are. Location is only shared while you have turned sharing on.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>So the app can describe what is in front of you and warn you about obstacles.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>So you can control the app by speaking instead of touching the screen.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>So the app can understand spoken commands like scan, navigate and help.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>So you can choose an emergency contact from people you already know, instead of typing a number.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
