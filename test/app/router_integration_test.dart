@@ -45,7 +45,8 @@ void main() {
     expect(session.state.safetyAcknowledged, isTrue);
     expect(find.text(kSafetyNotice.headline), findsNothing,
         reason: 'the notice should not still be on screen');
-    expect(find.text('Welcome'), findsOneWidget);
+    expect(find.text('Welcome to ImpairGency'), findsOneWidget,
+        reason: 'the real welcome screen, not a placeholder');
   });
 
   testWidgets('the acknowledgement is remembered across a restart',
@@ -70,7 +71,7 @@ void main() {
       (tester) async {
     await pumpApp(tester, acknowledged: true);
     expect(find.text(kSafetyNotice.headline), findsNothing);
-    expect(find.text('Welcome'), findsOneWidget);
+    expect(find.text('Welcome to ImpairGency'), findsOneWidget);
   });
 
   testWidgets('the notice can be reopened later without being re-acknowledged',

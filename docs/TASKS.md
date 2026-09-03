@@ -27,6 +27,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
 | Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `█████░░░░░░░` | 8 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **56 / 85  (66%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `██████████░░` | 10 / 12 |
+| Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
+| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
 | Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
 | Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
@@ -347,15 +356,19 @@ it; a signed-in non-admin cannot reach it.
 
 **Onboarding** — account first, so the flow stops being circular
 
-- [ ] Welcome — speaks on launch, two doors
-- [ ] Create account — **credentials never dictated**; voice moves between
-      fields, the keyboard enters them
-- [ ] How you'll use it — screen-on preference; derives the admin category
-- [ ] Emergency contact — skippable, and skipping says what SOS then cannot do
-- [ ] Invite a guardian — pairing code
-- [ ] Consent — location, recording, faces; **all off by default** — §7
-- [ ] Device — last and optional, gating nothing — §5
-- [ ] All set — one action, and **no route back to sign-in**
+- [x] Welcome — speaks on launch, two doors
+- [x] Create account — **credentials never dictated**; voice moves between
+      fields, the keyboard enters them. Moved from step 5/5 to step 1/6
+- [x] How you'll use it — screen-on preference; derives the admin category
+- [x] Emergency contact — skippable, and the first tap on Skip **explains
+      before it does**, spoken as well as shown
+- [x] Invite a guardian — pairing code, spelled out character by character
+      rather than read as a word
+- [x] Consent — location, history, recording, faces; **all off by default**,
+      each saying who can see the result — §7
+- [x] Device — last and optional, gating nothing — §5
+- [x] All set — one action, **no route back to sign-in**, and it says what is
+      *missing* rather than congratulating
 
 **SOS**
 

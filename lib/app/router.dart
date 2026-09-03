@@ -23,8 +23,19 @@ import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
 import '../shared/widgets/pending_screen.dart';
+import '../vi/onboarding/all_set_screen.dart';
+import '../vi/onboarding/consent_screen.dart';
+import '../vi/onboarding/create_account_screen.dart';
+import '../vi/onboarding/device_screen.dart';
+import '../vi/onboarding/emergency_contact_screen.dart';
+import '../vi/onboarding/invite_guardian_screen.dart';
+import '../vi/onboarding/onboarding_controller.dart';
+import '../vi/onboarding/preferences_screen.dart';
+import '../vi/onboarding/welcome_screen.dart';
 import '../vi/screens/location_debug_screen.dart';
 import '../vi/screens/safety_notice_screen.dart';
+import '../vi/widgets/vi_button.dart';
+import '../vi/widgets/vi_screen.dart';
 import 'routes.dart';
 
 /// Live session, fed by FirebaseAuth once `flutterfire configure` has been run
@@ -52,6 +63,13 @@ class AppSession extends ChangeNotifier {
 
   AuthService? _auth;
   AuthService get auth => _auth ??= AuthService();
+
+  OnboardingController? _onboarding;
+  OnboardingController get onboarding => _onboarding ??= OnboardingController(
+        auth: auth,
+        store: store,
+        pairing: pairing,
+      );
 
   /// Follows Firebase auth so the router's guard reflects who is signed in.
   ///
@@ -92,6 +110,16 @@ class AppSession extends ChangeNotifier {
   void update(SessionState next) {
     _state = next;
     notifyListeners();
+  }
+
+  /// Runs an onboarding step's work, then re-reads what is complete.
+  ///
+  /// The redirect sends the user to the first incomplete step, so refreshing
+  /// the session *is* the navigation - there is no second source of truth for
+  /// where they are in the flow.
+  Future<void> advance(Future<void> Function() work) async {
+    await work();
+    await load();
   }
 
   Future<void> acknowledgeSafety() async {
@@ -157,14 +185,112 @@ GoRouter createRouter(AppSession session) => GoRouter(
         ),
 
         // ---- visually impaired user app (mobile) ----
-        _page(Routes.welcome, 'Welcome', 'Phase 4', '§4'),
-        _page(Routes.createAccount, 'Create account', 'Phase 4', '§4'),
-        _page(Routes.preferences, "How you'll use it", 'Phase 4', '§4'),
-        _page(Routes.emergencyContact, 'Emergency contact', 'Phase 4', '§2.A.5'),
-        _page(Routes.inviteGuardian, 'Invite a guardian', 'Phase 1', '§3'),
-        _page(Routes.consent, 'Consent', 'Phase 4', '§7'),
-        _page(Routes.device, 'Device', 'Phase 4', '§5'),
-        _page(Routes.allSet, 'All set', 'Phase 4', '§4'),
+        GoRoute(
+          path: Routes.welcome,
+          builder: (context, _) => WelcomeScreen(
+            speaker: session.speaker,
+            onCreateAccount: () =>
+                appNavigate(context, Routes.createAccount),
+            onSignIn: () => appNavigate(context, Routes.createAccount),
+          ),
+        ),
+        GoRoute(
+          path: Routes.createAccount,
+          builder: (context, _) => CreateAccountScreen(
+            speaker: session.speaker,
+            onCreate: (email, password) async {
+              final failure =
+                  await session.onboarding.createAccount(email, password);
+              if (failure == null) await session.load();
+              return failure;
+            },
+          ),
+        ),
+        GoRoute(
+          path: Routes.preferences,
+          builder: (context, _) => PreferencesScreen(
+            speaker: session.speaker,
+            onChoose: (on) => session.advance(
+                () => session.onboarding.savePreference(screenStaysOn: on)),
+            onSkip: () => session.advance(
+                () => session.onboarding.skip(Routes.preferences)),
+          ),
+        ),
+        GoRoute(
+          path: Routes.emergencyContact,
+          builder: (context, _) => EmergencyContactScreen(
+            speaker: session.speaker,
+            onSave: (name, number) => session.advance(() =>
+                session.onboarding.saveEmergencyContact(name, number)),
+            onSkip: () => session.advance(
+                () => session.onboarding.skip(Routes.emergencyContact)),
+          ),
+        ),
+        GoRoute(
+          path: Routes.inviteGuardian,
+          builder: (context, _) => FutureBuilder<String?>(
+            future: session.onboarding.issueGuardianCode(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()));
+              }
+              final code = snapshot.data;
+              if (code == null) {
+                // Never a fabricated code: a guardian entering one that was
+                // never issued would fail with no way to tell why.
+                return _CouldNotIssueCode(
+                  speaker: session.speaker,
+                  onSkip: () => session.advance(
+                      () => session.onboarding.skip(Routes.inviteGuardian)),
+                );
+              }
+              return InviteGuardianScreen(
+                speaker: session.speaker,
+                code: code,
+                onDone: () => session
+                    .advance(session.onboarding.markGuardianInvited),
+                onSkip: () => session.advance(
+                    () => session.onboarding.skip(Routes.inviteGuardian)),
+              );
+            },
+          ),
+        ),
+        GoRoute(
+          path: Routes.consent,
+          builder: (context, _) => ConsentScreen(
+            speaker: session.speaker,
+            onContinue: (values) =>
+                session.advance(() => session.onboarding.saveConsent(values)),
+          ),
+        ),
+        GoRoute(
+          path: Routes.device,
+          builder: (context, _) => DeviceScreen(
+            speaker: session.speaker,
+            onHasDevice: () => session.advance(
+                () => session.onboarding.saveDevice(hasDevice: true)),
+            onNoDevice: () => session.advance(
+                () => session.onboarding.saveDevice(hasDevice: false)),
+            onSkip: () => session.advance(
+                () => session.onboarding.skip(Routes.device)),
+          ),
+        ),
+        GoRoute(
+          path: Routes.allSet,
+          builder: (context, _) => FutureBuilder<({bool contact, bool guardian})>(
+            future: session.onboarding.whatIsSetUp(),
+            builder: (context, snapshot) {
+              final state = snapshot.data ?? (contact: false, guardian: false);
+              return AllSetScreen(
+                speaker: session.speaker,
+                hasEmergencyContact: state.contact,
+                hasGuardian: state.guardian,
+                onStart: () => session.advance(session.onboarding.finish),
+              );
+            },
+          ),
+        ),
         _page(Routes.home, 'Dashboard', 'Phase 4', '§2.C'),
 
         // ---- guardian app (mobile) ----
@@ -313,3 +439,33 @@ Future<String?> _redeem(AppSession session, String code) async {
 /// inline closure inside a route table.
 void appNavigate(BuildContext context, String location) =>
     GoRouter.of(context).go(location);
+
+
+/// Shown when a pairing code could not be issued.
+///
+/// The alternative - showing a made-up code - would send a guardian to type
+/// something that was never issued, and fail with no way to tell why.
+class _CouldNotIssueCode extends StatelessWidget {
+  const _CouldNotIssueCode({required this.speaker, required this.onSkip});
+
+  final Speaker speaker;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) => ViScreen(
+        speaker: speaker,
+        step: 'Step 4 of 6',
+        title: 'Could not create an invitation',
+        body: const [
+          'This usually means there is no connection. You can invite a guardian '
+              'later from settings.',
+        ],
+        actions: [
+          ViButton(
+            label: 'Continue without a guardian',
+            icon: Icons.arrow_forward,
+            onPressed: onSkip,
+          ),
+        ],
+      );
+}
