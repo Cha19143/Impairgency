@@ -24,8 +24,20 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    // Admin is membership of a collection nothing client-side can write to,
+    // rather than a custom claim.
+    //
+    // Custom claims can only be set with the Admin SDK, which means a Cloud
+    // Function, which means a billing account. This gives the same property
+    // for free: `admins` is deny-all for every client, so the only way in is
+    // the Firebase console or the Admin SDK. Bootstrap the first admin by
+    // creating the document by hand.
+    //
+    // Costs one document read per admin-gated evaluation. `exists()` inside
+    // rules is privileged and does not itself go through the rules below.
     function isAdmin() {
-      return signedIn() && request.auth.token.admin == true;
+      return signedIn() &&
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     // Pairing documents use a deterministic id so this is one lookup, not a
@@ -188,11 +200,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---- admin roster ----------------------------------------------------
+
+    // Deny-all from every client. Membership is granted in the Firebase console
+    // or with the Admin SDK, never by an app. Readable only by other admins, so
+    // the roster is not enumerable by a signed-in stranger.
+    match /admins/{userId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // ---- server-only ---------------------------------------------------
 
-    // Live one-time login codes. No client path reads or writes these; they are
-    // issued and verified in functions/ with the Admin SDK. A collection of
-    // valid OTPs that any signed-in session can read is an account takeover.
+    // Email verification is Firebase Auth's own, not a code in a collection.
+    // cprwire stored six-digit OTPs in `otp_verification` and mailed them with
+    // EmailJS; a database of live login codes is an account takeover waiting to
+    // be found, and it needed a Cloud Function to be safe. sendEmailVerification
+    // is free, needs no server, and stores nothing. The deny stays as a
+    // backstop in case anything ever writes here again.
     match /otp_verification/{document=**} {
       allow read, write: if false;
     }

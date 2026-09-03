@@ -41,6 +41,22 @@ Three decisions, taken:
 | Voice vocabulary | Ported and extended from three commands to all six §2.C names, plus context-scoped cancellation |
 | Tests | **34, all green**, up from 8 |
 
+### Running on the free tier
+
+The project has decided to spend nothing. Three things planned around Cloud
+Functions were re-planned rather than dropped, and two of the three are better
+for it:
+
+| Wanted a Function for | Free replacement | Verdict |
+|---|---|---|
+| Admin custom claims | An `admins/{uid}` collection that is deny-all from every client. Membership granted in the console or with the Admin SDK; bootstrap the first row by hand. | **Equivalent.** Costs one document read per admin check. |
+| One-time email codes | Firebase Auth's own `sendEmailVerification()`. | **Better.** No codes stored anywhere, so no database of live credentials to leak. `cprwire` kept six-digit OTPs in `otp_verification` and mailed them with EmailJS. |
+| SOS → guardian push | The guardian app holds a Firestore listener and raises a local notification. | **Worse, and honestly so.** Only works while the app runs — indefinitely on Android with a foreground service, a few minutes on iOS. `functions/index.js` keeps the production path. |
+
+iOS remote push needs a $99/year Apple Developer Program membership and is out
+of scope. Android is the demo platform; iOS still runs everything except remote
+push to a guardian's iPhone.
+
 ### What was ported, and what was left
 
 **Ported:** the voice command vocabulary and its eight tests; the palette; the

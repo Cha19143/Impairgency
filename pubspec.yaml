@@ -23,6 +23,11 @@ dependencies:
   firebase_performance: ^0.10.1+7  # §1.4 system monitoring
   firebase_crashlytics: ^4.1.0     # §1.4 crashes
 
+  # §3.2 guardian alerts. Raised locally by the guardian app from a Firestore
+  # listener, because server-side fan-out needs Cloud Functions and Cloud
+  # Functions need a billing account. See docs/EMERGENCY_DELIVERY.md.
+  flutter_local_notifications: ^19.0.0
+
   # Location. §2.A.4 sharing, §2.A.5 SOS, §3.1 guardian tracking, and the
   # location_history collection Phase 2 aggregates for the learning features.
   geolocator: ^13.0.0

@@ -24,6 +24,15 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase | | Done |
 |---|---|---|
 | Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 1 — Location, push, pairing `M` | `█████████░░░` | 9 / 12 |
+| Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
+| Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
+| Phase 4 — Flow, SOS, voice `L` | `░░░░░░░░░░░░` | 0 / 21 |
+| Phase 5 — Accessibility, docs, defense `S` | `░░░░░░░░░░░░` | 0 / 10 |
+| Port from `cprwire` — do not rewrite these | `███░░░░░░░░░` | 1 / 4 |
+| **Overall** | | **28 / 85  (33%)** |
+|---|---|---|
+| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
 | Phase 1 — Location, push, pairing `M` | `█████████░░░` | 8 / 11 |
 | Phase 2 — Location history and aggregations `M` | `░░░░░░░░░░░░` | 0 / 7 |
 | Phase 3 — Web dashboard `M` | `░░░░░░░░░░░░` | 0 / 12 |
@@ -163,12 +172,17 @@ configuration is what bites late.
       the project does not have — §2.A.4
 - [ ] Throwaway debug screen proving a real fix on a real device
 - [x] Android `IMPORTANCE_HIGH` channel declared — `impairgency_emergency`
-- [ ] APNs key uploaded — **blocked**: needs an Apple Developer account
+- [ ] ~~APNs key~~ — **won't do**: needs a $99/year Apple Developer Program
+      membership. Android is the demo platform; declared on the scope table
 - [x] `firebase_messaging` token registration and refresh, with owner-only
       rules and dead-token pruning
 - [x] Cloud Function written — SOS write → high-priority fan-out to paired
       guardian tokens, per-token outcomes recorded on the event
-- [ ] Deploy it — **blocked**: Cloud Functions need the Blaze plan
+- [x] Free replacement shipped — guardian-side Firestore listener raising a
+      local notification (`SosWatcher`, `LocalAlertPresenter`). The Function
+      stays as the production path for when a billing account exists
+- [ ] ~~Deploy the Function~~ — **won't do**: needs the Blaze plan, and the
+      project is staying free
 - [x] Documented fallback — [`EMERGENCY_DELIVERY.md`](EMERGENCY_DELIVERY.md),
       every leg and every way it fails — §7 reliability
 - [x] `pairing_codes` write + redeem repository — single-use, expiring, with a

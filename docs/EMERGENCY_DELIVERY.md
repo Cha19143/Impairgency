@@ -18,7 +18,7 @@ account and no guardian can still do the first.
 | 1 | **Alarm** | Nothing but the speaker | Only a hardware fault. Always attempted first and never gated on anything else. |
 | 2 | **Phone call to the emergency contact** | A saved contact, a dialler, cell signal | Receipt says the contact was not reached. Works with no data connection, which is why it outranks push. |
 | 3 | **Location attached to the event** | Permission, device location on, a fix | Sent anyway if stale, always labelled with its age. Four distinct failures, four distinct sentences — see `lib/core/location/location_policy.dart`. |
-| 4 | **Guardian push** | A pairing, a live token, notification permission, data | Receipt names how many guardians were reached out of how many exist. |
+| 4 | **Guardian alert** | A pairing, the guardian app running, notification permission, data | Receipt names how many guardians were reached out of how many exist. |
 | 5 | **Guardian sees location** | All of 3 and 4, plus location consent | Consent is separate from pairing on purpose. Being someone's guardian and being allowed to track them are two decisions. |
 
 Legs 1 and 2 are on-device. **Legs 3–5 are the ones that can silently do
@@ -44,11 +44,35 @@ an old position still narrows a search — and always described as last known,
 with how long ago. A guardian seeing a pin from this morning while the user is
 across town has to know which it is.
 
-### Guardian push
+### Guardian alerts
 
-Delivery is fanned out by a Cloud Function on the SOS document, not by the app.
-The phone may be dropped, dead or out of signal a second after the write. Once
-the document lands, delivery stops depending on the phone staying alive.
+**How it works now.** The guardian app holds a Firestore listener on
+`sos_events` for the users it is paired with, and raises a local notification
+when one appears. No server involved, and nothing to pay for.
+
+**The honest trade-off.** A server pushes to a phone that is asleep; this only
+works while the guardian app is running. On Android a foreground service keeps
+it alive indefinitely. On iOS the system suspends background execution after a
+few minutes, so a guardian whose phone has been in a pocket since this morning
+will not be interrupted.
+
+This is a deliberate choice, not an oversight. Server-side fan-out needs Cloud
+Functions, Cloud Functions need a billing account, and this project has decided
+not to have one. The production path is **written and waiting** in
+`functions/index.js`; the day the project can deploy it, the guardian sees the
+same notification from the same channel and nothing else changes.
+
+What is deliberately *not* done: sending FCM directly from the app with a server
+key baked in. That key is extractable from any APK, and whoever extracts it can
+notify every user of the app. Several tutorials suggest it. It is a credential
+leak with extra steps.
+
+**Two independent guards against noise.** A Firestore listener replays its whole
+result set when it attaches, so without a bound every launch would fire every
+past emergency at once — and the one that mattered would be buried in them. The
+query is bounded by `kAlertableAge`, and `shouldAlert` checks it again; the
+second check is the one that decides. Cancelled events never alert, and an
+event already shown never shows twice.
 
 **Android.** High message priority wakes a dozing device; the
 `impairgency_emergency` channel at `IMPORTANCE_HIGH` carries the sound and the
@@ -75,15 +99,18 @@ allowed. Neither is silent: onboarding says what SOS can and cannot do without
 them, and the receipt after an SOS says nobody was reached rather than nothing
 at all.
 
-## What is not built yet
+## What is deliberately not built
 
-- **Cloud Functions need the Blaze plan.** Firestore rules and the client work
-  on Spark; function deployment does not. Until the project is upgraded, an SOS
-  writes its document and no guardian push goes out. The free tier covers a
-  capstone's volume many times over, but it needs a payment method on file.
-- **APNs key.** Needs an Apple Developer account; iOS push does nothing without
-  it.
-- Both are tracked as issues rather than left as surprises.
+Both of these were reachable by spending money. The project chose not to, and
+each has a free path that works.
+
+| Not built | Cost avoided | What is done instead |
+|---|---|---|
+| Server-side push fan-out | Blaze plan, needs a card on file | Guardian-side Firestore listener raising a local notification. Reliable on Android; time-limited on iOS. |
+| iOS remote push | Apple Developer Program, $99/year | Android is the demo platform. iOS still does alarm, phone call, location and scan; only remote push to a guardian's iPhone is unavailable. |
+
+Neither is a gap in the work. Both are recorded on the scope table with the
+reason, the same as face recognition and Bluetooth.
 
 ## The manual test that matters
 

@@ -77,7 +77,12 @@ beforeEach(async () => {
 });
 
 const as = (uid, claims) => env.authenticatedContext(uid, claims).firestore();
-const asAdmin = () => as(ADMIN, { admin: true });
+/** Admin is membership of the `admins` collection, seeded past the rules. */
+const asAdmin = () => as(ADMIN);
+const makeAdmin = () =>
+  env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'admins', ADMIN), { grantedAt: 'seed' });
+  });
 const anon = () => env.unauthenticatedContext().firestore();
 
 describe('user documents', () => {
@@ -127,8 +132,14 @@ describe('user documents', () => {
     );
   });
 
-  it('an admin claim can read any user', async () => {
+  it('an admin on the roster can read any user', async () => {
+    await makeAdmin();
     await assertSucceeds(getDoc(doc(asAdmin(), 'users', VI)));
+  });
+
+  it('an account not on the roster is not an admin', async () => {
+    // No admins document, so isAdmin() is false however the client behaves.
+    await assertFails(getDoc(doc(asAdmin(), 'users', VI)));
   });
 });
 
@@ -435,6 +446,7 @@ describe('one-time login codes', () => {
     await assertFails(getDoc(ref(anon())));
     await assertFails(getDoc(ref(as(VI))));
     await assertFails(getDoc(ref(as(STRANGER))));
+    await makeAdmin();
     await assertFails(getDoc(ref(asAdmin())));
   });
 
@@ -444,6 +456,31 @@ describe('one-time login codes', () => {
         code: '000000',
       }),
     );
+  });
+});
+
+describe('the admin roster', () => {
+  it('cannot be joined by the client that wants to join it', async () => {
+    // The whole point: this replaces a custom claim, so it has to be exactly as
+    // unreachable as one.
+    await assertFails(setDoc(doc(as(VI), 'admins', VI), { grantedAt: 'now' }));
+    await assertFails(setDoc(doc(asAdmin(), 'admins', STRANGER), {}));
+  });
+
+  it('cannot be granted by an existing admin from the app either', async () => {
+    await makeAdmin();
+    await assertFails(setDoc(doc(asAdmin(), 'admins', STRANGER), {}));
+  });
+
+  it('is not enumerable by a signed-in stranger', async () => {
+    await makeAdmin();
+    await assertFails(getDoc(doc(as(STRANGER), 'admins', ADMIN)));
+    await assertSucceeds(getDoc(doc(asAdmin(), 'admins', ADMIN)));
+  });
+
+  it('cannot be left by deleting your own row', async () => {
+    await makeAdmin();
+    await assertFails(deleteDoc(doc(asAdmin(), 'admins', ADMIN)));
   });
 });
 
