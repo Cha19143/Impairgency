@@ -642,11 +642,9 @@ class _Field extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const border = OutlineInputBorder(
-      borderRadius: BorderRadius.all(Radius.circular(10)),
-      borderSide: BorderSide(color: AdminColors.line),
-    );
-
+    // The fill, the borders, the label style and the focus ring come from
+    // buildAdminTheme's inputDecorationTheme, so a field here and a field in
+    // the invite dialog cannot drift apart.
     return TextField(
       controller: controller,
       focusNode: focusNode,
@@ -659,38 +657,14 @@ class _Field extends StatelessWidget {
       onSubmitted: onSubmitted,
       style: const TextStyle(fontSize: 14.5, color: AdminColors.ink),
       decoration: InputDecoration(
-        // The label stays above the field rather than sitting in it. A label
-        // that vanishes as soon as there is text is a label you cannot check
-        // your answer against.
+        // The label stays above the field rather than sitting in it — the
+        // theme floats it always. A label that vanishes as soon as there is
+        // text is a label you cannot check your answer against.
         labelText: label,
-        floatingLabelBehavior: FloatingLabelBehavior.always,
-        labelStyle: const TextStyle(
-          fontSize: 13.5,
-          fontWeight: FontWeight.w600,
-          color: AdminColors.inkMuted,
-        ),
-        floatingLabelStyle: const TextStyle(
-          fontSize: 13.5,
-          fontWeight: FontWeight.w600,
-          color: AdminColors.inkMuted,
-        ),
         hintText: hint,
         hintStyle: const TextStyle(fontSize: 14, color: AdminColors.inkMuted),
         prefixIcon: Icon(icon, size: 19, color: AdminColors.inkMuted),
         suffixIcon: trailing,
-        filled: true,
-        fillColor: AdminColors.field,
-        border: border,
-        enabledBorder: border,
-        disabledBorder: border,
-        focusedBorder: const OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(10)),
-          // Navy, not the cyan accent: a focus ring has to be visible against
-          // what is around it, and cyan on white is 1.3:1.
-          borderSide: BorderSide(color: AdminColors.chrome, width: 1.8),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
       ),
     );
   }

@@ -71,6 +71,11 @@ ThemeData buildAdminTheme() {
     ).copyWith(surface: AdminColors.canvas),
     scaffoldBackgroundColor: AdminColors.canvas,
   );
+  const fieldBorder = OutlineInputBorder(
+    borderRadius: BorderRadius.all(Radius.circular(10)),
+    borderSide: BorderSide(color: AdminColors.line),
+  );
+
   return base.copyWith(
     pageTransitionsTheme: PageTransitionsTheme(
       builders: {
@@ -86,6 +91,75 @@ ThemeData buildAdminTheme() {
       color: AdminColors.card,
       elevation: 0,
       margin: EdgeInsets.zero,
+    ),
+    // Set here rather than on each screen, so a field in a dialog nobody
+    // remembers to restyle still looks like a field on the sign-in page.
+    inputDecorationTheme: const InputDecorationTheme(
+      filled: true,
+      fillColor: AdminColors.field,
+      border: fieldBorder,
+      enabledBorder: fieldBorder,
+      disabledBorder: fieldBorder,
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(10)),
+        // Navy rather than the cyan accent: a focus ring has to be visible
+        // against what is around it, and cyan on white is 1.3:1.
+        borderSide: BorderSide(color: AdminColors.chrome, width: 1.8),
+      ),
+      labelStyle: TextStyle(
+        fontSize: 13.5,
+        fontWeight: FontWeight.w600,
+        color: AdminColors.inkMuted,
+      ),
+      floatingLabelStyle: TextStyle(
+        fontSize: 13.5,
+        fontWeight: FontWeight.w600,
+        color: AdminColors.inkMuted,
+      ),
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+      helperStyle: TextStyle(fontSize: 11.5, color: AdminColors.inkMuted),
+      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 17),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: AdminColors.card,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titleTextStyle: const TextStyle(
+        fontSize: 19,
+        fontWeight: FontWeight.bold,
+        color: AdminColors.ink,
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: AdminColors.chrome,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        textStyle:
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AdminColors.ink,
+        side: const BorderSide(color: AdminColors.line),
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        textStyle:
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: AdminColors.chrome,
+        textStyle:
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+      ),
     ),
   );
 }
