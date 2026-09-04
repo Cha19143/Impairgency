@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/places/session_event.dart';
 import '../../core/places/session_summary.dart';
 import '../admin_theme.dart';
+import '../admin_ui.dart';
 
 /// §1.3's five metrics.
 ///
@@ -33,45 +34,58 @@ class OverviewScreen extends StatelessWidget {
               ? 4
               : (constraints.maxWidth >= 460 ? 2 : 1);
           final cardWidth =
-              (constraints.maxWidth - 12 * (columns - 1)) / columns;
+              (constraints.maxWidth - 14 * (columns - 1)) / columns;
 
           return Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: 14,
+            runSpacing: 14,
             children: [
-              _Kpi(
+              AdminStat(
                 width: cardWidth,
                 label: 'Active users',
                 value: '${overview.activeUsers}',
                 note: 'with a session in this period',
+                icon: Icons.people_outline,
               ),
-              _Kpi(
+              AdminStat(
                 width: cardWidth,
                 label: 'Navigation sessions',
                 value: '${overview.sessions}',
+                note: 'started in this period',
+                icon: Icons.route_outlined,
               ),
-              _Kpi(
+              AdminStat(
                 width: cardWidth,
                 label: 'SOS incidents',
                 value: '${overview.sosIncidents}',
+                // sosFired, so: alerts that went out. Cancelled countdowns
+                // are a different event and are not counted here.
+                note: overview.sosIncidents == 0
+                    ? 'none in this period'
+                    : 'alerts sent',
+                icon: Icons.emergency_outlined,
+                tone: overview.sosIncidents > 0
+                    ? AdminTone.bad
+                    : AdminTone.good,
                 alert: overview.sosIncidents > 0,
               ),
-              _Kpi(
+              AdminStat(
                 width: cardWidth,
                 label: 'Positioning quality',
                 value: overview.sessions == 0
                     ? '—'
                     : '${((1 - overview.medianDiscardedFraction) * 100).round()}%',
                 note: 'median usable readings',
+                icon: Icons.my_location_outlined,
               ),
             ],
           );
         }),
-        const SizedBox(height: 20),
+        const SizedBox(height: 18),
         LayoutBuilder(builder: (context, constraints) {
           final stacked = constraints.maxWidth < 780;
           final panels = [
-            _Panel(
+            AdminPanel(
               title: 'Frequently visited places',
               // §1.3. Counted from names users typed themselves - the summaries
               // carry no coordinates at all.
@@ -85,7 +99,7 @@ class OverviewScreen extends StatelessWidget {
                           .toList(),
                     ),
             ),
-            _Panel(
+            AdminPanel(
               title: 'Detections',
               footnote: UsageOverview.detectionCaveat,
               child: overview.detectionCounts.isEmpty
@@ -102,7 +116,7 @@ class OverviewScreen extends StatelessWidget {
               ? Column(
                   children: [
                     panels.first,
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     panels.last,
                   ],
                 )
@@ -110,7 +124,7 @@ class OverviewScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(child: panels.first),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     Expanded(child: panels.last),
                   ],
                 );
@@ -137,110 +151,6 @@ String _pretty(String kindName) {
   };
 }
 
-class _Kpi extends StatelessWidget {
-  const _Kpi({
-    required this.label,
-    required this.value,
-    required this.width,
-    this.note,
-    this.alert = false,
-  });
-
-  final String label;
-  final String value;
-  final double width;
-  final String? note;
-  final bool alert;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: '$label: $value',
-      child: ExcludeSemantics(
-        child: Container(
-          width: width,
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
-          decoration: BoxDecoration(
-            color: alert ? const Color(0xFFFDF4F5) : AdminColors.card,
-            border: Border.all(
-                color: alert ? const Color(0xFFE8B4BA) : AdminColors.line),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    letterSpacing: 1,
-                    fontWeight: FontWeight.w700,
-                    color: AdminColors.inkMuted,
-                  )),
-              const SizedBox(height: 6),
-              Text(value,
-                  style: TextStyle(
-                    fontSize: 27,
-                    height: 1.05,
-                    fontWeight: FontWeight.bold,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    color: alert ? AdminColors.bad : AdminColors.ink,
-                  )),
-              if (note != null) ...[
-                const SizedBox(height: 3),
-                Text(note!,
-                    style: const TextStyle(
-                        fontSize: 11.5, color: AdminColors.inkMuted)),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Panel extends StatelessWidget {
-  const _Panel({required this.title, required this.child, this.footnote});
-
-  final String title;
-  final Widget child;
-  final String? footnote;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      decoration: BoxDecoration(
-        color: AdminColors.card,
-        border: Border.all(color: AdminColors.line),
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 10.5,
-                letterSpacing: 1,
-                fontWeight: FontWeight.w700,
-                color: AdminColors.inkMuted,
-              )),
-          const SizedBox(height: 12),
-          child,
-          if (footnote != null) ...[
-            const SizedBox(height: 12),
-            Text(footnote!,
-                style: const TextStyle(
-                    fontSize: 11.5,
-                    height: 1.35,
-                    color: AdminColors.inkMuted)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _Bars extends StatelessWidget {
   const _Bars({required this.rows});
 
@@ -253,24 +163,28 @@ class _Bars extends StatelessWidget {
       children: [
         for (final row in rows)
           Padding(
-            padding: const EdgeInsets.only(bottom: 9),
+            padding: const EdgeInsets.only(bottom: 11),
             child: Row(
               children: [
                 Expanded(
                   flex: 3,
                   child: Text(row.label,
-                      style: const TextStyle(fontSize: 13),
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AdminColors.ink),
                       overflow: TextOverflow.ellipsis),
                 ),
                 Expanded(
                   flex: 4,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: BorderRadius.circular(5),
                     child: LinearProgressIndicator(
                       value: max == 0 ? 0 : row.count / max,
-                      minHeight: 6,
-                      backgroundColor: const Color(0xFFE4E9F2),
-                      valueColor: const AlwaysStoppedAnimation(Color(0xFF1E3A8A)),
+                      minHeight: 9,
+                      backgroundColor: const Color(0xFFE9EEF7),
+                      valueColor:
+                          const AlwaysStoppedAnimation(Color(0xFF1E3A8A)),
                     ),
                   ),
                 ),
@@ -280,7 +194,8 @@ class _Bars extends StatelessWidget {
                       textAlign: TextAlign.right,
                       style: const TextStyle(
                         fontSize: 12.5,
-                        color: AdminColors.inkMuted,
+                        fontWeight: FontWeight.w600,
+                        color: AdminColors.ink,
                         fontFeatures: [FontFeature.tabularFigures()],
                       )),
                 ),

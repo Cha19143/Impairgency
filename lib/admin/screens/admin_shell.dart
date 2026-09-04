@@ -41,6 +41,7 @@ class AdminShell extends StatelessWidget {
     this.onSelect,
     this.onSignOut,
     this.subtitle,
+    this.account,
   });
 
   final String current;
@@ -49,6 +50,13 @@ class AdminShell extends StatelessWidget {
   final Widget child;
   final void Function(AdminSection)? onSelect;
   final VoidCallback? onSignOut;
+
+  /// Who is signed in, shown above the sign-out button.
+  ///
+  /// This dashboard has a whole screen for the case where someone is signed in
+  /// as an account they did not mean to be. Naming the account in the sidebar
+  /// is how that gets noticed before it becomes confusing.
+  final String? account;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +71,7 @@ class AdminShell extends StatelessWidget {
               child: SafeArea(
                 child: AdminNav(
                   current: current,
+                  account: account,
                   onSignOut: onSignOut,
                   onSelect: (section) {
                     // Close the drawer first: leaving it open over the page it
@@ -78,19 +87,20 @@ class AdminShell extends StatelessWidget {
           ? AppBar(
               backgroundColor: AdminColors.chrome,
               foregroundColor: Colors.white,
-              title: const Text('ImpairGency',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              titleSpacing: 4,
+              title: const AdminBrandMark(compact: true),
             )
           : null,
       body: Row(
         children: [
           if (!narrow)
             SizedBox(
-              width: 224,
+              width: 236,
               child: ColoredBox(
                 color: AdminColors.chrome,
                 child: AdminNav(
                   current: current,
+                  account: account,
                   onSelect: onSelect,
                   onSignOut: onSignOut,
                 ),
@@ -106,9 +116,20 @@ class AdminShell extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Padding(
+                      // The page's own heading, on a hairline that separates it
+                      // from the cards below without a second background.
+                      Container(
                         padding: EdgeInsets.fromLTRB(
-                            tight ? 16 : 28, narrow ? 18 : 26, tight ? 16 : 28, 14),
+                          tight ? 16 : 30,
+                          narrow ? 18 : 28,
+                          tight ? 16 : 30,
+                          18,
+                        ),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: AdminColors.line),
+                          ),
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -117,20 +138,22 @@ class AdminShell extends StatelessWidget {
                               child: Text(
                                 title,
                                 style: TextStyle(
-                                  fontSize: tight ? 22 : 26,
+                                  fontSize: tight ? 22 : 27,
                                   fontWeight: FontWeight.bold,
+                                  letterSpacing: -0.4,
                                   color: AdminColors.ink,
                                 ),
                               ),
                             ),
                             if (subtitle != null)
                               Padding(
-                                padding: const EdgeInsets.only(top: 3),
+                                padding: const EdgeInsets.only(top: 4),
                                 child: Text(
                                   subtitle!,
                                   style: const TextStyle(
-                                      fontSize: 13.5,
-                                      color: AdminColors.inkMuted),
+                                    fontSize: 13.5,
+                                    color: AdminColors.inkMuted,
+                                  ),
                                 ),
                               ),
                           ],
@@ -139,7 +162,7 @@ class AdminShell extends StatelessWidget {
                       Expanded(
                         child: SingleChildScrollView(
                           padding: EdgeInsets.fromLTRB(
-                              tight ? 16 : 28, 0, tight ? 16 : 28, 32),
+                              tight ? 16 : 30, 20, tight ? 16 : 30, 36),
                           child: child,
                         ),
                       ),
@@ -155,6 +178,65 @@ class AdminShell extends StatelessWidget {
   }
 }
 
+/// The product, on the dashboard's chrome.
+///
+/// The same lockup the sign-in page opens with, so the dashboard behind the
+/// door looks like the door.
+class AdminBrandMark extends StatelessWidget {
+  const AdminBrandMark({super.key, this.compact = false});
+
+  /// Drops the "admin" line, for the narrow layout's app bar.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AdminColors.accent,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: const Icon(Icons.shield_outlined,
+                size: 18, color: AdminColors.inkOnAccent),
+          ),
+          const SizedBox(width: 11),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ImpairGency',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    height: 1.2,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                if (!compact)
+                  const Text(
+                    'ADMIN',
+                    style: TextStyle(
+                      color: AdminColors.chromeText,
+                      fontSize: 9.5,
+                      height: 1.4,
+                      letterSpacing: 1.6,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
 /// The nav itself, shared by the sidebar and the drawer.
 class AdminNav extends StatelessWidget {
   const AdminNav({
@@ -162,25 +244,35 @@ class AdminNav extends StatelessWidget {
     required this.current,
     this.onSelect,
     this.onSignOut,
+    this.account,
   });
 
   final String current;
   final void Function(AdminSection)? onSelect;
   final VoidCallback? onSignOut;
+  final String? account;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+      padding: const EdgeInsets.fromLTRB(12, 20, 12, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Padding(
-            padding: EdgeInsets.fromLTRB(10, 0, 10, 20),
+            padding: EdgeInsets.fromLTRB(10, 0, 10, 22),
+            child: AdminBrandMark(),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(10, 0, 10, 8),
             child: Text(
-              'ImpairGency',
+              'DASHBOARD',
               style: TextStyle(
-                  color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                color: AdminColors.chromeText,
+                fontSize: 9.5,
+                letterSpacing: 1.4,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           for (final section in adminSections)
@@ -190,13 +282,88 @@ class AdminNav extends StatelessWidget {
               onTap: onSelect == null ? null : () => onSelect!(section),
             ),
           const Spacer(),
+          if (account != null || onSignOut != null) _Account(
+            account: account,
+            onSignOut: onSignOut,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Who is signed in, and the way out.
+class _Account extends StatelessWidget {
+  const _Account({this.account, this.onSignOut});
+
+  final String? account;
+  final VoidCallback? onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial =
+        (account?.trim().isNotEmpty ?? false) ? account!.trim()[0] : '?';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 12, 6, 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        color: Colors.white.withValues(alpha: 0.04),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (account != null)
+            Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AdminColors.accent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    initial.toUpperCase(),
+                    style: const TextStyle(
+                      color: AdminColors.accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    account!,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           if (onSignOut != null)
-            TextButton.icon(
-              onPressed: onSignOut,
-              icon: const Icon(Icons.logout, size: 17,
-                  color: AdminColors.chromeText),
-              label: const Text('Sign out',
-                  style: TextStyle(color: AdminColors.chromeText)),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: onSignOut,
+                icon: const Icon(Icons.logout, size: 16,
+                    color: AdminColors.chromeText),
+                label: const Text('Sign out',
+                    style: TextStyle(
+                        color: AdminColors.chromeText, fontSize: 13)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ),
         ],
       ),
@@ -214,15 +381,15 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Material(
         color: selected
             ? AdminColors.accent.withValues(alpha: 0.12)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(10),
           // No ripple. A sidebar is navigation, not a control being operated,
           // and an ink splash that plays out after the pane has already changed
           // reads as lag rather than feedback.
@@ -231,11 +398,24 @@ class _NavItem extends StatelessWidget {
           highlightColor: Colors.transparent,
           hoverColor: AdminColors.accent.withValues(alpha: 0.06),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+            padding: const EdgeInsets.fromLTRB(0, 11, 10, 11),
             child: Row(
               children: [
+                // The marker on the left edge, so which section you are on
+                // survives being read at a glance or in greyscale.
+                Container(
+                  width: 3,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? AdminColors.accent
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 9),
                 Icon(section.icon,
-                    size: 17,
+                    size: 18,
                     color: selected ? AdminColors.accent : AdminColors.chromeText),
                 const SizedBox(width: 10),
                 // Expanded, not bare: "Accessibility" is wider than the
@@ -246,7 +426,7 @@ class _NavItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13.5,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                       color:
                           selected ? AdminColors.accent : AdminColors.chromeText,
                     ),
