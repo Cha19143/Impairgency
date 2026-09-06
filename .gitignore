@@ -62,3 +62,7 @@ functions/node_modules/
 
 # Node
 node_modules/
+
+# Playwright
+test/e2e/test-results/
+test/e2e/playwright-report/

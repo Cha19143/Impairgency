@@ -23,16 +23,14 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 
 | Phase | | Done |
 |---|---|---|
-| Phase 0 — Security and integrity `S` | `███████████░` | 18 / 19 |
+| Phase 0 — Security and integrity `S` | `████████████` | 19 / 19 |
 | Phase 1 — Location, push, pairing `M` | `████████████` | 10 / 10 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
-| Phase 3 — Web dashboard `M` | `████████████` | 12 / 12 |
+| Phase 3 — Web dashboard `M` | `███████████░` | 19 / 20 |
 | Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
-| **Overall** | | **82 / 83  (99%)** |
-
-
+| **Overall** | | **90 / 91  (99%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -183,6 +181,23 @@ just do not populate it with fabricated figures.
       contrast of every pair the app renders, computed live from the same
       constant the app paints with and the tests assert against. All eight
       pass AA; the three large action buttons clear AAA
+
+- [x] Browser tests on the emulators — `tool/test_e2e.sh`, 8 passing. Playwright
+      drives the shipped web build through Flutter's accessibility tree, which
+      is the only DOM a canvas-rendered app exposes and the same surface a
+      screen reader uses
+  - [x] a signed-out deep link into the dashboard lands on sign-in
+  - [x] the mobile app is not reachable on the web build
+  - [x] a wrong password says so, and does not pretend to sign in
+  - [x] an administrator signs in and lands on the overview
+  - [x] the overview reports the seeded sessions, not a placeholder
+  - [x] an empty database says so, instead of showing zeroes
+  - [~] a non-admin is told why they cannot get in — **defect found by this
+        suite and not yet fixed.** Authentication succeeds, then nothing
+        happens: the "Signed in, but not an administrator" screen never
+        appears, because the redirect correctly returns null and go_router
+        therefore does not rebuild the route. Recorded as `test.fail()` in
+        `test/e2e/auth-gate.spec.js`, which will turn red when it is fixed
 
 **Gate:** the deployed URL shows only the dashboard; a mobile build cannot reach
 it; a signed-in non-admin cannot reach it.

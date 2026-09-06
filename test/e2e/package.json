@@ -1,0 +1,12 @@
+{
+  "name": "impairgency-e2e-tests",
+  "private": true,
+  "type": "module",
+  "description": "Browser tests for the admin dashboard. Run from the repo root: tool/test_e2e.sh",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}
