@@ -377,6 +377,11 @@ them except the two screens that read learned data.
 - `flutter test` — 8 voice tests green today; extend for the three new commands and
   the cancel keywords.
 - Firestore rules tests on the emulator, per Phase 0.
+- Browser tests on the emulators — `tool/test_e2e.sh`. Playwright drives the
+  built web app through Flutter's accessibility tree: the auth gate, and §1.3's
+  numbers read out of Firestore rather than out of the widget that renders them.
+  A canvas-rendered app has no other DOM, so this doubles as proof that the
+  dashboard is reachable the way a screen reader reaches it.
 - Widget tests per onboarding screen: every control carries a semantic label, and no
   overflow at 2.0× text scale.
 - A flow test asserting setup resumes at the first incomplete step after a kill.

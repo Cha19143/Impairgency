@@ -43,13 +43,18 @@ flutter test
 flutter run
 ```
 
-The app runs on a clean checkout without Firebase. To connect it:
+`lib/main.dart` initialises Firebase against the project in
+`lib/firebase_options.dart`. To point a clone at your own:
 
 ```bash
 flutterfire configure --project=<your-new-project-id>
 ```
 
-then uncomment the `Firebase.initializeApp` block in `lib/main.dart`.
+To run against the local emulators instead of the live project:
+
+```bash
+flutter run -d chrome --dart-define=USE_EMULATOR=true
+```
 
 ### Deploying rules — do this before storing any real data
 
@@ -81,16 +86,31 @@ shipped, turned into a failing test.
 | `test/core/voice_commands_test.dart` | The vocabulary screen drifting from what the parser accepts. Cancel words that hijack everyday speech. |
 | `test/core/safety_notice_test.dart` | Copy that hedges instead of naming what the app misses, or claims the environment is safe. |
 | `test/rules/firestore.test.js` | A guardian reading a user they were never paired with. Location leaking after consent is revoked. A client making itself an admin. A pairing code redeemed twice. |
+| `test/e2e/auth-gate.spec.js` | A correct password that redisplays the login form. An admin route reachable without an admin. The dashboard is driven in a real browser, so these are caught in the build that ships rather than in a test harness. |
+| `test/e2e/overview.spec.js` | Numbers that survive an empty database. The predecessor hardcoded 15.4K and 99.2% and looked entirely convincing; these read §1.3's figures out of Firestore and assert the empty state stays empty. |
 
 ```bash
-flutter test                 # 55 unit and widget tests
-tool/test_rules.sh           # 28 security rules tests, on the emulator
+flutter test                 # 481 unit and widget tests
+tool/test_rules.sh           # 74 security rules tests, on the emulator
+tool/test_e2e.sh             # 8 browser tests against the dashboard
 flutter build apk && flutter build ios && flutter build web
 ```
 
-`tool/test_rules.sh` needs no Firebase project and no network — it runs against
-the emulator with a demo project id. It does need a JDK 21+; the script points
-itself at a Homebrew `openjdk@21` if your default `java` is older.
+`tool/test_rules.sh` and `tool/test_e2e.sh` need no Firebase project and no
+network — they run against the emulators with a demo project id. Both need a
+JDK 21+; they point themselves at a Homebrew `openjdk@21` if your default
+`java` is older.
+
+`tool/test_e2e.sh` builds the web app with `--dart-define=USE_EMULATOR=true`,
+which points it at the local emulators **and** turns on Flutter's accessibility
+tree at boot. Both matter: Flutter web paints to a canvas, so that tree is the
+only thing a browser can read, and the tests therefore reach the dashboard
+through the same surface a screen reader uses. It leaves `build/web` pointed at
+the emulators, so run a plain `flutter build web` before deploying.
+
+A Playwright MCP server is declared in `.mcp.json` for driving the dashboard
+interactively while writing these tests. It is a convenience for that, not a
+dependency: `tool/test_e2e.sh` runs standalone.
 
 All three builds, every time. Defects this project's predecessor hit were
 invisible to `analyze` and `test`.
