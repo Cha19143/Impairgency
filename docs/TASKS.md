@@ -301,7 +301,11 @@ The old repo at `~/kokey/CapstoneImpairgency/cprwire/` is reference-only.
       declared `google_mlkit_object_detection` and ran an SSD MobileNet
       through TFLite instead. Leaving ML Kit out keeps iOS simulator builds
       working. The guidance policy is now pure and tested in
-      `core/vision/`; only the camera and interpreter plumbing is in `data/`
+      `core/vision/`; only the camera and interpreter plumbing is in `data/`.
+      The SSD itself has since been replaced by YOLO11n, which ends at the
+      head rather than at a post-process node — so the thresholding and the
+      suppression an SSD graph does for you are now in `core/vision/yolo.dart`
+      and tested there. See `docs/VISION.md`
 - [x] Contact picker — **substituted by typed entry**, and the reason is worth
       keeping. `flutter_contacts` force-unwraps
       `UIApplication.shared.delegate!.window!!`, nil since iOS 13, and crashes
