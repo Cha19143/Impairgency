@@ -90,11 +90,20 @@ shipped, turned into a failing test.
 | `test/e2e/overview.spec.js` | Numbers that survive an empty database. The predecessor hardcoded 15.4K and 99.2% and looked entirely convincing; these read §1.3's figures out of Firestore and assert the empty state stays empty. |
 
 ```bash
-flutter test                 # 540 unit and widget tests
+flutter test                 # 544 unit and widget tests
 tool/test_rules.sh           # 74 security rules tests, on the emulator
 tool/test_e2e.sh             # 8 browser tests against the dashboard
+tool/eval_detector.py --fetch  # what the detector finds, on 846 annotated photos
 flutter build apk && flutter build ios && flutter build web
 ```
+
+`tool/eval_detector.py` is the one that is not a pass/fail. It runs the shipped
+detection pipeline over annotated photographs and prints recall by how big the
+object is in frame, which is the app's own question — see
+[`docs/VISION.md`](docs/VISION.md). It exists because "the model works" was
+once one photograph of a bus, and that is enough to prove a pipeline is wired
+up and nothing at all about whether somebody walking down a corridor gets told
+about the chair.
 
 `tool/test_rules.sh` and `tool/test_e2e.sh` need no Firebase project and no
 network — they run against the emulators with a demo project id. Both need a

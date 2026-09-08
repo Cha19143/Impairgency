@@ -30,7 +30,17 @@ class ScanService {
   static const Duration _inferenceGap = Duration(milliseconds: 350);
 
   Interpreter? _interpreter;
+
+  /// The same interpreter, driven from a background isolate.
+  ///
+  /// Null when one could not be started, and the synchronous path below is
+  /// then used instead. That fallback is not decoration: inference at 640 is
+  /// long enough to be felt, and a scan screen that runs slowly is worth
+  /// vastly more than one that does not run.
+  IsolateInterpreter? _worker;
+
   CameraController? _controller;
+  bool _disposed = false;
   List<String> _labels = const [];
   int _sensorOrientation = 90;
   bool _busy = false;
@@ -115,6 +125,15 @@ class ScanService {
       _output = outputBytes.buffer.asFloat32List();
 
       _interpreter = interpreter;
+      try {
+        // Off the thread that draws the screen. The camera preview is for
+        // whoever is helping rather than for the user, so the jank itself is
+        // not the point - blocking this isolate also delays every platform
+        // message, which is what turns "Stop" into "Stop, a moment ago".
+        _worker = await IsolateInterpreter.create(address: interpreter.address);
+      } catch (e) {
+        debugPrint('Inference stays on the UI isolate: $e');
+      }
       return true;
     } catch (e) {
       debugPrint('Model load failed: $e');
@@ -146,7 +165,8 @@ class ScanService {
     return true;
   }
 
-  void _process(CameraImage image, void Function(List<Detection>) onFrame) {
+  Future<void> _process(
+      CameraImage image, void Function(List<Detection>) onFrame) async {
     final interpreter = _interpreter;
     final inputBytes = _inputBytes;
     final outputBytes = _outputBytes;
@@ -164,7 +184,16 @@ class ScanService {
 
     try {
       final letterbox = _fillInput(image);
-      interpreter.run(inputBytes, outputBytes);
+
+      final worker = _worker;
+      if (worker != null) {
+        await worker.run(inputBytes, outputBytes);
+      } else {
+        interpreter.run(inputBytes, outputBytes);
+      }
+      // Awaiting let dispose() run. Reading the interpreter's output after it
+      // has been closed is a use-after-free, not an empty frame.
+      if (_disposed) return;
 
       final boxes = decodeYolo(
         output,
@@ -304,6 +333,7 @@ class ScanService {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
     try {
       await _controller?.stopImageStream();
     } catch (_) {
@@ -311,6 +341,11 @@ class ScanService {
     }
     await _controller?.dispose();
     _controller = null;
+
+    // The worker holds the interpreter by address, so it has to be stopped
+    // before the interpreter is closed under it.
+    await _worker?.close();
+    _worker = null;
     _interpreter?.close();
     _interpreter = null;
   }
