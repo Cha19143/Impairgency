@@ -156,7 +156,16 @@ class ScanService {
 
     _controller = CameraController(
       back,
-      ResolutionPreset.low,
+      // 720x480, not the 320x240 of ResolutionPreset.low. A 640 model fed a
+      // 240-pixel-wide frame spends most of its input on upscaled blur, and
+      // the measurement says it costs two points of recall on nearby objects
+      // and four across everything.
+      //
+      // It is close to free: _fillInput walks the *model's* input and samples
+      // back into the camera frame, so a bigger frame does not lengthen that
+      // loop. What it costs is the buffer, which is why this is medium rather
+      // than the highest preset the phone will offer.
+      ResolutionPreset.medium,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
@@ -187,7 +196,18 @@ class ScanService {
 
       final worker = _worker;
       if (worker != null) {
-        await worker.run(inputBytes, outputBytes);
+        try {
+          await worker.run(inputBytes, outputBytes);
+        } catch (e) {
+          // One failure is enough to stop trusting it. Dropping back to the
+          // inline path costs frame rate; carrying on and reading whatever is
+          // in the output buffer would describe the previous frame's room, or
+          // an empty one, and neither announces itself as wrong.
+          debugPrint('Isolate inference failed, falling back inline: $e');
+          _worker = null;
+          unawaited(worker.close().catchError((_) {}));
+          interpreter.run(inputBytes, outputBytes);
+        }
       } else {
         interpreter.run(inputBytes, outputBytes);
       }

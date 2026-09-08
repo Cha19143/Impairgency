@@ -148,6 +148,13 @@ def main():
     ap.add_argument('--nms-iou', type=float, default=0.45)
     ap.add_argument('--max-boxes', type=int, default=20)
     ap.add_argument('--hit-iou', type=float, default=0.5)
+    # What the camera actually hands over. ResolutionPreset.low is 320x240 on
+    # Android, so the frame reaching the model is 320 pixels on its long side
+    # whatever the model's input is - evaluating on 1024px photographs measures
+    # a detector the app does not have. 0 disables the simulation.
+    ap.add_argument('--camera-frame', type=int, default=320,
+                    help='longest side the camera delivers; 0 for the '
+                         'full-resolution photograph')
     args = ap.parse_args()
 
     if args.fetch:
@@ -172,6 +179,12 @@ def main():
     side = int(inp['shape'][2] if nchw else inp['shape'][1])
 
     def detect(im):
+        if args.camera_frame:
+            w, h = im.size
+            k = args.camera_frame / max(w, h)
+            if k < 1.0:
+                im = im.resize((max(1, round(w*k)), max(1, round(h*k))),
+                               Image.BILINEAR)
         # lib/core/vision/yolo.dart's Letterbox, and the same planar input.
         w, h = im.size
         scale = min(side / w, side / h)
@@ -238,8 +251,10 @@ def main():
         if n % 200 == 0:
             print(f'  ...{n}', flush=True)
 
+    frame = (f'camera {args.camera_frame}px' if args.camera_frame
+             else 'full-resolution photo')
     print(f'\n{os.path.basename(args.model)}   input {side}   '
-          f'score >= {args.min_score}')
+          f'score >= {args.min_score}   {frame}')
     print(f'{"how big in frame":22s} {"found":>7s} {"of":>7s} {"recall":>8s}')
     for name, _ in BANDS:
         if total[name]:

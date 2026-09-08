@@ -56,11 +56,21 @@ person stopped for nothing three times stops believing the fourth — so a weak
 detection is enough to be named and not enough to be shouted. `kMinScore` and
 `kUrgentScore` in `core/vision/detection.dart`.
 
-Reproduce any of it, or ask what a different threshold would have done:
+**And the camera was handing over 320×240.** `ResolutionPreset.low` is 240p, so
+a 640 model was spending most of its input on upscaled blur — worth two points
+of recall on nearby objects and four across everything. It is now `medium`,
+720×480, which is close to free: `_fillInput` walks the model's input and
+samples back into the camera frame, so a larger frame does not lengthen that
+loop. The evaluation simulates this rather than assuming it away, which is why
+`--camera-frame` defaults to a camera-sized image and not to the
+1024-pixel photograph on disk.
+
+Reproduce any of it, or ask what a different setting would have done:
 
 ```bash
-tool/eval_detector.py --fetch            # first run, builds the set
-tool/eval_detector.py --min-score 0.5    # what the old bar would have found
+tool/eval_detector.py --fetch              # first run, builds the set
+tool/eval_detector.py --min-score 0.5      # what the old bar would have found
+tool/eval_detector.py --camera-frame 320   # what ResolutionPreset.low saw
 ```
 
 ## Why the code around it changed as much as it did
