@@ -140,6 +140,79 @@ void main() {
     });
   });
 
+  group('the way back in', () {
+    test('an anonymous user may reach sign-in', () {
+      // Before this route existed the welcome screen's Sign in button led to
+      // Create your account, and a returning user had nowhere to go: Firebase
+      // told them the email was taken and to sign in instead, which was the
+      // button they had pressed.
+      expect(
+        resolveRedirect(isWeb: false, location: Routes.signIn, session: anon),
+        isNull,
+      );
+    });
+
+    test('signing in is not a step of setting up', () {
+      expect(Routes.onboardingFlow, isNot(contains(Routes.signIn)));
+      const fresh = SessionState(signedIn: true, safetyAcknowledged: true);
+      expect(fresh.resumeAt, Routes.createAccount);
+    });
+
+    test('a settled user who lands on it is moved on', () {
+      // Otherwise the router leaves them looking at a sign-in form for the
+      // account they are already using - the admin dashboard's old bug, on
+      // the other platform.
+      expect(
+        resolveRedirect(isWeb: false, location: Routes.signIn, session: settled),
+        Routes.home,
+      );
+    });
+
+    test('a half-finished user who lands on it goes back to their step', () {
+      const midway = SessionState(
+        signedIn: true,
+        safetyAcknowledged: true,
+        completedSteps: {Routes.createAccount, Routes.preferences},
+      );
+      expect(
+        resolveRedirect(isWeb: false, location: Routes.signIn, session: midway),
+        Routes.emergencyContact,
+      );
+    });
+
+    test('the safety notice still comes first', () {
+      const unwarned = SessionState();
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.signIn, session: unwarned),
+        Routes.safety,
+      );
+    });
+
+    test('it does not exist on web', () {
+      for (final session in [anon, settled]) {
+        expect(
+          resolveRedirect(isWeb: true, location: Routes.signIn, session: session),
+          Routes.adminRoot,
+        );
+      }
+    });
+
+    test('signing out is behind the account, not in front of it', () {
+      // /settings/sign-out is not a signed-out route: reaching it without an
+      // account would be a confirmation screen for nothing.
+      expect(
+        resolveRedirect(isWeb: false, location: Routes.signOut, session: anon),
+        Routes.welcome,
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.signOut, session: settled),
+        isNull,
+      );
+    });
+  });
+
   group('onboarding resumes where it stopped', () {
     test('a fresh account starts at step one', () {
       const fresh = SessionState(signedIn: true, safetyAcknowledged: true);

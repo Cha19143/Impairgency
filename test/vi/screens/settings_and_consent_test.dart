@@ -59,7 +59,7 @@ void main() {
           onConsent: () {}, onLearned: () {},
           onDevice: () => tapped = true,
           onEmergencyContact: () {}, onInviteGuardian: () {},
-          onSafetyNotice: () {}, onBack: () {},
+          onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
         ),
       );
       await tapAction(tester, find.text('Connect a device'));
@@ -74,7 +74,7 @@ void main() {
           hasContact: false,
           onConsent: () {}, onLearned: () {}, onDevice: () {},
           onEmergencyContact: () {}, onInviteGuardian: () {},
-          onSafetyNotice: () {}, onBack: () {},
+          onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
         ),
       );
       expect(find.text('Not set. SOS has nobody to call.'), findsOneWidget);
@@ -92,7 +92,8 @@ void main() {
         SettingsScreen(
           onConsent: () {}, onLearned: () {}, onDevice: () {},
           onEmergencyContact: () {}, onInviteGuardian: () {},
-          onSafetyNotice: () => opened = true, onBack: () {},
+          onSafetyNotice: () => opened = true, onSignOut: () {},
+          onBack: () {},
         ),
       );
       await tapAction(tester, find.text('What this app can and cannot do'));

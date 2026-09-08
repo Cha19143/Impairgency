@@ -9,6 +9,7 @@ import 'package:impairgency/vi/onboarding/device_screen.dart';
 import 'package:impairgency/vi/onboarding/emergency_contact_screen.dart';
 import 'package:impairgency/vi/onboarding/invite_guardian_screen.dart';
 import 'package:impairgency/vi/onboarding/preferences_screen.dart';
+import 'package:impairgency/vi/onboarding/sign_in_screen.dart';
 import 'package:impairgency/vi/onboarding/welcome_screen.dart';
 import 'package:impairgency/vi/widgets/vi_button.dart';
 
@@ -44,6 +45,11 @@ List<(String, Widget Function(Speaker))> screens() => [
       ('Create account', (s) => CreateAccountScreen(
             speaker: s,
             onCreate: (_, __) async => null,
+          )),
+      ('Sign in', (s) => SignInScreen(
+            speaker: s,
+            onSignIn: (_, __) async => null,
+            onCreateAccount: () {},
           )),
       ("How you'll use it", (s) => PreferencesScreen(
             speaker: s,

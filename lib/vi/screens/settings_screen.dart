@@ -19,6 +19,7 @@ class SettingsScreen extends StatelessWidget {
     required this.onEmergencyContact,
     required this.onInviteGuardian,
     required this.onSafetyNotice,
+    required this.onSignOut,
     required this.onBack,
     this.hasContact = false,
     this.hasGuardian = false,
@@ -31,6 +32,10 @@ class SettingsScreen extends StatelessWidget {
   final VoidCallback onEmergencyContact;
   final VoidCallback onInviteGuardian;
   final VoidCallback onSafetyNotice;
+
+  /// Opens the confirmation, not the sign-out itself.
+  final VoidCallback onSignOut;
+
   final VoidCallback onBack;
   final bool hasContact;
   final bool hasGuardian;
@@ -85,6 +90,16 @@ class SettingsScreen extends StatelessWidget {
             label: 'What this app can and cannot do',
             kind: ViButtonKind.quiet,
             onPressed: onSafetyNotice,
+          ),
+          // Last, and quiet, and it asks before it does anything. Until this
+          // existed there was no way off an account on a phone that had one -
+          // which also meant the sign-in screen was unreachable for anybody
+          // who had ever signed in.
+          ViButton(
+            label: 'Sign out',
+            detail: 'This phone forgets your account',
+            kind: ViButtonKind.quiet,
+            onPressed: onSignOut,
           ),
           ViButton(
             label: 'Back',

@@ -13,6 +13,11 @@ abstract final class Routes {
 
   // Visually impaired user app (mobile)
   static const welcome = '/';
+
+  /// The way back in for an account that already exists. Not part of
+  /// [onboardingFlow]: signing in is not a step of setting up, it is the
+  /// alternative to it.
+  static const signIn = '/sign-in';
   static const createAccount = '/onboarding/account';
   static const preferences = '/onboarding/preferences';
   static const emergencyContact = '/onboarding/contact';
@@ -27,6 +32,7 @@ abstract final class Routes {
   static const settings = '/settings';
   static const consentCentre = '/settings/consent';
   static const learned = '/settings/learned';
+  static const signOut = '/settings/sign-out';
 
   // Guardian app (mobile)
   static const guardianHome = '/guardian';
@@ -108,8 +114,18 @@ class SessionState {
 bool _isAdminRoute(String location) => location.startsWith(Routes.adminRoot);
 bool _isGuardianRoute(String location) =>
     location.startsWith(Routes.guardianHome);
-bool _isOnboardingRoute(String location) =>
-    location.startsWith('/onboarding') || location == Routes.welcome;
+
+/// The screens that exist for someone without an account yet, or without one
+/// on this device: the two doors and the setup behind them.
+///
+/// Sign-in belongs here for both of the reasons this function is consulted. It
+/// has to be reachable while signed out, and it has to be left behind once
+/// setup is done — a signed-in user who lands on it would otherwise be looking
+/// at a form for the account they are already using.
+bool _isSignedOutRoute(String location) =>
+    location.startsWith('/onboarding') ||
+    location == Routes.welcome ||
+    location == Routes.signIn;
 
 /// Where the app should send this request, or null to let it through.
 ///
@@ -172,7 +188,7 @@ String? resolveRedirect({
   if (location == Routes.safety) return null;
 
   if (!session.signedIn) {
-    return _isOnboardingRoute(location) ? null : Routes.welcome;
+    return _isSignedOutRoute(location) ? null : Routes.welcome;
   }
 
   if (session.isGuardian) {
@@ -185,6 +201,6 @@ String? resolveRedirect({
   }
 
   // Setup is done; onboarding is behind them.
-  if (_isOnboardingRoute(location)) return Routes.home;
+  if (_isSignedOutRoute(location)) return Routes.home;
   return null;
 }
