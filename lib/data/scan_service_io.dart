@@ -104,6 +104,11 @@ class ScanService {
       final input = Float32List(3 * _side * _side);
       _input = input;
       _inputBytes = input.buffer.asUint8List();
+      // The letterbox is a description of a buffer that has had its padding
+      // written into it. This is a different buffer, so the old one no longer
+      // describes anything: keeping it would leave the bars black rather than
+      // the grey the model was trained to ignore.
+      _letterbox = null;
 
       final outputBytes = Uint8List(outputShape[1] * _anchors * 4);
       _outputBytes = outputBytes;

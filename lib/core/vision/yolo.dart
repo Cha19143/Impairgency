@@ -92,16 +92,20 @@ List<RawBox> decodeYolo(
     // The best class for this anchor, found without materialising the other
     // 79. At 2100 anchors this loop runs 168,000 times per frame, on the same
     // thread that draws the screen.
-    var bestClass = -1;
-    var bestScore = minScore;
-    for (var c = 0; c < classes; c++) {
+    var bestClass = 0;
+    var bestScore = output[kBoxRows * anchors + anchor];
+    for (var c = 1; c < classes; c++) {
       final score = output[(kBoxRows + c) * anchors + anchor];
       if (score > bestScore) {
         bestScore = score;
         bestClass = c;
       }
     }
-    if (bestClass < 0) continue;
+    // At the threshold is not below it. `kMinScore` is documented as the
+    // confidence below which a detection is noise, and `guidanceFor` reads it
+    // the same way; a decoder that used `>` here would drop a box the layer
+    // above would have kept.
+    if (bestScore < minScore) continue;
 
     kept.add(RawBox(
       classIndex: bestClass,
@@ -207,9 +211,7 @@ class Letterbox {
   /// Undoing the padding matters as much as undoing the scale. Skip it and
   /// every direction is dragged towards centre, so an obstacle at the very
   /// edge of the frame is announced as "ahead".
-  double toFrameX(double x) =>
-      drawWidth == 0 ? x : (x * side - padX) / drawWidth;
+  double toFrameX(double x) => (x * side - padX) / drawWidth;
 
-  double toFrameY(double y) =>
-      drawHeight == 0 ? y : (y * side - padY) / drawHeight;
+  double toFrameY(double y) => (y * side - padY) / drawHeight;
 }

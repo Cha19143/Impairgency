@@ -193,12 +193,14 @@ class AppSession extends ChangeNotifier {
 
   /// Signs out, and hands the phone back the way it was found.
   ///
-  /// The store is cleared *before* Firebase is told, so that there is no
-  /// moment where the app is signed out and the previous account's completed
-  /// steps and cached emergency contact are still on screen.
+  /// Firebase first, because it is the only step here that can fail. Clearing
+  /// the device before it would, on that failure, leave a phone with no setup
+  /// on it still signed in to the account the setup belonged to — which lands
+  /// the user back at "Create your account" for an account they already have.
+  /// That is the loop this release exists to close, reached by another road.
   Future<void> signOut() async {
-    await store.forgetAccount();
     await auth.signOut();
+    await store.forgetAccount();
     await load();
   }
 

@@ -99,6 +99,14 @@ void main() {
       expect(boxes.single.centerX, closeTo(0.1, 1e-6));
     });
 
+    test('a score exactly at the threshold is kept, not dropped', () {
+      // kMinScore is documented as the confidence *below* which a detection is
+      // noise, and guidanceFor filters with >=. A decoder using > here would
+      // quietly disagree with the layer it feeds.
+      final out = tensor([slot(score: 0.5)]);
+      expect(decode(out, 1, minScore: 0.5), hasLength(1));
+    });
+
     test('an empty frame decodes to nothing rather than to something', () {
       expect(decode(tensor([null, null, null]), 3), isEmpty);
     });
