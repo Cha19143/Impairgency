@@ -67,4 +67,14 @@ class PrefsSessionStore implements SessionStore {
       ..add(route);
     await prefs.setStringList(_stepsKey, steps.toList());
   }
+
+  /// Removes the three keys rather than calling `clear()`, which would also
+  /// take anything another part of the app has stored under its own name.
+  @override
+  Future<void> forgetAccount() async {
+    final prefs = await _prefs;
+    await prefs.remove(_stepsKey);
+    await prefs.remove(_profileKey);
+    await prefs.remove(_safetyKey);
+  }
 }

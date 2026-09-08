@@ -47,6 +47,14 @@ dependencies:
   # and never used it: the scan screen ran an SSD MobileNet through TFLite. ML
   # Kit's MLImage.framework ships no arm64 simulator slice and breaks every iOS
   # simulator build, so leaving it out is both correct and free.
+  #
+  # The model is now YOLO11n rather than that SSD, exported to LiteRT at 320.
+  # It is a better detector on the things this app is for - people, chairs,
+  # doors, cars - and it is also the thing that makes the scan screen's output
+  # worth trusting rather than merely present. Note the licence: Ultralytics
+  # ship YOLO11 under AGPL-3.0, so distributing this APK means either
+  # publishing the source under the same terms or holding an Ultralytics
+  # enterprise licence. See docs/VISION.md.
   camera: ^0.12.0
   tflite_flutter: ^0.11.0
   image: ^4.2.0

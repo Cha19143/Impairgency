@@ -60,7 +60,9 @@ push to a guardian's iPhone.
 ### What was ported, and what was left
 
 **Ported:** the voice command vocabulary and its eight tests; the palette; the
-object-detection approach (ML Kit + `tflite_flutter`).
+camera, YUV and rotation handling behind the scan screen. Not the detector
+itself — cprwire's SSD MobileNet has since been replaced by YOLO11n, and
+[`VISION.md`](VISION.md) sets out what that changed and the licence it carries.
 
 **Left behind:** FlutterFlow's `lib/flutter_flow/` scaffolding and its generated
 widget/model pairs; the `cprwire` package name; the mocked screens

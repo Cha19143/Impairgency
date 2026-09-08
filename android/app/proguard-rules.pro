@@ -1,5 +1,5 @@
 # tflite_flutter references TensorFlow Lite's optional GPU delegate, which this
-# app does not bundle - the scan screen runs SSD MobileNet on the CPU delegate.
+# app does not bundle - the scan screen runs YOLO11n on the CPU delegate.
 # R8 treats the dangling reference as an error rather than a warning and fails
 # the release build outright, so the two classes it names are silenced here.
 # These are the rules the Android Gradle plugin itself generated into

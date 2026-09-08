@@ -90,11 +90,20 @@ shipped, turned into a failing test.
 | `test/e2e/overview.spec.js` | Numbers that survive an empty database. The predecessor hardcoded 15.4K and 99.2% and looked entirely convincing; these read §1.3's figures out of Firestore and assert the empty state stays empty. |
 
 ```bash
-flutter test                 # 481 unit and widget tests
+flutter test                 # 544 unit and widget tests
 tool/test_rules.sh           # 74 security rules tests, on the emulator
 tool/test_e2e.sh             # 8 browser tests against the dashboard
+tool/eval_detector.py --fetch  # what the detector finds, on 846 annotated photos
 flutter build apk && flutter build ios && flutter build web
 ```
+
+`tool/eval_detector.py` is the one that is not a pass/fail. It runs the shipped
+detection pipeline over annotated photographs and prints recall by how big the
+object is in frame, which is the app's own question — see
+[`docs/VISION.md`](docs/VISION.md). It exists because "the model works" was
+once one photograph of a bus, and that is enough to prove a pipeline is wired
+up and nothing at all about whether somebody walking down a corridor gets told
+about the chair.
 
 `tool/test_rules.sh` and `tool/test_e2e.sh` need no Firebase project and no
 network — they run against the emulators with a demo project id. Both need a
@@ -123,7 +132,11 @@ finished that way is a defect, not a polish item.
 
 ## Ported from `cprwire`
 
-Carried over: the voice command vocabulary and its tests, the object-detection
-approach, the palette. Left behind: FlutterFlow's generated scaffolding, the
-`cprwire` package name, the mocked screens, and a Firebase project whose rules
-nobody could see.
+Carried over: the voice command vocabulary and its tests, the YUV and rotation
+handling behind the scan screen, the palette. Left behind: FlutterFlow's
+generated scaffolding, the `cprwire` package name, the mocked screens, and a
+Firebase project whose rules nobody could see.
+
+The detector is not carried over either. `cprwire`'s SSD MobileNet has been
+replaced by YOLO11n — [`docs/VISION.md`](docs/VISION.md) is what it is, how it
+was produced, what it changed, and the licence it comes with.

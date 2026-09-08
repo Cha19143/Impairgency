@@ -36,12 +36,14 @@ import '../vi/onboarding/emergency_contact_screen.dart';
 import '../vi/onboarding/invite_guardian_screen.dart';
 import '../vi/onboarding/onboarding_controller.dart';
 import '../vi/onboarding/preferences_screen.dart';
+import '../vi/onboarding/sign_in_screen.dart';
 import '../vi/onboarding/welcome_screen.dart';
 import '../vi/screens/consent_centre_screen.dart';
 import '../vi/screens/dashboard_screen.dart';
 import '../vi/screens/learned_data_screen.dart';
 import '../vi/screens/scan_screen.dart';
 import '../vi/screens/settings_screen.dart';
+import '../vi/screens/sign_out_screen.dart';
 import '../vi/screens/location_debug_screen.dart';
 import '../vi/screens/sos_flow.dart';
 import '../vi/screens/what_can_i_say_screen.dart';
@@ -97,7 +99,15 @@ class AppSession extends ChangeNotifier {
   Future<void> bindAuth() async {
     auth.changes.listen((user) async {
       if (user == null) {
-        update(SessionState(safetyAcknowledged: _state.safetyAcknowledged));
+        // Read back off the device rather than carrying the old state
+        // forward. Signing out clears what this phone held about that account,
+        // and a listener that trusted its own memory would put it straight
+        // back - including the safety acknowledgement, which belongs to the
+        // person who heard the notice and not to the handset.
+        update(SessionState(
+          safetyAcknowledged: await store.safetyAcknowledged(),
+          completedSteps: await store.completedSteps(),
+        ));
         return;
       }
       final isAdmin = await admin.isAdmin(user.uid);
@@ -181,6 +191,19 @@ class AppSession extends ChangeNotifier {
     await load();
   }
 
+  /// Signs out, and hands the phone back the way it was found.
+  ///
+  /// Firebase first, because it is the only step here that can fail. Clearing
+  /// the device before it would, on that failure, leave a phone with no setup
+  /// on it still signed in to the account the setup belonged to — which lands
+  /// the user back at "Create your account" for an account they already have.
+  /// That is the loop this release exists to close, reached by another road.
+  Future<void> signOut() async {
+    await auth.signOut();
+    await store.forgetAccount();
+    await load();
+  }
+
   Future<void> acknowledgeSafety() async {
     await store.acknowledgeSafety();
     update(SessionState(
@@ -250,7 +273,25 @@ GoRouter createRouter(AppSession session) => GoRouter(
             speaker: session.speaker,
             onCreateAccount: () =>
                 appNavigate(context, Routes.createAccount),
-            onSignIn: () => appNavigate(context, Routes.createAccount),
+            onSignIn: () => appNavigate(context, Routes.signIn),
+          ),
+        ),
+        GoRoute(
+          path: Routes.signIn,
+          builder: (context, _) => SignInScreen(
+            speaker: session.speaker,
+            onSignIn: (email, password) async {
+              final failure = await session.auth.signIn(email, password);
+              if (failure != null) return failure;
+              // What the account has already finished, back onto this device
+              // before the redirect reads it. Without this the router sees no
+              // completed steps and sends a returning user to step one, to
+              // create the account they have just signed in to.
+              await session.onboarding.restoreProgress();
+              await session.load();
+              return null;
+            },
+            onCreateAccount: () => appNavigate(context, Routes.createAccount),
           ),
         ),
         GoRoute(
@@ -394,7 +435,19 @@ GoRouter createRouter(AppSession session) => GoRouter(
                 appNavigate(context, Routes.emergencyContact),
             onInviteGuardian: () => appNavigate(context, Routes.inviteGuardian),
             onSafetyNotice: () => appNavigate(context, Routes.safety),
+            onSignOut: () => appNavigate(context, Routes.signOut),
             onBack: () => appNavigate(context, Routes.home),
+          ),
+        ),
+        GoRoute(
+          path: Routes.signOut,
+          builder: (context, _) => SignOutScreen(
+            speaker: session.speaker,
+            // No navigation afterwards: signing out makes the redirect true
+            // again, and it sends them to the safety notice and then the
+            // welcome screen on its own.
+            onSignOut: session.signOut,
+            onCancel: () => appNavigate(context, Routes.settings),
           ),
         ),
         GoRoute(

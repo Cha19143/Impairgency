@@ -12,12 +12,14 @@ import 'package:impairgency/vi/onboarding/device_screen.dart';
 import 'package:impairgency/vi/onboarding/emergency_contact_screen.dart';
 import 'package:impairgency/vi/onboarding/invite_guardian_screen.dart';
 import 'package:impairgency/vi/onboarding/preferences_screen.dart';
+import 'package:impairgency/vi/onboarding/sign_in_screen.dart';
 import 'package:impairgency/vi/onboarding/welcome_screen.dart';
 import 'package:impairgency/vi/screens/consent_centre_screen.dart';
 import 'package:impairgency/vi/screens/dashboard_screen.dart';
 import 'package:impairgency/vi/screens/learned_data_screen.dart';
 import 'package:impairgency/vi/screens/safety_notice_screen.dart';
 import 'package:impairgency/vi/screens/settings_screen.dart';
+import 'package:impairgency/vi/screens/sign_out_screen.dart';
 import 'package:impairgency/vi/screens/sos_countdown_screen.dart';
 import 'package:impairgency/vi/screens/sos_receipt_screen.dart';
 import 'package:impairgency/vi/screens/what_can_i_say_screen.dart';
@@ -75,10 +77,15 @@ Map<String, Widget Function()> screens() => {
             consent: const {'location': true, 'history': false},
           ),
       'What can I say': () => WhatCanISayScreen(onBack: () {}),
+      'Sign in': () => SignInScreen(
+            onSignIn: (_, __) async => null,
+            onCreateAccount: () {},
+          ),
+      'Sign out': () => SignOutScreen(onSignOut: () {}, onCancel: () {}),
       'Settings': () => SettingsScreen(
             onConsent: () {}, onLearned: () {}, onDevice: () {},
             onEmergencyContact: () {}, onInviteGuardian: () {},
-            onSafetyNotice: () {}, onBack: () {},
+            onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
           ),
       'Consent centre': () => ConsentCentreScreen(
           current: const {'location': true},

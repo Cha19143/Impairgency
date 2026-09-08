@@ -44,6 +44,7 @@ Widget _settings() => SettingsScreen(
       onEmergencyContact: () {},
       onInviteGuardian: () {},
       onSafetyNotice: () {},
+      onSignOut: () {},
       onBack: () {},
       hasContact: true,
     );

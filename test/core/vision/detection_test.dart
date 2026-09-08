@@ -90,6 +90,26 @@ void main() {
       expect('chair'.allMatches(guidance.phrase).length, 1);
     });
 
+    test('a low-confidence obstacle is named but not shouted about', () {
+      // The threshold for being mentioned is deliberately generous, because a
+      // missed obstacle is a collision. "Stop" is the exception: it halts
+      // somebody mid-step, and a person stopped for nothing three times stops
+      // believing the fourth.
+      final guidance = guidanceFor([at(score: 0.4, centerX: 0.5, extent: 0.8)]);
+      expect(guidance.phrase, 'Stop. chair right in front of you');
+      expect(guidance.urgent, isFalse,
+          reason: 'it is worth saying, not worth interrupting for');
+    });
+
+    test('the same obstacle, confidently seen, does interrupt', () {
+      final guidance = guidanceFor([at(score: 0.9, centerX: 0.5, extent: 0.8)]);
+      expect(guidance.urgent, isTrue);
+    });
+
+    test('the mention threshold is lower than the shouting one', () {
+      expect(kMinScore, lessThan(kUrgentScore));
+    });
+
     test('urgency is set by the primary object', () {
       expect(guidanceFor([at(extent: 0.7)]).urgent, isTrue);
       expect(guidanceFor([at(extent: 0.2)]).urgent, isFalse);

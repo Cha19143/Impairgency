@@ -38,6 +38,19 @@ abstract interface class SessionStore {
   /// Onboarding steps already finished, so setup can resume after a kill.
   Future<Set<String>> completedSteps();
   Future<void> markStepComplete(String route);
+
+  /// Returns the device to how it was before anyone signed in.
+  ///
+  /// Everything this store holds is about a person, and none of it is scoped to
+  /// an account: the completed steps and the cached profile belong to whoever
+  /// signed in last. Leaving them in place after a sign-out means the next
+  /// person to use this phone walks past setup into someone else's emergency
+  /// contact and someone else's consent.
+  ///
+  /// The safety acknowledgement goes with them, and that is the point rather
+  /// than an oversight. §7's notice is what a *person* has been told the app
+  /// cannot do, not a box this handset has ticked.
+  Future<void> forgetAccount();
 }
 
 class InMemorySessionStore implements SessionStore {
@@ -70,4 +83,11 @@ class InMemorySessionStore implements SessionStore {
 
   @override
   Future<void> markStepComplete(String route) async => _steps.add(route);
+
+  @override
+  Future<void> forgetAccount() async {
+    _steps.clear();
+    _profile = const CachedProfile();
+    _acknowledged = false;
+  }
 }
