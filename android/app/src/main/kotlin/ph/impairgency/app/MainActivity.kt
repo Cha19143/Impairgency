@@ -1,4 +1,4 @@
-package ph.impairgency.impairgency
+package ph.impairgency.app
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
