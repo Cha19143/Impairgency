@@ -120,9 +120,10 @@ Close on the scope table in [`SCOPE.md`](SCOPE.md).
   push needs Cloud Functions, which need a paid plan. The guardian app holds a
   Firestore listener instead, which works while the app is open. Open it and
   fire again. `functions/index.js` is the production path, written and waiting.
-- **Scanning finds nothing.** The model is an SSD MobileNet; point the camera at
-  a chair. If it still finds nothing, use the Repeat button to show the guidance
-  path works and move on — do not debug live.
+- **Scanning finds nothing.** The model is YOLO11n on COCO's eighty classes;
+  point the camera at a person or a chair. If it still finds nothing, use the
+  Repeat button to show the guidance path works and move on — do not debug
+  live.
 - **The web dashboard is empty.** It says "No sessions yet" because nothing has
   been recorded with history consent on. That is the correct empty state, and
   worth saying: the screen it replaces would have shown zeroes that read as

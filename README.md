@@ -90,7 +90,7 @@ shipped, turned into a failing test.
 | `test/e2e/overview.spec.js` | Numbers that survive an empty database. The predecessor hardcoded 15.4K and 99.2% and looked entirely convincing; these read §1.3's figures out of Firestore and assert the empty state stays empty. |
 
 ```bash
-flutter test                 # 481 unit and widget tests
+flutter test                 # 540 unit and widget tests
 tool/test_rules.sh           # 74 security rules tests, on the emulator
 tool/test_e2e.sh             # 8 browser tests against the dashboard
 flutter build apk && flutter build ios && flutter build web
@@ -123,7 +123,11 @@ finished that way is a defect, not a polish item.
 
 ## Ported from `cprwire`
 
-Carried over: the voice command vocabulary and its tests, the object-detection
-approach, the palette. Left behind: FlutterFlow's generated scaffolding, the
-`cprwire` package name, the mocked screens, and a Firebase project whose rules
-nobody could see.
+Carried over: the voice command vocabulary and its tests, the YUV and rotation
+handling behind the scan screen, the palette. Left behind: FlutterFlow's
+generated scaffolding, the `cprwire` package name, the mocked screens, and a
+Firebase project whose rules nobody could see.
+
+The detector is not carried over either. `cprwire`'s SSD MobileNet has been
+replaced by YOLO11n — [`docs/VISION.md`](docs/VISION.md) is what it is, how it
+was produced, what it changed, and the licence it comes with.
