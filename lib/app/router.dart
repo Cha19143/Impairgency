@@ -26,12 +26,14 @@ import '../data/admin_repository.dart';
 import '../data/auth_service.dart';
 import '../data/geolocator_location_source.dart';
 import '../data/guardian_onboarding.dart';
+import '../data/guardian_repository.dart';
 import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
 import '../data/location_history_repository.dart';
 import '../data/sos_engine.dart';
 import '../data/stt_speech_recognizer.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
+import '../guardian/screens/guardian_home_page.dart';
 import '../guardian/screens/guardian_register_screen.dart';
 import '../shared/widgets/pending_screen.dart';
 import '../vi/onboarding/all_set_screen.dart';
@@ -149,6 +151,10 @@ class AppSession extends ChangeNotifier {
 
   SosEngine? _sos;
   SosEngine get sos => _sos ??= SosEngine(speaker: speaker);
+
+  GuardianRepository? _guardian;
+  GuardianRepository get guardian =>
+      _guardian ??= GuardianRepository(pairing: pairing);
 
   GuardianOnboarding? _guardianOnboarding;
   GuardianOnboarding get guardianOnboarding =>
@@ -688,7 +694,17 @@ GoRouter createRouter(AppSession session) {
         ),
 
         // ---- guardian app (mobile) ----
-        _page(Routes.guardianHome, 'Guardian', 'Phase 1', '§3.1, §3.2'),
+        GoRoute(
+          path: Routes.guardianHome,
+          builder: (context, _) => GuardianHomePage(
+            guardianId: session.state.uid ?? '',
+            repository: session.guardian,
+            presenter: session.alerts,
+            speaker: session.speaker,
+            onEnterCode: () => appNavigate(context, Routes.guardianAccept),
+            onSignOut: () => appNavigate(context, Routes.signOut),
+          ),
+        ),
         GoRoute(
           path: Routes.guardianRegister,
           builder: (context, _) => GuardianRegisterScreen(

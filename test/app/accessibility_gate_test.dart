@@ -4,7 +4,9 @@ import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/places/place.dart';
 import 'package:impairgency/core/places/stay.dart';
 import 'package:impairgency/core/sos/sos_receipt.dart';
+import 'package:impairgency/core/guardian/watched_user.dart';
 import 'package:impairgency/guardian/screens/accept_invitation_screen.dart';
+import 'package:impairgency/guardian/screens/guardian_home_screen.dart';
 import 'package:impairgency/guardian/screens/guardian_register_screen.dart';
 import 'package:impairgency/vi/onboarding/all_set_screen.dart';
 import 'package:impairgency/vi/onboarding/choose_role_screen.dart';
@@ -113,6 +115,16 @@ Map<String, Widget Function()> screens() => {
       'SOS receipt': () => SosReceiptScreen(receipt: _receipt(), onDone: () {}),
       'Guardian accept invitation': () =>
           AcceptInvitationScreen(onRedeem: (_) async => null),
+      'Guardian home': () => GuardianHomeScreen(
+            users: const [
+              WatchedUser(uid: 'u1', name: 'Ana', phone: '0917'),
+              WatchedUser(uid: 'u2', name: 'Ben'),
+            ],
+            onCall: (_) async => true,
+            onOpenMap: (_) {},
+            onEnterCode: () {},
+            onSignOut: () {},
+          ),
     };
 
 Future<void> pump(
@@ -199,6 +211,6 @@ void main() {
   testWidgets('the gate covers every screen in the app', (tester) async {
     // If a screen is added and not listed here, that is the omission this
     // assertion is meant to make visible.
-    expect(screens().length, greaterThanOrEqualTo(21));
+    expect(screens().length, greaterThanOrEqualTo(22));
   });
 }

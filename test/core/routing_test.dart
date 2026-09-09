@@ -256,6 +256,23 @@ void main() {
       expect(Routes.onboardingFlow[1], Routes.profile);
     });
 
+    test('a guardian can sign out, and is otherwise kept on their side', () {
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.signOut, session: guardian),
+        isNull,
+      );
+      expect(
+        resolveRedirect(isWeb: false, location: Routes.home, session: guardian),
+        Routes.guardianHome,
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.guardianHome, session: guardian),
+        isNull,
+      );
+    });
+
     test('a guardian mid-registration stays on the guardian side', () {
       // The role is cached before the account is created, so the guard sees
       // a guardian from the first auth event.

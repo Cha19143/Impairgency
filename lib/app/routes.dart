@@ -208,6 +208,9 @@ String? resolveRedirect({
   }
 
   if (session.isGuardian) {
+    // Signing out lives under the visually impaired app's settings path,
+    // but a guardian has to be able to leave too.
+    if (location == Routes.signOut) return null;
     return _isGuardianRoute(location) ? null : Routes.guardianHome;
   }
 
