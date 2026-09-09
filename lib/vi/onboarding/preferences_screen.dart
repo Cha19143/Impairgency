@@ -27,7 +27,7 @@ class PreferencesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ViScreen(
         speaker: speaker,
-        step: 'Step 2 of 6',
+        step: 'Step 3 of 7',
         title: 'Do you want the screen to stay on?',
         body: const [
           'This changes how much the app speaks, and whether the display '

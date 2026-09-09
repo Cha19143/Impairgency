@@ -87,7 +87,7 @@ class _ConsentScreenState extends State<ConsentScreen> {
 
     return ViScreen(
       speaker: widget.speaker,
-      step: 'Step 5 of 6',
+      step: 'Step 6 of 7',
       title: 'What may the app use?',
       body: const [
         'Everything here starts switched off. Nothing is shared until you turn '

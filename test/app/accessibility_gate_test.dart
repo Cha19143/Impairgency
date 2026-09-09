@@ -6,6 +6,9 @@ import 'package:impairgency/core/places/stay.dart';
 import 'package:impairgency/core/sos/sos_receipt.dart';
 import 'package:impairgency/guardian/screens/accept_invitation_screen.dart';
 import 'package:impairgency/vi/onboarding/all_set_screen.dart';
+import 'package:impairgency/vi/onboarding/choose_role_screen.dart';
+import 'package:impairgency/vi/onboarding/forgot_password_screen.dart';
+import 'package:impairgency/vi/onboarding/profile_screen.dart';
 import 'package:impairgency/vi/onboarding/consent_screen.dart';
 import 'package:impairgency/vi/onboarding/create_account_screen.dart';
 import 'package:impairgency/vi/onboarding/device_screen.dart';
@@ -59,8 +62,13 @@ Map<String, Widget Function()> screens() => {
       'Safety notice': () => SafetyNoticeScreen(onAcknowledge: () async {}),
       'Welcome': () =>
           WelcomeScreen(onCreateAccount: () {}, onSignIn: () {}),
+      'Choose role': () => ChooseRoleScreen(
+          onVisuallyImpaired: () {}, onGuardian: () {}, onSignIn: () {}),
       'Create account': () =>
           CreateAccountScreen(onCreate: (_, __) async => null),
+      'About you': () => ProfileScreen(onSave: (_) async {}),
+      'Forgot password': () =>
+          ForgotPasswordScreen(onSendReset: (_) async => null, onBack: () {}),
       'Preferences': () =>
           PreferencesScreen(onChoose: (_) {}, onSkip: () {}),
       'Emergency contact': () =>
@@ -188,6 +196,6 @@ void main() {
   testWidgets('the gate covers every screen in the app', (tester) async {
     // If a screen is added and not listed here, that is the omission this
     // assertion is meant to make visible.
-    expect(screens().length, greaterThanOrEqualTo(17));
+    expect(screens().length, greaterThanOrEqualTo(20));
   });
 }

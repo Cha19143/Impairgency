@@ -3,6 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/speech/speaker.dart';
 import 'package:impairgency/vi/onboarding/all_set_screen.dart';
+import 'package:impairgency/vi/onboarding/choose_role_screen.dart';
+import 'package:impairgency/vi/onboarding/forgot_password_screen.dart';
+import 'package:impairgency/vi/onboarding/profile_screen.dart';
 import 'package:impairgency/vi/onboarding/consent_screen.dart';
 import 'package:impairgency/vi/onboarding/create_account_screen.dart';
 import 'package:impairgency/vi/onboarding/device_screen.dart';
@@ -42,9 +45,21 @@ List<(String, Widget Function(Speaker))> screens() => [
             onCreateAccount: () {},
             onSignIn: () {},
           )),
+      ('Choose role', (s) => ChooseRoleScreen(
+            speaker: s,
+            onVisuallyImpaired: () {},
+            onGuardian: () {},
+            onSignIn: () {},
+          )),
       ('Create account', (s) => CreateAccountScreen(
             speaker: s,
             onCreate: (_, __) async => null,
+          )),
+      ('About you', (s) => ProfileScreen(speaker: s, onSave: (_) async {})),
+      ('Forgot password', (s) => ForgotPasswordScreen(
+            speaker: s,
+            onSendReset: (_) async => null,
+            onBack: () {},
           )),
       ('Sign in', (s) => SignInScreen(
             speaker: s,

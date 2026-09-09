@@ -108,7 +108,7 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
   Widget build(BuildContext context) {
     return ViScreen(
       speaker: widget.speaker,
-      step: 'Step 3 of 6',
+      step: 'Step 4 of 7',
       title: 'Who should we call in an emergency?',
       body: const [
         'One person the app will ring when you say "help" or press the SOS '

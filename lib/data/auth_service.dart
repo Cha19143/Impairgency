@@ -47,6 +47,24 @@ class AuthService {
     }
   }
 
+  /// Sends Firebase's own reset link.
+  ///
+  /// Returns null when it is on its way - including when there is no such
+  /// account. Firebase itself answers that way once email enumeration
+  /// protection is on, and the screen says the same sentence either way, so
+  /// nobody can use this form to learn which addresses are registered.
+  Future<String?> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      return null;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') return null;
+      return describeAuthError(e.code);
+    } catch (_) {
+      return 'Something went wrong. Check your connection and try again.';
+    }
+  }
+
   Future<void> resendVerification() =>
       _auth.currentUser?.sendEmailVerification() ?? Future.value();
 

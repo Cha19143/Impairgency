@@ -18,7 +18,17 @@ abstract final class Routes {
   /// [onboardingFlow]: signing in is not a step of setting up, it is the
   /// alternative to it.
   static const signIn = '/sign-in';
+
+  /// Also not a step: the reset link is used *at* sign-in, not during setup.
+  static const forgotPassword = '/forgot-password';
+
+  /// Which app the new account is for. Before [createAccount], and not a
+  /// step of it: a guardian who chose the other door never sees the flow.
+  static const chooseRole = '/onboarding/role';
   static const createAccount = '/onboarding/account';
+
+  /// Name, age, type of impairment - and a number a guardian can call.
+  static const profile = '/onboarding/profile';
   static const preferences = '/onboarding/preferences';
   static const emergencyContact = '/onboarding/contact';
   static const inviteGuardian = '/onboarding/guardian';
@@ -38,6 +48,7 @@ abstract final class Routes {
   static const guardianHome = '/guardian';
   static const guardianAccept = '/guardian/accept';
 
+
   // Admin dashboard (web)
   static const adminRoot = '/admin';
   static const adminSignIn = '/admin/sign-in';
@@ -51,6 +62,7 @@ abstract final class Routes {
   /// blind user restarting from scratch after a crash would be punishing.
   static const onboardingFlow = <String>[
     createAccount,
+    profile,
     preferences,
     emergencyContact,
     inviteGuardian,
@@ -125,7 +137,8 @@ bool _isGuardianRoute(String location) =>
 bool _isSignedOutRoute(String location) =>
     location.startsWith('/onboarding') ||
     location == Routes.welcome ||
-    location == Routes.signIn;
+    location == Routes.signIn ||
+    location == Routes.forgotPassword;
 
 /// Where the app should send this request, or null to let it through.
 ///

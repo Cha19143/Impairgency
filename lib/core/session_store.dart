@@ -8,16 +8,40 @@ library;
 /// The handful of facts the app needs before it can reach the network.
 class CachedProfile {
   const CachedProfile({
+    this.role,
     this.consent = const {},
     this.contactName,
     this.contactNumber,
     this.guardianCount = 0,
   });
 
+  /// 'vi' or 'guardian'. Cached so the router knows which app to open
+  /// before - or without - the account document being readable, and set
+  /// *before* the account is created so the guard never sees a guardian as
+  /// a visually impaired user mid-registration.
+  final String? role;
+
   final Map<String, bool> consent;
   final String? contactName;
   final String? contactNumber;
   final int guardianCount;
+
+  bool get isGuardian => role == 'guardian';
+
+  CachedProfile copyWith({
+    String? role,
+    Map<String, bool>? consent,
+    String? contactName,
+    String? contactNumber,
+    int? guardianCount,
+  }) =>
+      CachedProfile(
+        role: role ?? this.role,
+        consent: consent ?? this.consent,
+        contactName: contactName ?? this.contactName,
+        contactNumber: contactNumber ?? this.contactNumber,
+        guardianCount: guardianCount ?? this.guardianCount,
+      );
 }
 
 abstract interface class SessionStore {

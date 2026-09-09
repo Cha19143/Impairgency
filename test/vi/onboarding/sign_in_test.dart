@@ -227,7 +227,7 @@ void main() {
 
       expect(find.text('Sign in'), findsWidgets);
       expect(find.text('Create your account'), findsNothing);
-      expect(find.text('Step 1 of 6'), findsNothing,
+      expect(find.textContaining('Step 1 of'), findsNothing,
           reason: 'signing in is not step one of setting up');
     });
 
@@ -246,7 +246,14 @@ void main() {
       await tapAction(tester, action('Create an account instead'));
       await tester.pumpAndSettle();
 
+      // Via the question the tester asked for: which app is this for?
+      expect(find.text('Who is this account for?'), findsOneWidget);
+      await tapAction(tester, action('Visually impaired user'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Create your account'), findsOneWidget);
+      expect(session.state.isGuardian, isFalse);
     });
+
   });
 }

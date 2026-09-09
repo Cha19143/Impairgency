@@ -33,6 +33,9 @@ import '../data/stt_speech_recognizer.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
 import '../shared/widgets/pending_screen.dart';
 import '../vi/onboarding/all_set_screen.dart';
+import '../vi/onboarding/choose_role_screen.dart';
+import '../vi/onboarding/forgot_password_screen.dart';
+import '../vi/onboarding/profile_screen.dart';
 import '../vi/onboarding/consent_screen.dart';
 import '../vi/onboarding/create_account_screen.dart';
 import '../vi/onboarding/device_screen.dart';
@@ -171,6 +174,10 @@ class AppSession extends ChangeNotifier {
         return;
       }
       final isAdmin = await admin.isAdmin(user.uid);
+      // Which app this account is for, decided before the guard runs: a
+      // guardian sent through the visually impaired flow would be asked to
+      // create the account they have just created.
+      final isGuardian = await _isGuardian(user.uid);
       update(SessionState(
         uid: user.uid,
         consent: _state.consent,
@@ -179,7 +186,7 @@ class AppSession extends ChangeNotifier {
         guardianCount: _state.guardianCount,
         signedIn: true,
         isAdmin: isAdmin,
-        isGuardian: _state.isGuardian,
+        isGuardian: isGuardian,
         safetyAcknowledged: _state.safetyAcknowledged,
         completedSteps: _state.completedSteps,
       ));
@@ -202,7 +209,7 @@ class AppSession extends ChangeNotifier {
       uid: _state.uid,
       signedIn: _state.signedIn,
       isAdmin: _state.isAdmin,
-      isGuardian: _state.isGuardian,
+      isGuardian: _state.isGuardian || profile.isGuardian,
       safetyAcknowledged: await store.safetyAcknowledged(),
       completedSteps: await store.completedSteps(),
       consent: profile.consent,
@@ -225,6 +232,7 @@ class AppSession extends ChangeNotifier {
       if (data == null) return;
       final contact = data['emergencyContact'] as Map<String, dynamic>?;
       await store.cacheProfile(CachedProfile(
+        role: data['role'] as String?,
         consent: Map<String, bool>.from(data['consent'] as Map? ?? const {}),
         contactName: contact?['name'] as String?,
         contactNumber: contact?['number'] as String?,
@@ -246,6 +254,37 @@ class AppSession extends ChangeNotifier {
     } catch (_) {
       return _state.guardianCount;
     }
+  }
+
+  /// The role, from the device first and the account second.
+  ///
+  /// The device's copy is written before an account is created and cleared
+  /// at sign-out, so it is right whenever it is present. The account is read
+  /// only when it is not - a sign-in on a new phone - and bounded, because
+  /// this runs before the first screen and a phone with no signal must still
+  /// reach one.
+  Future<bool> _isGuardian(String uid) async {
+    final cached = await store.cachedProfile();
+    if (cached.role != null) return cached.isGuardian;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(const Duration(seconds: 6));
+      final role = snapshot.data()?['role'] as String?;
+      if (role != null) await store.cacheProfile(cached.copyWith(role: role));
+      return role == 'guardian';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Records which app a new account is for, before it is created.
+  Future<void> rememberRole(String role) async {
+    final cached = await store.cachedProfile();
+    await store.cacheProfile(cached.copyWith(role: role));
+    await load();
   }
 
   /// Puts a just-saved emergency contact where SOS reads it from.
@@ -375,9 +414,29 @@ GoRouter createRouter(AppSession session) {
           path: Routes.welcome,
           builder: (context, _) => WelcomeScreen(
             speaker: session.speaker,
-            onCreateAccount: () =>
-                appNavigate(context, Routes.createAccount),
+            onCreateAccount: () => appNavigate(context, Routes.chooseRole),
             onSignIn: () => appNavigate(context, Routes.signIn),
+          ),
+        ),
+        GoRoute(
+          path: Routes.chooseRole,
+          builder: (context, _) => ChooseRoleScreen(
+            speaker: session.speaker,
+            onVisuallyImpaired: () async {
+              await session.rememberRole('vi');
+              if (context.mounted) appNavigate(context, Routes.createAccount);
+            },
+            onGuardian: () => appNavigate(context, Routes.guardianHome),
+            onSignIn: () => appNavigate(context, Routes.signIn),
+          ),
+        ),
+        GoRoute(
+          path: Routes.forgotPassword,
+          builder: (context, state) => ForgotPasswordScreen(
+            speaker: session.speaker,
+            initialEmail: state.uri.queryParameters['email'],
+            onSendReset: session.auth.sendPasswordReset,
+            onBack: () => appNavigate(context, Routes.signIn),
           ),
         ),
         GoRoute(
@@ -395,7 +454,14 @@ GoRouter createRouter(AppSession session) {
               await session.load();
               return null;
             },
-            onCreateAccount: () => appNavigate(context, Routes.createAccount),
+            onCreateAccount: () => appNavigate(context, Routes.chooseRole),
+            onForgotPassword: (email) => appNavigate(
+              context,
+              Uri(
+                path: Routes.forgotPassword,
+                queryParameters: email.isEmpty ? null : {'email': email},
+              ).toString(),
+            ),
           ),
         ),
         GoRoute(
@@ -408,6 +474,14 @@ GoRouter createRouter(AppSession session) {
               if (failure == null) await session.load();
               return failure;
             },
+          ),
+        ),
+        GoRoute(
+          path: Routes.profile,
+          builder: (context, _) => ProfileScreen(
+            speaker: session.speaker,
+            onSave: (info) => session.advance(
+                () => session.onboarding.savePersonalInfo(info)),
           ),
         ),
         GoRoute(
@@ -774,7 +848,7 @@ class _CouldNotIssueCode extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ViScreen(
         speaker: speaker,
-        step: 'Step 4 of 6',
+        step: 'Step 5 of 7',
         title: 'Could not create an invitation',
         body: const [
           'This usually means there is no connection. You can invite a guardian '

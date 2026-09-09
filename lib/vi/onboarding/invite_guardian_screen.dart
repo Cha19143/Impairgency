@@ -40,7 +40,7 @@ class InviteGuardianScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ViScreen(
         speaker: speaker,
-        step: 'Step 4 of 6',
+        step: 'Step 5 of 7',
         title: 'Invite a guardian',
         body: const [
           'Give this code to the person who will watch over you. They enter it '

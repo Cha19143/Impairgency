@@ -35,6 +35,7 @@ class PrefsSessionStore implements SessionStore {
     try {
       final data = jsonDecode(raw) as Map<String, dynamic>;
       return CachedProfile(
+        role: data['role'] as String?,
         consent: Map<String, bool>.from(data['consent'] as Map? ?? const {}),
         contactName: data['contactName'] as String?,
         contactNumber: data['contactNumber'] as String?,
@@ -52,6 +53,7 @@ class PrefsSessionStore implements SessionStore {
     await (await _prefs).setString(
       _profileKey,
       jsonEncode({
+        'role': profile.role,
         'consent': profile.consent,
         'contactName': profile.contactName,
         'contactNumber': profile.contactNumber,

@@ -20,6 +20,18 @@ void main() {
     // an account they have just signed in to. These are the facts an account
     // carries with it that say otherwise.
 
+    test('a saved name means the personal information step is behind them',
+        () {
+      expect(
+        OnboardingController.stepsEvidencedBy({'name': 'Ana', 'age': 34}),
+        contains(Routes.profile),
+      );
+      expect(
+        OnboardingController.stepsEvidencedBy({'email': 'a@b.c'}),
+        isNot(contains(Routes.profile)),
+      );
+    });
+
     test('a saved preference means the preferences step is behind them', () {
       expect(
         OnboardingController.stepsEvidencedBy({'screenStaysOn': true}),

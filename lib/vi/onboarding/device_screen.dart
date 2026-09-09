@@ -27,7 +27,7 @@ class DeviceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ViScreen(
         speaker: speaker,
-        step: 'Step 6 of 6',
+        step: 'Step 7 of 7',
         title: 'Do you have an ImpairGency device?',
         body: const [
           'This is optional. Scanning, guidance and emergency SOS all work on '

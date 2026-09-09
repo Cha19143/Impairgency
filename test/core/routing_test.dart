@@ -172,7 +172,11 @@ void main() {
       const midway = SessionState(
         signedIn: true,
         safetyAcknowledged: true,
-        completedSteps: {Routes.createAccount, Routes.preferences},
+        completedSteps: {
+          Routes.createAccount,
+          Routes.profile,
+          Routes.preferences,
+        },
       );
       expect(
         resolveRedirect(isWeb: false, location: Routes.signIn, session: midway),
@@ -213,6 +217,44 @@ void main() {
     });
   });
 
+  group('the doors added for the tester', () {
+    test('choosing a role, resetting a password and registering as a guardian '
+        'are reachable signed out', () {
+      for (final door in [
+        Routes.chooseRole,
+        Routes.forgotPassword,
+      ]) {
+        expect(
+          resolveRedirect(isWeb: false, location: door, session: anon),
+          isNull,
+          reason: '$door should be reachable without an account',
+        );
+      }
+    });
+
+    test('and are left behind once setup is done', () {
+      for (final door in [
+        Routes.chooseRole,
+        Routes.forgotPassword,
+      ]) {
+        expect(
+          resolveRedirect(isWeb: false, location: door, session: settled),
+          Routes.home,
+        );
+      }
+    });
+
+    test('choosing a role is not a step, so it is never resumed to', () {
+      expect(Routes.onboardingFlow, isNot(contains(Routes.chooseRole)));
+    });
+
+    test('personal information comes right after the account', () {
+      expect(Routes.onboardingFlow[0], Routes.createAccount);
+      expect(Routes.onboardingFlow[1], Routes.profile);
+    });
+
+  });
+
   group('onboarding resumes where it stopped', () {
     test('a fresh account starts at step one', () {
       const fresh = SessionState(signedIn: true, safetyAcknowledged: true);
@@ -223,7 +265,11 @@ void main() {
       const midway = SessionState(
         signedIn: true,
         safetyAcknowledged: true,
-        completedSteps: {Routes.createAccount, Routes.preferences},
+        completedSteps: {
+          Routes.createAccount,
+          Routes.profile,
+          Routes.preferences,
+        },
       );
       expect(midway.resumeAt, Routes.emergencyContact);
       expect(
