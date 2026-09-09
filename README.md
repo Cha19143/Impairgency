@@ -23,7 +23,11 @@ lib/
   app/        router, redirect rule, theme
   core/       platform-agnostic and Flutter-free — unit tested without a binding
     a11y/     WCAG contrast maths
-    voice/    command vocabulary and matching
+    contacts/ the emergency contacts, and what their order means
+    navigation/ destinations and straight-line directions
+    reading/  a page in pieces, at the listener's pace
+    speech/   the one speech queue: hazard > navigation > information
+    voice/    command vocabulary, matching, and hearing a command
   data/       Firestore repositories, device services
   vi/         visually impaired user app
   guardian/   guardian app
@@ -84,14 +88,17 @@ shipped, turned into a failing test.
 | `test/core/contrast_test.dart` | Button labels that fail WCAG AA. The old app rendered white on `#00FFFF`, about 1.1:1. |
 | `test/core/routing_test.dart` | An admin route reachable without an admin. Onboarding that cannot resume after a crash. A completion screen that routes back to sign-in. |
 | `test/core/voice_commands_test.dart` | The vocabulary screen drifting from what the parser accepts. Cancel words that hijack everyday speech. |
+| `test/core/speech/speech_queue_test.dart` | A hazard warning restarted on every camera frame, so "Stop, tree in front of you" was heard as "Stop. Stop. Stop." A tester reported it; this keeps it reported. |
+| `test/vi/voice_controller_test.dart` | Voice commands that fail silently. Every way the microphone can fail is said out loud, and says the buttons still work. |
+| `test/data/sos_engine_test.dart` | An SOS that hangs offline behind a Firestore write, a guardian event never written, a contact never dialled. Each leg with the platform replaced by a fake. |
 | `test/core/safety_notice_test.dart` | Copy that hedges instead of naming what the app misses, or claims the environment is safe. |
 | `test/rules/firestore.test.js` | A guardian reading a user they were never paired with. Location leaking after consent is revoked. A client making itself an admin. A pairing code redeemed twice. |
 | `test/e2e/auth-gate.spec.js` | A correct password that redisplays the login form. An admin route reachable without an admin. The dashboard is driven in a real browser, so these are caught in the build that ships rather than in a test harness. |
 | `test/e2e/overview.spec.js` | Numbers that survive an empty database. The predecessor hardcoded 15.4K and 99.2% and looked entirely convincing; these read §1.3's figures out of Firestore and assert the empty state stays empty. |
 
 ```bash
-flutter test                 # 544 unit and widget tests
-tool/test_rules.sh           # 74 security rules tests, on the emulator
+flutter test                 # 774 unit and widget tests
+tool/test_rules.sh           # 77 security rules tests, on the emulator
 tool/test_e2e.sh             # 8 browser tests against the dashboard
 tool/eval_detector.py --fetch  # what the detector finds, on 846 annotated photos
 flutter build apk && flutter build ios && flutter build web

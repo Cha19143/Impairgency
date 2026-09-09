@@ -30,7 +30,8 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
-| **Overall** | | **90 / 91  (99%)** |
+| Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
+| **Overall** | | **103 / 104  (99%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -306,17 +307,101 @@ The old repo at `~/kokey/CapstoneImpairgency/cprwire/` is reference-only.
       head rather than at a post-process node — so the thresholding and the
       suppression an SSD graph does for you are now in `core/vision/yolo.dart`
       and tested there. See `docs/VISION.md`
-- [x] Contact picker — **substituted by typed entry**, and the reason is worth
-      keeping. `flutter_contacts` force-unwraps
+- [x] Contact picker — **the system picker, over a method channel of our
+      own**, and the reason no package is used is worth keeping.
+      `flutter_contacts` force-unwraps
       `UIApplication.shared.delegate!.window!!`, nil since iOS 13, and crashes
       on launch. `flutter_native_contact_picker` wraps the system picker
       correctly but declares Java 1.8 against Kotlin 17 and breaks the Android
-      build outright. A convenience is not worth a platform. The screen still
-      takes an injected picker, so one can return the day either is fixed
+      build outright. So `MainActivity.kt` fires `ACTION_PICK` and
+      `AppDelegate.swift` presents `CNContactPickerViewController`: one row
+      comes back, never the address book, and no contacts permission is
+      needed for it. The screen still takes an injected picker, so tests run
+      without a phone
 - [x] ~~OTP Cloud Functions~~ — **obsolete.** Replaced by Firebase Auth's own
       `sendEmailVerification()`: free, no server, and it stores nothing. A
       database of live login codes is an account takeover waiting to be found
 - [x] Voice command vocabulary + tests — *ported and extended to six commands*
+
+---
+
+## Tester feedback round — one tester, one device, thirteen items
+
+What came back from the first person outside the team to use the build,
+grouped the way they grouped it. Three of the P0s were not device problems:
+they were features that had never been wired, and the tester was the first
+to notice because nobody on the team had been the person the app is for.
+
+**P0 — broken**
+
+- [x] Voice commands did not work *at all* — because nothing listened.
+      `speech_to_text` was declared and imported nowhere. Now: permission →
+      `SttSpeechRecognizer` → `VoiceController` → parser → `VoiceActions` →
+      router, and every break in that chain is said out loud and written
+      under the microphone button. The dashboard listens after it asks; the
+      SOS countdown listens for "cancel" without silencing its own count
+- [x] "Stop, tree in front of you" came out as "Stop. Stop. Stop." — every
+      camera frame restarted the sentence. One `SpeechQueue` for the whole
+      app: hazard > navigation > information, a hazard interrupts anything
+      but an identical hazard already being said, nothing else cuts a
+      sentence short. `test/core/speech/` asserts the rule
+- [x] The emergency contact did nothing — three things at once. The saved
+      contact never reached the device cache SOS reads from until the next
+      launch; `guardianCount` was read from a field nothing wrote, so the
+      guardian event was never written; and offline, the Firestore write
+      held "Calling for help…" forever. All three fixed and tested, and the
+      receipt gained `LegOutcome.pending` for an alert queued for a
+      connection — neither reached nor failed, and said as neither
+
+**P1 — missing screens**
+
+- [x] Who is this account for? — visually impaired user or guardian, before
+      Create account. The role is cached on the device before the account
+      exists, so the guard never sends a guardian through the wrong flow
+- [x] About you — name, age, type of impairment as a list of six with
+      Other, an optional phone number for the guardian's Call button.
+      Step 2 of 7; writes `displayName` for the dashboard and the Function
+- [x] Forgot your password? — Firebase's own reset link, worded so the form
+      cannot be used to learn which emails are registered
+- [x] Guardian registration — name, email, password, phone, and the code;
+      the code's shape checked before anything is sent, its validity
+      answered in the pairing code's own words under the field
+- [x] Guardian dashboard — who they watch, a location line that is true
+      when read alone, a recent SOS first, Call and Open on a map. Also
+      where `SosWatcher` is finally started; it had never been constructed
+
+**P2 — feature changes**
+
+- [x] Several emergency contacts, in calling order. The list is the order;
+      the legs ring the first, the receipt offers the next by name and a
+      text to all; every number goes on the SOS event. Import from the
+      phone through the system picker. Order documented in
+      [`EMERGENCY_DELIVERY.md`](EMERGENCY_DELIVERY.md)
+- [x] Directions in Scan — say where you are going, be told which way and
+      how far. **Straight-line, not routed**, and introduced as such: there
+      is no road network on the free tier. Navigation priority, behind
+      hazards. `core/navigation/guidance.dart`
+- [x] Saved places — Home, Work, School and the rest as one-tap buttons in
+      Smart assistance; saved by standing in them; added, renamed and
+      removed under Settings. Owner-only in the rules, with a test that a
+      guardian is refused even with location consent
+- [x] Read text — its own button, its own screen, one photograph, the words
+      in pieces with pause, say that again and next. ML Kit's text half is
+      the one new dependency, with its reason in `pubspec.yaml`
+- [x] Settings — two entries added and nothing else touched: *Emergency
+      contacts* (was singular, now says how many) and *Saved places*
+
+**Assumptions made, to be checked with the tester**
+
+- The guardian's Call button rings the *user's own number* when they gave
+  one and their emergency contact otherwise, and says which. "Same target
+  as the user-side SOS" would otherwise mean a guardian ringing themselves
+- Directions are straight-line. If turn-by-turn on roads is what was meant,
+  that needs a routing service and a billing account, and belongs on the
+  scope table with a reason
+- The phone number on About you is not in the tester's list. It is there
+  because the guardian's Call button needs a target; it is optional and
+  says why it is asked
 
 ---
 
