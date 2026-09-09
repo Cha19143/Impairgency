@@ -228,12 +228,55 @@ class AppSession extends ChangeNotifier {
         consent: Map<String, bool>.from(data['consent'] as Map? ?? const {}),
         contactName: contact?['name'] as String?,
         contactNumber: contact?['number'] as String?,
-        guardianCount: (data['guardianCount'] as num?)?.toInt() ?? 0,
+        guardianCount: await _countGuardians(uid),
       ));
       await load();
     } catch (_) {
       // Offline. The cache is what the app runs on until the network returns.
     }
+  }
+
+  /// Counted from the pairings, because nothing on the client may write a
+  /// count onto the user document and nothing on the server does either.
+  /// Falls back to what was cached rather than to zero: offline, "no
+  /// guardian" would be a claim, and the wrong one.
+  Future<int> _countGuardians(String uid) async {
+    try {
+      return (await pairing.guardiansOf(uid)).length;
+    } catch (_) {
+      return _state.guardianCount;
+    }
+  }
+
+  /// Puts a just-saved emergency contact where SOS reads it from.
+  ///
+  /// The bug this closes: the contact was written to Firestore and the
+  /// device's copy - the one SOS and Settings actually read - was refreshed
+  /// only at sign-in. Save a contact during setup, press SOS, and the
+  /// receipt said no contact was saved. The tester was right that the
+  /// feature did not work; it worked on the next launch, with a network.
+  Future<void> rememberContact(String name, String number) async {
+    final cached = await store.cachedProfile();
+    await store.cacheProfile(CachedProfile(
+      consent: cached.consent,
+      contactName: name,
+      contactNumber: number,
+      guardianCount: cached.guardianCount,
+    ));
+    await load();
+  }
+
+  /// Same shape, for consent. The consent centre used to re-read Firestore
+  /// after saving, which offline meant a switch that did not move.
+  Future<void> rememberConsent(Map<String, bool> consent) async {
+    final cached = await store.cachedProfile();
+    await store.cacheProfile(CachedProfile(
+      consent: consent,
+      contactName: cached.contactName,
+      contactNumber: cached.contactNumber,
+      guardianCount: cached.guardianCount,
+    ));
+    await load();
   }
 
   void update(SessionState next) {
@@ -381,8 +424,10 @@ GoRouter createRouter(AppSession session) {
           path: Routes.emergencyContact,
           builder: (context, _) => EmergencyContactScreen(
             speaker: session.speaker,
-            onSave: (name, number) => session.advance(() =>
-                session.onboarding.saveEmergencyContact(name, number)),
+            onSave: (name, number) => session.advance(() async {
+              await session.onboarding.saveEmergencyContact(name, number);
+              await session.rememberContact(name, number);
+            }),
             onSkip: () => session.advance(
                 () => session.onboarding.skip(Routes.emergencyContact)),
           ),
@@ -421,8 +466,10 @@ GoRouter createRouter(AppSession session) {
           path: Routes.consent,
           builder: (context, _) => ConsentScreen(
             speaker: session.speaker,
-            onContinue: (values) =>
-                session.advance(() => session.onboarding.saveConsent(values)),
+            onContinue: (values) => session.advance(() async {
+              await session.onboarding.saveConsent(values);
+              await session.rememberConsent(values);
+            }),
           ),
         ),
         GoRoute(
@@ -477,7 +524,7 @@ GoRouter createRouter(AppSession session) {
           path: Routes.sos,
           builder: (context, _) => SosFlow(
             engine: session.sos,
-            userId: session.state.uid ?? 'unknown',
+            userId: session.state.uid,
             speaker: session.speaker,
             voiceController: session.voice,
             contactName: session.state.contactName,
@@ -521,7 +568,8 @@ GoRouter createRouter(AppSession session) {
             current: session.state.consent,
             onSave: (values) async {
               await session.onboarding.saveConsent(values);
-              await session.refreshProfile();
+              await session.rememberConsent(values);
+              unawaited(session.refreshProfile());
             },
             onBack: () => appNavigate(context, Routes.settings),
           ),

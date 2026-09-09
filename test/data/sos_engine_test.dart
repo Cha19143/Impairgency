@@ -1,0 +1,234 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:impairgency/core/location/location_fix.dart';
+import 'package:impairgency/core/location/location_source.dart';
+import 'package:impairgency/core/sos/sos_receipt.dart';
+import 'package:impairgency/core/speech/speaker.dart';
+import 'package:impairgency/data/sos_engine.dart';
+
+class RecordingSpeaker implements Speaker {
+  final List<String> said = [];
+  @override
+  String? get lastSpoken => said.isEmpty ? null : said.last;
+  @override
+  Future<void> repeat() async {}
+  @override
+  Future<void> speak(String text) async => said.add(text);
+  @override
+  Future<void> speakLines(List<String> lines) async => said.addAll(lines);
+  @override
+  Future<void> stop() async {}
+}
+
+class FixedLocation implements LocationSource {
+  const FixedLocation(this.state, {this.fix});
+  final LocationAvailability state;
+  final LocationFix? fix;
+  @override
+  Future<LocationAvailability> availability() async => state;
+  @override
+  Future<LocationAvailability> requestPermission() async => state;
+  @override
+  Future<LocationFix?> currentFix({Duration timeout = Duration.zero}) async =>
+      fix;
+  @override
+  Future<LocationFix?> lastKnownFix() async => fix;
+}
+
+/// The legs, each replaced by something the test controls.
+class Harness {
+  Harness({
+    this.dialResult = true,
+    this.dialThrows = false,
+    this.writeThrows = false,
+    this.writeHangs = false,
+    LocationSource? location,
+  }) : location = location ?? const FixedLocation(LocationAvailability.denied);
+
+  final bool dialResult;
+  final bool dialThrows;
+  final bool writeThrows;
+  final bool writeHangs;
+  final LocationSource location;
+  final speaker = RecordingSpeaker();
+  final dialled = <Uri>[];
+  final written = <Map<String, Object?>>[];
+
+  late final engine = SosEngine(
+    speaker: speaker,
+    location: location,
+    locationBudget: Duration.zero,
+    guardianBudget: const Duration(milliseconds: 50),
+    dial: (uri) async {
+      if (dialThrows) throw StateError('no dialler');
+      dialled.add(uri);
+      return dialResult;
+    },
+    writeEvent: (event) async {
+      if (writeThrows) throw StateError('permission denied');
+      if (writeHangs) await Completer<void>().future;
+      written.add(event);
+    },
+  );
+}
+
+void main() {
+  group('the call leg', () {
+    test('dials the saved number, as a tel: link', () async {
+      final h = Harness();
+      final receipt = await h.engine.fire(
+        userId: 'u1',
+        contactName: 'Mum',
+        contactNumber: '+63 917 000 0000',
+        guardianCount: 0,
+      );
+      expect(h.dialled.single.scheme, 'tel');
+      expect(h.dialled.single.path, '+639170000000',
+          reason: 'spaces would reach the dialler as %20');
+      expect(h.dialled.single.toString(), 'tel:+639170000000');
+      expect(receipt.of(SosLeg.call)!.outcome, LegOutcome.done);
+      expect(receipt.spoken, contains('Called Mum.'));
+    });
+
+    test('no contact means nobody is dialled and the receipt says so',
+        () async {
+      final h = Harness();
+      final receipt =
+          await h.engine.fire(userId: 'u1', guardianCount: 0);
+      expect(h.dialled, isEmpty);
+      expect(receipt.of(SosLeg.call)!.outcome, LegOutcome.notConfigured);
+      expect(receipt.spoken, contains('No emergency contact is saved'));
+    });
+
+    test('a dialler that refuses is reported as a call that did not connect',
+        () async {
+      final h = Harness(dialResult: false);
+      final receipt = await h.engine.fire(
+          userId: 'u1',
+          contactName: 'Mum',
+          contactNumber: '0917',
+          guardianCount: 0);
+      expect(receipt.of(SosLeg.call)!.outcome, LegOutcome.failed);
+      expect(receipt.spoken, contains('did not connect'));
+    });
+
+    test('a dialler that throws does not take the SOS down', () async {
+      final h = Harness(dialThrows: true);
+      final receipt = await h.engine.fire(
+          userId: 'u1',
+          contactName: 'Mum',
+          contactNumber: '0917',
+          guardianCount: 0);
+      expect(receipt.of(SosLeg.alarm)!.succeeded, isTrue);
+      expect(receipt.of(SosLeg.call)!.outcome, LegOutcome.failed);
+    });
+  });
+
+  group('the alarm', () {
+    test('sounds first, before anything that could wait', () async {
+      final h = Harness();
+      await h.engine.fire(userId: 'u1', guardianCount: 0);
+      expect(h.speaker.said.first, contains('Emergency'));
+    });
+  });
+
+  group('the guardian leg', () {
+    test('writes the event, and says the guardian was told', () async {
+      final h = Harness();
+      final receipt =
+          await h.engine.fire(userId: 'u1', guardianCount: 1);
+      expect(h.written.single['userId'], 'u1');
+      expect(h.written.single['cancelled'], false);
+      expect(receipt.of(SosLeg.guardians)!.outcome, LegOutcome.done);
+    });
+
+    test('with no guardian the event is still recorded, honestly', () async {
+      // An administrator reviews it, and a guardian paired afterwards can
+      // still see it. Only the wording changes.
+      final h = Harness();
+      final receipt =
+          await h.engine.fire(userId: 'u1', guardianCount: 0);
+      await Future<void>.delayed(Duration.zero);
+      expect(h.written, hasLength(1));
+      expect(receipt.of(SosLeg.guardians)!.outcome, LegOutcome.notConfigured);
+      expect(receipt.anyoneReached, isFalse);
+    });
+
+    test('offline, the write does not hang the SOS forever', () async {
+      // A Firestore write completes on server acknowledgement. With no
+      // signal, that is never - and the flow sat on "Calling for help…".
+      final h = Harness(writeHangs: true);
+      final receipt = await h.engine
+          .fire(userId: 'u1', guardianCount: 1)
+          .timeout(const Duration(seconds: 2));
+      final leg = receipt.of(SosLeg.guardians)!;
+      expect(leg.outcome, LegOutcome.pending);
+      expect(leg.succeeded, isFalse);
+      expect(receipt.anyoneReached, isFalse,
+          reason: 'queued is not reached');
+      expect(receipt.spoken, contains('waiting for a connection'));
+    });
+
+    test('a refused write is a failure, named', () async {
+      final h = Harness(writeThrows: true);
+      final receipt =
+          await h.engine.fire(userId: 'u1', guardianCount: 1);
+      expect(receipt.of(SosLeg.guardians)!.outcome, LegOutcome.failed);
+      expect(receipt.spoken, contains('could not be reached'));
+    });
+
+    test('nobody signed in means no event, and the receipt says why',
+        () async {
+      // Never written under a placeholder id: the rules would refuse it
+      // silently, and the receipt would have claimed a guardian was told.
+      final h = Harness();
+      final receipt =
+          await h.engine.fire(userId: null, guardianCount: 1);
+      expect(h.written, isEmpty);
+      expect(receipt.of(SosLeg.guardians)!.outcome, LegOutcome.failed);
+      expect(receipt.spoken, contains('not signed in'));
+    });
+
+    test('the event carries the contact and the position', () async {
+      final h = Harness(
+        location: FixedLocation(
+          LocationAvailability.ready,
+          fix: LocationFix(
+              latitude: 14.6, longitude: 121.0, accuracyMetres: 12, at: DateTime.now()),
+        ),
+      );
+      await h.engine.fire(
+          userId: 'u1',
+          contactName: 'Mum',
+          contactNumber: '0917',
+          guardianCount: 1);
+      final event = h.written.single;
+      expect(event['lat'], 14.6);
+      expect((event['contact'] as Map)['number'], '0917');
+      expect(event['locationSummary'], 'Your location was sent.');
+    });
+  });
+
+  group('the location leg', () {
+    test('a refused permission is a named failure, not a crash', () async {
+      final h = Harness(
+          location: const FixedLocation(LocationAvailability.deniedForever));
+      final receipt =
+          await h.engine.fire(userId: 'u1', guardianCount: 0);
+      expect(receipt.of(SosLeg.location)!.outcome, LegOutcome.failed);
+      expect(receipt.spoken, contains('blocked for this app'));
+    });
+  });
+
+  group('cancellation', () {
+    test('is recorded when there is an account, and skipped when not',
+        () async {
+      final h = Harness();
+      await h.engine.recordCancellation('u1');
+      await h.engine.recordCancellation(null);
+      expect(h.written, hasLength(1));
+      expect(h.written.single['cancelled'], true);
+    });
+  });
+}

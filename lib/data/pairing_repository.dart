@@ -127,6 +127,17 @@ class PairingRepository {
       .snapshots()
       .map((s) => s.docs.map((d) => d.data()['viUserId'] as String).toList());
 
+  /// The guardians watching over [viUserId].
+  ///
+  /// The user document never carried a count - nothing on the client is
+  /// allowed to write one - so until this existed the SOS engine believed
+  /// every user had no guardian, and never wrote the event a guardian's
+  /// listener waits for.
+  Future<List<String>> guardiansOf(String viUserId) async {
+    final snap = await _pairings.where('viUserId', isEqualTo: viUserId).get();
+    return snap.docs.map((d) => d.data()['guardianId'] as String).toList();
+  }
+
   Future<void> unpair(String guardianId, String viUserId) =>
       _pairings.doc(pairingId(guardianId, viUserId)).delete();
 }

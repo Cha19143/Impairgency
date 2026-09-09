@@ -38,6 +38,13 @@ enum LegOutcome {
   /// Distinct from [failed] because the remedy is different and the user
   /// should hear which it was.
   notConfigured,
+
+  /// Attempted, and not confirmed either way: the alert is queued on the
+  /// phone for a connection that is not there. Not a success - nobody has
+  /// been reached - and not a failure - it will go when the network returns.
+  /// Saying which is the difference between a user who waits and one who
+  /// gives up.
+  pending,
 }
 
 class LegResult {
@@ -114,7 +121,12 @@ class SosReceipt {
               : '${result.detail} were told.',
         (SosLeg.guardians, LegOutcome.notConfigured) =>
           'You have no guardian, so nobody was alerted.',
-        (SosLeg.guardians, _) => 'Your guardian could not be reached.',
+        (SosLeg.guardians, LegOutcome.pending) =>
+          'Your guardian alert is waiting for a connection, and will be sent '
+              'as soon as this phone has one.',
+        (SosLeg.guardians, _) => result.detail == null
+            ? 'Your guardian could not be reached.'
+            : 'Your guardian could not be reached. ${result.detail}',
       };
 
   /// One line for the top of the screen, and the first thing spoken.

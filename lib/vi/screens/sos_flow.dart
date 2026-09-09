@@ -29,7 +29,10 @@ class SosFlow extends StatefulWidget {
   });
 
   final SosEngine engine;
-  final String userId;
+
+  /// Null when nobody is signed in on this phone. The alarm and the call
+  /// still run; the guardian leg says why it could not.
+  final String? userId;
   final VoidCallback onFinished;
   final String? contactName;
   final String? contactNumber;

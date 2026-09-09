@@ -106,7 +106,7 @@ VoiceController controller(
         fetchFix: _noFix,
         contactName: 'Mum',
       ),
-      onNavigate: routes == null ? null : routes.add,
+      onNavigate: routes?.add,
     );
 
 Future<({LocationAvailability availability, String? summary})> _noFix() async =>

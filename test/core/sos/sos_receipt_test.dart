@@ -82,6 +82,14 @@ void main() {
       expect(missing.spoken, contains('You have no guardian'));
       expect(failed.spoken, contains('could not be reached'));
     });
+
+    test('an alert queued for a connection is neither reached nor failed', () {
+      final queued = receipt(guardians: LegOutcome.pending, call: LegOutcome.failed);
+      expect(queued.anyoneReached, isFalse);
+      expect(queued.headline, 'Nobody was reached');
+      expect(queued.spoken, contains('waiting for a connection'));
+      expect(queued.spoken, isNot(contains('could not be reached')));
+    });
   });
 
   group('what it leads with', () {
