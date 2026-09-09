@@ -67,9 +67,21 @@ class SosReceipt {
   LegResult? of(SosLeg leg) =>
       legs.where((l) => l.leg == leg).firstOrNull;
 
+  /// Every call, in the order they were placed. More than one when the
+  /// user rang the next contact from the receipt.
+  List<LegResult> get calls => legs.where((l) => l.leg == SosLeg.call).toList();
+
   bool get anyoneReached =>
-      (of(SosLeg.call)?.succeeded ?? false) ||
+      calls.any((c) => c.succeeded) ||
       (of(SosLeg.guardians)?.succeeded ?? false);
+
+  /// The receipt with one more call on it, kept in reading order.
+  SosReceipt withCall(LegResult call) {
+    final index = legs.lastIndexWhere((l) => l.leg == SosLeg.call);
+    final next = [...legs];
+    next.insert(index < 0 ? 1 : index + 1, call);
+    return SosReceipt(next);
+  }
 
   bool get everythingWorked => legs.every((l) => l.succeeded);
 
@@ -86,7 +98,7 @@ class SosReceipt {
   }
 
   String _whoWasReached() {
-    final called = of(SosLeg.call)?.succeeded ?? false;
+    final called = calls.any((c) => c.succeeded);
     final guardians = of(SosLeg.guardians)?.succeeded ?? false;
     if (called && guardians) return 'Your contact answered and your guardian was told.';
     if (called) return 'Your contact answered.';

@@ -5,13 +5,14 @@
 /// can run without a platform channel.
 library;
 
+import 'contacts/emergency_contact.dart';
+
 /// The handful of facts the app needs before it can reach the network.
 class CachedProfile {
   const CachedProfile({
     this.role,
     this.consent = const {},
-    this.contactName,
-    this.contactNumber,
+    this.contacts = const [],
     this.guardianCount = 0,
   });
 
@@ -22,24 +23,30 @@ class CachedProfile {
   final String? role;
 
   final Map<String, bool> consent;
-  final String? contactName;
-  final String? contactNumber;
+
+  /// The emergency contacts, in calling order. See `emergency_contact.dart`
+  /// for what the order means.
+  final List<EmergencyContact> contacts;
+
   final int guardianCount;
+
+  /// The first contact, for anything that only wants one.
+  String? get contactName => contacts.isEmpty ? null : contacts.first.name;
+  String? get contactNumber =>
+      contacts.isEmpty ? null : contacts.first.number;
 
   bool get isGuardian => role == 'guardian';
 
   CachedProfile copyWith({
     String? role,
     Map<String, bool>? consent,
-    String? contactName,
-    String? contactNumber,
+    List<EmergencyContact>? contacts,
     int? guardianCount,
   }) =>
       CachedProfile(
         role: role ?? this.role,
         consent: consent ?? this.consent,
-        contactName: contactName ?? this.contactName,
-        contactNumber: contactNumber ?? this.contactNumber,
+        contacts: contacts ?? this.contacts,
         guardianCount: guardianCount ?? this.guardianCount,
       );
 }

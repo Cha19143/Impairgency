@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/alerts/alert_presenter.dart';
+import '../core/contacts/emergency_contact.dart';
 import '../core/location/location_policy.dart';
 import '../core/location/location_source.dart';
 import '../core/places/place.dart';
@@ -24,6 +25,7 @@ import '../admin/screens/users_screen.dart';
 import '../core/places/session_summary.dart';
 import '../data/admin_repository.dart';
 import '../data/auth_service.dart';
+import '../data/contact_picker.dart';
 import '../data/geolocator_location_source.dart';
 import '../data/guardian_onboarding.dart';
 import '../data/guardian_repository.dart';
@@ -197,8 +199,7 @@ class AppSession extends ChangeNotifier {
       update(SessionState(
         uid: user.uid,
         consent: _state.consent,
-        contactName: _state.contactName,
-        contactNumber: _state.contactNumber,
+        contacts: _state.contacts,
         guardianCount: _state.guardianCount,
         signedIn: true,
         isAdmin: isAdmin,
@@ -229,8 +230,7 @@ class AppSession extends ChangeNotifier {
       safetyAcknowledged: await store.safetyAcknowledged(),
       completedSteps: await store.completedSteps(),
       consent: profile.consent,
-      contactName: profile.contactName,
-      contactNumber: profile.contactNumber,
+      contacts: profile.contacts,
       guardianCount: profile.guardianCount,
     ));
   }
@@ -246,12 +246,10 @@ class AppSession extends ChangeNotifier {
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = snapshot.data();
       if (data == null) return;
-      final contact = data['emergencyContact'] as Map<String, dynamic>?;
       await store.cacheProfile(CachedProfile(
         role: data['role'] as String?,
         consent: Map<String, bool>.from(data['consent'] as Map? ?? const {}),
-        contactName: contact?['name'] as String?,
-        contactNumber: contact?['number'] as String?,
+        contacts: emergencyContactsFrom(data),
         guardianCount: await _countGuardians(uid),
       ));
       await load();
@@ -310,14 +308,9 @@ class AppSession extends ChangeNotifier {
   /// only at sign-in. Save a contact during setup, press SOS, and the
   /// receipt said no contact was saved. The tester was right that the
   /// feature did not work; it worked on the next launch, with a network.
-  Future<void> rememberContact(String name, String number) async {
+  Future<void> rememberContacts(List<EmergencyContact> contacts) async {
     final cached = await store.cachedProfile();
-    await store.cacheProfile(CachedProfile(
-      consent: cached.consent,
-      contactName: name,
-      contactNumber: number,
-      guardianCount: cached.guardianCount,
-    ));
+    await store.cacheProfile(cached.copyWith(contacts: dedupeContacts(contacts)));
     await load();
   }
 
@@ -325,12 +318,7 @@ class AppSession extends ChangeNotifier {
   /// after saving, which offline meant a switch that did not move.
   Future<void> rememberConsent(Map<String, bool> consent) async {
     final cached = await store.cachedProfile();
-    await store.cacheProfile(CachedProfile(
-      consent: consent,
-      contactName: cached.contactName,
-      contactNumber: cached.contactNumber,
-      guardianCount: cached.guardianCount,
-    ));
+    await store.cacheProfile(cached.copyWith(consent: consent));
     await load();
   }
 
@@ -514,9 +502,11 @@ GoRouter createRouter(AppSession session) {
           path: Routes.emergencyContact,
           builder: (context, _) => EmergencyContactScreen(
             speaker: session.speaker,
-            onSave: (name, number) => session.advance(() async {
-              await session.onboarding.saveEmergencyContact(name, number);
-              await session.rememberContact(name, number);
+            initial: session.state.contacts,
+            picker: const SystemContactPicker(),
+            onSave: (contacts) => session.advance(() async {
+              await session.onboarding.saveEmergencyContacts(contacts);
+              await session.rememberContacts(contacts);
             }),
             onSkip: () => session.advance(
                 () => session.onboarding.skip(Routes.emergencyContact)),
@@ -617,8 +607,7 @@ GoRouter createRouter(AppSession session) {
             userId: session.state.uid,
             speaker: session.speaker,
             voiceController: session.voice,
-            contactName: session.state.contactName,
-            contactNumber: session.state.contactNumber,
+            contacts: session.state.contacts,
             guardianCount: session.state.guardianCount,
             onFinished: () => appNavigate(context, Routes.home),
           ),
@@ -627,7 +616,7 @@ GoRouter createRouter(AppSession session) {
           path: Routes.settings,
           builder: (context, _) => SettingsScreen(
             speaker: session.speaker,
-            hasContact: session.state.contactNumber != null,
+            contactCount: session.state.contacts.length,
             hasGuardian: session.state.guardianCount > 0,
             onConsent: () => appNavigate(context, Routes.consentCentre),
             onLearned: () => appNavigate(context, Routes.learned),

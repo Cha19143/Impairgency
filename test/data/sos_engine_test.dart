@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:impairgency/core/contacts/emergency_contact.dart';
 import 'package:impairgency/core/location/location_fix.dart';
 import 'package:impairgency/core/location/location_source.dart';
 import 'package:impairgency/core/sos/sos_receipt.dart';
@@ -79,8 +80,9 @@ void main() {
       final h = Harness();
       final receipt = await h.engine.fire(
         userId: 'u1',
-        contactName: 'Mum',
-        contactNumber: '+63 917 000 0000',
+        contacts: const [
+          EmergencyContact(name: 'Mum', number: '+63 917 000 0000'),
+        ],
         guardianCount: 0,
       );
       expect(h.dialled.single.scheme, 'tel');
@@ -106,8 +108,7 @@ void main() {
       final h = Harness(dialResult: false);
       final receipt = await h.engine.fire(
           userId: 'u1',
-          contactName: 'Mum',
-          contactNumber: '0917',
+          contacts: const [EmergencyContact(name: 'Mum', number: '0917')],
           guardianCount: 0);
       expect(receipt.of(SosLeg.call)!.outcome, LegOutcome.failed);
       expect(receipt.spoken, contains('did not connect'));
@@ -117,11 +118,76 @@ void main() {
       final h = Harness(dialThrows: true);
       final receipt = await h.engine.fire(
           userId: 'u1',
-          contactName: 'Mum',
-          contactNumber: '0917',
+          contacts: const [EmergencyContact(name: 'Mum', number: '0917')],
           guardianCount: 0);
       expect(receipt.of(SosLeg.alarm)!.succeeded, isTrue);
       expect(receipt.of(SosLeg.call)!.outcome, LegOutcome.failed);
+    });
+  });
+
+  group('several contacts - the calling order', () {
+    test('only the first is rung by the legs; the rest are offered after',
+        () async {
+      // A phone places one call at a time.
+      final h = Harness();
+      final receipt = await h.engine.fire(
+        userId: 'u1',
+        contacts: const [
+          EmergencyContact(name: 'Mum', number: '0917'),
+          EmergencyContact(name: 'Dad', number: '0918'),
+        ],
+        guardianCount: 0,
+      );
+      expect(h.dialled.map((u) => u.path), ['0917']);
+      expect(receipt.calls.single.detail, 'Mum');
+
+      final next = await h.engine.call(
+          const EmergencyContact(name: 'Dad', number: '0918'));
+      expect(h.dialled.map((u) => u.path), ['0917', '0918']);
+      final chained = receipt.withCall(next);
+      expect(chained.calls.map((c) => c.detail), ['Mum', 'Dad']);
+      expect(chained.spoken, contains('Called Dad.'));
+    });
+
+    test('every contact is written on the event for the guardian', () async {
+      final h = Harness();
+      await h.engine.fire(
+        userId: 'u1',
+        contacts: const [
+          EmergencyContact(name: 'Mum', number: '0917'),
+          EmergencyContact(name: 'Dad', number: '0918'),
+        ],
+        guardianCount: 1,
+      );
+      final contacts = h.written.single['contacts'] as List;
+      expect(contacts, hasLength(2));
+      expect((contacts[1] as Map)['name'], 'Dad');
+      expect((h.written.single['contact'] as Map)['name'], 'Mum',
+          reason: 'the old single field still names the first');
+    });
+
+    test('a text to everyone opens the messaging app with all numbers',
+        () async {
+      final h = Harness();
+      final ok = await h.engine.textAll(
+        const [
+          EmergencyContact(name: 'Mum', number: '0917'),
+          EmergencyContact(name: 'Dad', number: '+63 918'),
+        ],
+        'Emergency. I need help.',
+      );
+      expect(ok, isTrue);
+      final uri = h.dialled.single;
+      expect(uri.scheme, 'sms');
+      expect(uri.toString(), contains('0917'));
+      expect(uri.path, '0917;+63918');
+      expect(uri.queryParameters['body'], 'Emergency. I need help.');
+    });
+
+    test('with nobody to text, nothing opens', () async {
+      final h = Harness();
+      expect(await h.engine.textAll(const [], 'x'), isFalse);
+      expect(h.dialled, isEmpty);
     });
   });
 
@@ -200,8 +266,7 @@ void main() {
       );
       await h.engine.fire(
           userId: 'u1',
-          contactName: 'Mum',
-          contactNumber: '0917',
+          contacts: const [EmergencyContact(name: 'Mum', number: '0917')],
           guardianCount: 1);
       final event = h.written.single;
       expect(event['lat'], 14.6);

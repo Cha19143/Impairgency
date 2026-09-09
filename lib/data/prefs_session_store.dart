@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/contacts/emergency_contact.dart';
 import '../core/session_store.dart';
 
 /// [SessionStore] backed by the device.
@@ -37,8 +38,15 @@ class PrefsSessionStore implements SessionStore {
       return CachedProfile(
         role: data['role'] as String?,
         consent: Map<String, bool>.from(data['consent'] as Map? ?? const {}),
-        contactName: data['contactName'] as String?,
-        contactNumber: data['contactNumber'] as String?,
+        // Reads the single contact a previous release cached, too.
+        contacts: emergencyContactsFrom({
+          if (data['contacts'] is List) 'emergencyContacts': data['contacts'],
+          if (data['contactNumber'] != null)
+            'emergencyContact': {
+              'name': data['contactName'] ?? '',
+              'number': data['contactNumber'],
+            },
+        }),
         guardianCount: (data['guardianCount'] as num?)?.toInt() ?? 0,
       );
     } catch (_) {
@@ -55,8 +63,7 @@ class PrefsSessionStore implements SessionStore {
       jsonEncode({
         'role': profile.role,
         'consent': profile.consent,
-        'contactName': profile.contactName,
-        'contactNumber': profile.contactNumber,
+        'contacts': profile.contacts.map((c) => c.toJson()).toList(),
         'guardianCount': profile.guardianCount,
       }),
     );

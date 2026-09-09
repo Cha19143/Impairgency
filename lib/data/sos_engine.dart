@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/contacts/emergency_contact.dart';
 import '../core/location/location_policy.dart';
 import '../core/location/location_source.dart';
 import '../core/sos/sos_receipt.dart';
@@ -46,14 +49,6 @@ class SosEngine {
           'at': FieldValue.serverTimestamp(),
         });
 
-  /// Digits and a leading plus, nothing else.
-  ///
-  /// A number typed with spaces would otherwise reach the dialler as
-  /// `tel:+63%20917…`, which some diallers refuse and none need. Contacts
-  /// picked from the address book arrive with spaces, dashes and brackets.
-  static String dialable(String? raw) =>
-      (raw ?? '').replaceAll(RegExp(r'[^0-9+]'), '');
-
   static Future<bool> _defaultDial(Uri uri) =>
       launchUrl(uri, mode: LaunchMode.externalApplication);
 
@@ -72,12 +67,18 @@ class SosEngine {
   /// returns; the receipt says exactly that.
   final Duration guardianBudget;
 
+  /// Runs the legs. [contacts] is the calling order; only the first is rung
+  /// here, because a phone places one call at a time. The rest are reached
+  /// through [callNext] from the receipt, and all of them are written on the
+  /// event so a guardian sees the whole list.
   Future<SosReceipt> fire({
     required String? userId,
-    String? contactName,
-    String? contactNumber,
+    List<EmergencyContact> contacts = const [],
     required int guardianCount,
   }) async {
+    final first = contacts.isEmpty ? null : contacts.first;
+    final contactName = first?.name;
+    final contactNumber = first?.number;
     final legs = <LegResult>[];
 
     // 1. Alarm. Needs nothing, so it is never gated on anything.
@@ -100,19 +101,10 @@ class SosEngine {
     );
 
     // 3. Call. Works with no data connection, which is why it outranks push.
-    final number = dialable(contactNumber);
-    if (number.isEmpty) {
-      legs.add(LegResult(SosLeg.call, LegOutcome.notConfigured,
-          detail: contactName));
+    if (first == null) {
+      legs.add(const LegResult(SosLeg.call, LegOutcome.notConfigured));
     } else {
-      try {
-        final ok = await _dial(Uri(scheme: 'tel', path: number));
-        legs.add(LegResult(SosLeg.call,
-            ok ? LegOutcome.done : LegOutcome.failed,
-            detail: contactName));
-      } catch (_) {
-        legs.add(LegResult(SosLeg.call, LegOutcome.failed, detail: contactName));
-      }
+      legs.add(await call(first));
     }
 
     legs.add(LegResult(
@@ -134,6 +126,8 @@ class SosEngine {
       'locationSummary': outcome.spoken,
       if (contactName != null || contactNumber != null)
         'contact': {'name': contactName, 'number': contactNumber},
+      if (contacts.isNotEmpty)
+        'contacts': contacts.map((c) => c.toJson()).toList(),
       if (outcome.fix != null) ...{
         'lat': outcome.fix!.latitude,
         'lng': outcome.fix!.longitude,
@@ -157,6 +151,42 @@ class SosEngine {
         SosLeg.values.indexOf(a.leg).compareTo(SosLeg.values.indexOf(b.leg)));
     return SosReceipt(legs);
   }
+
+  /// Rings one contact and reports whether the dialler took the number.
+  ///
+  /// "Done" means the dialler opened, not that anyone answered - the phone
+  /// cannot know that, and the receipt's wording is chosen not to claim it.
+  Future<LegResult> call(EmergencyContact contact) async {
+    final number = contact.dialable;
+    if (number.isEmpty) {
+      return LegResult(SosLeg.call, LegOutcome.notConfigured,
+          detail: contact.name);
+    }
+    try {
+      final ok = await _dial(Uri(scheme: 'tel', path: number));
+      return LegResult(SosLeg.call, ok ? LegOutcome.done : LegOutcome.failed,
+          detail: contact.name);
+    } catch (_) {
+      return LegResult(SosLeg.call, LegOutcome.failed, detail: contact.name);
+    }
+  }
+
+  /// Opens the messaging app with every contact and [body] filled in.
+  ///
+  /// The one channel a phone can fan out on by itself. The user still
+  /// presses Send; no app may send a text unasked, and for an emergency
+  /// text that is the right way round. Returns false if no messaging app
+  /// took it.
+  Future<bool> textAll(List<EmergencyContact> contacts, String body) async {
+    if (contacts.isEmpty) return false;
+    try {
+      return await _dial(smsLink(contacts, body, ios: _isIos));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  final bool _isIos = !kIsWeb && Platform.isIOS;
 
   Future<LegResult> _alertGuardians(Map<String, Object?> event) async {
     try {

@@ -77,7 +77,7 @@ Map<String, Widget Function()> screens() => {
       'Preferences': () =>
           PreferencesScreen(onChoose: (_) {}, onSkip: () {}),
       'Emergency contact': () =>
-          EmergencyContactScreen(onSave: (_, __) {}, onSkip: () {}),
+          EmergencyContactScreen(onSave: (_) {}, onSkip: () {}),
       'Invite guardian': () => InviteGuardianScreen(
           code: 'FH29MR47', onDone: () {}, onSkip: () {}),
       'Consent': () => ConsentScreen(onContinue: (_) {}),

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../app/routes.dart';
+import '../../core/contacts/emergency_contact.dart';
 import '../../core/profile/impairment.dart';
 import '../../core/session_store.dart';
 import '../../data/auth_service.dart';
@@ -131,7 +132,9 @@ class OnboardingController {
   static Set<String> stepsEvidencedBy(Map<String, dynamic> data) => {
         if (data['name'] != null) Routes.profile,
         if (data['screenStaysOn'] != null) Routes.preferences,
-        if (data['emergencyContact'] != null) Routes.emergencyContact,
+        if (data['emergencyContact'] != null ||
+            data['emergencyContacts'] != null)
+          Routes.emergencyContact,
         if (data['guardianInvited'] == true) Routes.inviteGuardian,
         if (data['hasDevice'] != null) Routes.device,
       };
@@ -153,10 +156,10 @@ class OnboardingController {
     await _complete(Routes.preferences);
   }
 
-  Future<void> saveEmergencyContact(String name, String number) async {
-    await _me?.set({
-      'emergencyContact': {'name': name, 'number': number},
-    }, SetOptions(merge: true));
+  /// The list, in calling order, plus the first under the old single name
+  /// for anything that still reads it.
+  Future<void> saveEmergencyContacts(List<EmergencyContact> contacts) async {
+    await _me?.set(emergencyContactsToJson(contacts), SetOptions(merge: true));
     await _complete(Routes.emergencyContact);
   }
 
@@ -193,7 +196,7 @@ class OnboardingController {
     final snapshot = await _me?.get();
     final data = snapshot?.data();
     return (
-      contact: data?['emergencyContact'] != null,
+      contact: emergencyContactsFrom(data).isNotEmpty,
       guardian: data?['guardianInvited'] == true,
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/router.dart';
 import 'package:impairgency/app/routes.dart';
 import 'package:impairgency/app/theme.dart';
+import 'package:impairgency/core/contacts/emergency_contact.dart';
 import 'package:impairgency/core/safety/safety_notice.dart';
 import 'package:impairgency/core/session_store.dart';
 import 'package:impairgency/data/prefs_session_store.dart';
@@ -97,8 +98,7 @@ void main() {
       await store.markStepComplete(Routes.createAccount);
       await store.markStepComplete(Routes.preferences);
       await store.cacheProfile(const CachedProfile(
-        contactName: 'Mum',
-        contactNumber: '+639170000000',
+        contacts: [EmergencyContact(name: 'Mum', number: '+639170000000')],
         guardianCount: 2,
         consent: {'location': true},
       ));
@@ -133,7 +133,8 @@ void main() {
       final store = InMemorySessionStore(
         acknowledged: true,
         steps: {Routes.createAccount},
-        profile: const CachedProfile(contactName: 'Mum'),
+        profile: const CachedProfile(
+            contacts: [EmergencyContact(name: 'Mum', number: '0917')]),
       );
 
       await store.forgetAccount();

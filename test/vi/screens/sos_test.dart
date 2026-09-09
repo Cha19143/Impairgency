@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/theme.dart';
+import 'package:impairgency/core/contacts/emergency_contact.dart';
 import 'package:impairgency/core/sos/sos_receipt.dart';
 import 'package:impairgency/core/speech/speaker.dart';
 import 'package:impairgency/core/voice/voice_commands.dart';
@@ -232,6 +233,38 @@ void main() {
       )));
       await tester.pump();
       expect(find.text('Try again'), findsOneWidget);
+    });
+
+    testWidgets('offers the next person on the list, and a text to all',
+        (tester) async {
+      var next = 0;
+      var texted = 0;
+      await tester.pumpWidget(host(SosReceiptScreen(
+        receipt: receipt(),
+        onDone: () {},
+        nextContact: const EmergencyContact(name: 'Dad', number: '0918'),
+        onCallNext: () => next++,
+        contactCount: 3,
+        onTextAll: () => texted++,
+      )));
+      await tester.pump();
+
+      await tester.tap(find.text('Call Dad'));
+      await tester.tap(find.text('Text all 3 contacts'));
+      expect(next, 1);
+      expect(texted, 1);
+    });
+
+    testWidgets('with nobody left to call, no next button', (tester) async {
+      await tester.pumpWidget(host(SosReceiptScreen(
+        receipt: receipt(),
+        onDone: () {},
+        contactCount: 1,
+        onTextAll: () {},
+      )));
+      await tester.pump();
+      expect(find.textContaining('Call '), findsNothing);
+      expect(find.text('Text your contact'), findsOneWidget);
     });
 
     testWidgets('every leg appears on screen', (tester) async {

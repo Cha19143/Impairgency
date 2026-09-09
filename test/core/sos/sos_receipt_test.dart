@@ -92,6 +92,29 @@ void main() {
     });
   });
 
+  group('several calls - the fan-out, one call at a time', () {
+    test('a second call is added in reading order and counted as reached', () {
+      final first = receipt(call: LegOutcome.failed);
+      expect(first.anyoneReached, isTrue, reason: 'guardian was told');
+      final noone = receipt(call: LegOutcome.failed, guardians: LegOutcome.notConfigured);
+      expect(noone.anyoneReached, isFalse);
+
+      final chained = noone.withCall(
+          const LegResult(SosLeg.call, LegOutcome.done, detail: 'Dad'));
+      expect(chained.calls.map((c) => c.detail), ['Mum', 'Dad']);
+      expect(chained.anyoneReached, isTrue);
+      expect(chained.legs.map((l) => l.leg), [
+        SosLeg.alarm,
+        SosLeg.call,
+        SosLeg.call,
+        SosLeg.location,
+        SosLeg.guardians,
+      ]);
+      expect(chained.spoken, contains('The call to Mum did not connect.'));
+      expect(chained.spoken, contains('Called Dad.'));
+    });
+  });
+
   group('what it leads with', () {
     test('reaching someone comes first, because that is what matters', () {
       final r = receipt();

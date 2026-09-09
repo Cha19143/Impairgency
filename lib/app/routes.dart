@@ -2,6 +2,8 @@
 /// can be unit tested. `router.dart` wires this to go_router.
 library;
 
+import '../core/contacts/emergency_contact.dart';
+
 abstract final class Routes {
   /// Debug-only proving ground for a real GPS fix and a real notification.
   /// Registered only in debug builds - see router.dart.
@@ -84,8 +86,7 @@ class SessionState {
     this.safetyAcknowledged = false,
     this.completedSteps = const <String>{},
     this.consent = const {},
-    this.contactName,
-    this.contactNumber,
+    this.contacts = const [],
     this.guardianCount = 0,
   });
 
@@ -107,9 +108,14 @@ class SessionState {
   /// dashboard so consent is visible without opening a settings screen.
   final Map<String, bool> consent;
 
-  /// The emergency contact, so SOS does not have to fetch it mid-emergency.
-  final String? contactName;
-  final String? contactNumber;
+  /// The emergency contacts, in calling order, so SOS does not have to
+  /// fetch them mid-emergency.
+  final List<EmergencyContact> contacts;
+
+  /// The first contact - the one rung first - for anything that wants one.
+  String? get contactName => contacts.isEmpty ? null : contacts.first.name;
+  String? get contactNumber =>
+      contacts.isEmpty ? null : contacts.first.number;
 
   /// How many guardians are paired. Zero means the SOS receipt says so rather
   /// than reporting a failure that was never attempted.
