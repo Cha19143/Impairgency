@@ -78,5 +78,28 @@
             <action android:name="android.intent.action.DIAL"/>
             <data android:scheme="tel"/>
         </intent>
+        <!-- The messaging app, for the text to every emergency contact. Same
+             failure mode as the dialer above: hidden on API 30+ unless asked
+             for by name. -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="sms"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="smsto"/>
+        </intent>
+        <!-- The speech recogniser. On API 30+ speech_to_text cannot see the
+             service without this, and reports "not available" on a phone
+             that has one - which is one way a voice feature can look broken
+             on a tester's device and fine on a developer's. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <!-- The system contact picker, for choosing an emergency contact. -->
+        <intent>
+            <action android:name="android.intent.action.PICK"/>
+            <data android:mimeType="vnd.android.cursor.dir/phone_v2"/>
+        </intent>
     </queries>
 </manifest>

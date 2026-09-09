@@ -1,6 +1,7 @@
 package ph.impairgency.impairgency
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract
@@ -41,18 +42,21 @@ class MainActivity : FlutterActivity() {
             Intent.ACTION_PICK,
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
         )
-        if (intent.resolveActivity(packageManager) == null) {
+        // No resolveActivity() check: on API 30+ that answers null for any
+        // app not named in <queries>, and a phone with a contacts app would
+        // be told it has none. Starting the intent and catching the failure
+        // is the honest test.
+        pending = result
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, PICK_CONTACT)
+        } catch (e: ActivityNotFoundException) {
+            pending = null
             result.error(
                 "unavailable",
                 "There is no contacts app on this phone to choose from.",
                 null,
             )
-            return
-        }
-        pending = result
-        try {
-            @Suppress("DEPRECATION")
-            startActivityForResult(intent, PICK_CONTACT)
         } catch (e: Exception) {
             pending = null
             result.error("unavailable", e.message, null)
