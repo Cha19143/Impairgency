@@ -6,7 +6,9 @@ import '../../app/theme.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/vision/detection.dart';
 import '../../data/scan_service.dart';
+import '../voice_controller.dart';
 import '../widgets/vi_button.dart';
+import '../widgets/voice_mic_button.dart';
 
 /// §2.A.1 and §2.A.3 — describing what is in front of the user.
 ///
@@ -21,13 +23,20 @@ class ScanScreen extends StatefulWidget {
     required this.onBack,
     this.speaker = const SilentSpeaker(),
     this.service,
+    this.voice,
   });
 
   final VoidCallback onBack;
-  final Speaker speaker;
+
+  /// Takes priorities, because this is the one screen where two things can
+  /// need saying at once and one of them is a hazard.
+  final PrioritySpeaker speaker;
 
   /// Injected in tests so the screen can be exercised without a camera.
   final ScanService? service;
+
+  /// "Repeat" and "help" by voice, mid-walk. Null hides the button.
+  final VoiceController? voice;
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -98,13 +107,21 @@ class _ScanScreenState extends State<ScanScreen> {
     _lastSpokenAt = now;
     // A buzz as well as a word: someone in traffic may not hear it.
     if (guidance.urgent) HapticFeedback.heavyImpact();
-    widget.speaker.speak(guidance.phrase);
+    // Hazards preempt whatever else is being said and are never restarted
+    // while still in progress; ordinary descriptions wait their turn. The
+    // queue holds that rule, not this screen.
+    widget.speaker.announce(
+      guidance.phrase,
+      priority:
+          guidance.urgent ? SpeechPriority.hazard : SpeechPriority.info,
+    );
   }
 
   Future<void> _repeat() => widget.speaker.speak(_guidance);
 
   @override
   void dispose() {
+    widget.voice?.stop();
     _service.dispose();
     widget.speaker.stop();
     super.dispose();
@@ -175,6 +192,11 @@ class _ScanScreenState extends State<ScanScreen> {
                     icon: Icons.replay,
                     onPressed: _repeat,
                   ),
+                  if (widget.voice != null)
+                    VoiceMicButton(
+                      controller: widget.voice!,
+                      detail: 'Say repeat, or help',
+                    ),
                   if (_refused)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 12),

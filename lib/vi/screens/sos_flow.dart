@@ -5,6 +5,7 @@ import '../../core/sos/sos_receipt.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/voice/voice_commands.dart';
 import '../../data/sos_engine.dart';
+import '../voice_controller.dart';
 import 'sos_countdown_screen.dart';
 import 'sos_receipt_screen.dart';
 
@@ -24,6 +25,7 @@ class SosFlow extends StatefulWidget {
     this.guardianCount = 0,
     this.speaker = const SilentSpeaker(),
     this.voice,
+    this.voiceController,
   });
 
   final SosEngine engine;
@@ -33,7 +35,13 @@ class SosFlow extends StatefulWidget {
   final String? contactNumber;
   final int guardianCount;
   final Speaker speaker;
+
+  /// Spoken commands, for tests that feed them directly.
   final Stream<VoiceCommand>? voice;
+
+  /// The real microphone. When present its [VoiceController.commands] is the
+  /// stream the countdown listens to, and the countdown opens it.
+  final VoiceController? voiceController;
 
   @override
   State<SosFlow> createState() => _SosFlowState();
@@ -44,6 +52,9 @@ class _SosFlowState extends State<SosFlow> {
   bool _running = false;
 
   Future<void> _fire() async {
+    // Whatever the microphone is doing, the legs come first.
+    await widget.voiceController?.stop();
+    if (!mounted) return;
     setState(() => _running = true);
     final receipt = await widget.engine.fire(
       userId: widget.userId,
@@ -97,10 +108,19 @@ class _SosFlowState extends State<SosFlow> {
       );
     }
 
+    final controller = widget.voiceController;
     return SosCountdownScreen(
       contactName: widget.contactName,
       speaker: widget.speaker,
-      voice: widget.voice,
+      voice: widget.voice ?? controller?.commands,
+      startListening: controller == null
+          ? null
+          : () => controller.listen(
+                only: kCancellationCommands,
+                dispatch: false,
+                auto: true,
+                silenceSpeaker: false,
+              ),
       onFire: _fire,
       onCancel: _cancel,
     );

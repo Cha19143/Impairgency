@@ -7,9 +7,12 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/alerts/alert_presenter.dart';
+import '../core/location/location_policy.dart';
+import '../core/location/location_source.dart';
 import '../core/places/place.dart';
 import '../core/session_store.dart';
 import '../core/speech/speaker.dart';
+import '../core/voice/speech_recognizer.dart';
 import '../admin/screens/accessibility_screen.dart';
 import '../admin/screens/admin_page.dart';
 import '../admin/screens/admin_shell.dart';
@@ -26,6 +29,7 @@ import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
 import '../data/location_history_repository.dart';
 import '../data/sos_engine.dart';
+import '../data/stt_speech_recognizer.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
 import '../shared/widgets/pending_screen.dart';
 import '../vi/onboarding/all_set_screen.dart';
@@ -48,6 +52,8 @@ import '../vi/screens/location_debug_screen.dart';
 import '../vi/screens/sos_flow.dart';
 import '../vi/screens/what_can_i_say_screen.dart';
 import '../vi/screens/safety_notice_screen.dart';
+import '../vi/voice_actions.dart';
+import '../vi/voice_controller.dart';
 import '../vi/widgets/vi_button.dart';
 import '../vi/widgets/vi_screen.dart';
 import 'routes.dart';
@@ -56,13 +62,67 @@ import 'routes.dart';
 /// against the new project. Until then it reports signed out, which is the
 /// correct default: the guard fails closed.
 class AppSession extends ChangeNotifier {
-  AppSession({SessionStore? store, Speaker? speaker, PairingRepository? pairing})
-      : store = store ?? InMemorySessionStore(),
+  AppSession({
+    SessionStore? store,
+    Speaker? speaker,
+    PairingRepository? pairing,
+    SpeechRecognizer? recognizer,
+  })  : store = store ?? InMemorySessionStore(),
         speaker = speaker ?? const SilentSpeaker(),
-        _pairing = pairing;
+        _pairing = pairing,
+        _recognizer = recognizer;
 
   final SessionStore store;
   final Speaker speaker;
+
+  /// [speaker], with priorities. The scan screen needs them; a test that
+  /// passed a plain recording speaker gets it back wrapped.
+  PrioritySpeaker get prioritySpeaker => withPriorities(speaker);
+
+  SpeechRecognizer? _recognizer;
+
+  /// Where a spoken command sends the user. Set by [createRouter].
+  void Function(String route)? navigate;
+
+  VoiceController? _voice;
+
+  /// The microphone, and everything between it and an action.
+  ///
+  /// One for the whole app rather than one per screen, so the permission is
+  /// asked for once, the failure is explained once, and a screen that opens
+  /// while another is listening does not end up with two microphones.
+  VoiceController get voice => _voice ??= VoiceController(
+        recognizer: _recognizer ??= SttSpeechRecognizer(),
+        speaker: speaker,
+        actions: () => VoiceActions(
+          location: const GeolocatorLocationSource(),
+          fetchFix: _fixForVoice,
+          contactName: _state.contactName,
+          hasGuardian: _state.guardianCount > 0,
+        ),
+        onNavigate: (route) => navigate?.call(route),
+      );
+
+  /// What "where am I" reads back: the SOS location policy's sentence, so the
+  /// answer carries the same honesty about age and accuracy.
+  Future<({LocationAvailability availability, String? summary})>
+      _fixForVoice() async {
+    const source = GeolocatorLocationSource();
+    final availability = await source.requestPermission();
+    if (availability != LocationAvailability.ready) {
+      return (availability: availability, summary: null);
+    }
+    final fix = await bestEffortFix(source);
+    final outcome = resolveLocationForSos(
+      availability: availability,
+      fix: fix,
+      now: DateTime.now(),
+    );
+    return (
+      availability: availability,
+      summary: outcome.hasSomethingToSend ? outcome.spoken : null,
+    );
+  }
 
   // Constructed lazily so a widget test that never opens a Firestore-backed
   // screen does not need Firebase initialised.
@@ -223,7 +283,8 @@ class AppSession extends ChangeNotifier {
 /// Empty by default, so nothing about the normal launch changes.
 const String _startOverride = String.fromEnvironment('START');
 
-GoRouter createRouter(AppSession session) => GoRouter(
+GoRouter createRouter(AppSession session) {
+  final router = GoRouter(
       initialLocation: _startOverride.isNotEmpty
           ? _startOverride
           : (kIsWeb ? Routes.adminRoot : Routes.welcome),
@@ -395,6 +456,7 @@ GoRouter createRouter(AppSession session) => GoRouter(
           path: Routes.home,
           builder: (context, _) => DashboardScreen(
             speaker: session.speaker,
+            voice: session.voice,
             consent: session.state.consent,
             onScan: () => appNavigate(context, Routes.scan),
             onAssist: () => appNavigate(context, Routes.home),
@@ -406,7 +468,8 @@ GoRouter createRouter(AppSession session) => GoRouter(
         GoRoute(
           path: Routes.scan,
           builder: (context, _) => ScanScreen(
-            speaker: session.speaker,
+            speaker: session.prioritySpeaker,
+            voice: session.voice,
             onBack: () => appNavigate(context, Routes.home),
           ),
         ),
@@ -416,6 +479,7 @@ GoRouter createRouter(AppSession session) => GoRouter(
             engine: session.sos,
             userId: session.state.uid ?? 'unknown',
             speaker: session.speaker,
+            voiceController: session.voice,
             contactName: session.state.contactName,
             contactNumber: session.state.contactNumber,
             guardianCount: session.state.guardianCount,
@@ -612,6 +676,12 @@ GoRouter createRouter(AppSession session) => GoRouter(
         ),
       ],
     );
+  // A spoken "help" has to end up on the SOS screen. The controller is
+  // app-wide and the router is the only thing that can move the user, so it
+  // is wired here rather than in a screen.
+  session.navigate = router.go;
+  return router;
+}
 
 GoRoute _page(String path, String title, String phase, String requirement) =>
     GoRoute(
