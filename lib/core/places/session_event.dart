@@ -10,6 +10,10 @@ enum SessionEventKind {
   sosFired,
   sosCancelled,
   placeLearned,
+
+  /// The user said where they were going before they left - §2.A.7's
+  /// travel recording, with a destination on it.
+  destinationSet,
 }
 
 class SessionEvent {
@@ -84,5 +88,7 @@ String describeEvent(SessionEvent event) {
       detail == null ? 'SOS cancelled' : 'SOS cancelled — $detail',
     SessionEventKind.placeLearned =>
       detail == null ? 'Place recognised' : 'Place recognised — $detail',
+    SessionEventKind.destinationSet =>
+      detail == null ? 'Destination set' : 'Heading for $detail',
   };
 }
