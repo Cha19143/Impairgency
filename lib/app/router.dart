@@ -63,6 +63,7 @@ import '../vi/screens/sign_out_screen.dart';
 import '../vi/screens/location_debug_screen.dart';
 import '../vi/screens/sos_flow.dart';
 import '../vi/screens/what_can_i_say_screen.dart';
+import '../vi/screens/read_text_screen.dart';
 import '../vi/screens/safety_notice_screen.dart';
 import '../vi/screens/saved_places_screen.dart';
 import '../vi/screens/smart_assistance_screen.dart';
@@ -622,6 +623,7 @@ GoRouter createRouter(AppSession session) {
             consent: session.state.consent,
             onScan: () => appNavigate(context, Routes.scan),
             onAssist: () => appNavigate(context, Routes.assist),
+            onReadText: () => appNavigate(context, Routes.readText),
             onSos: () => appNavigate(context, Routes.sos),
             onWhatCanISay: () => appNavigate(context, Routes.whatCanISay),
             onSettings: () => appNavigate(context, Routes.settings),
@@ -640,6 +642,13 @@ GoRouter createRouter(AppSession session) {
               await session.setDestination(null);
               if (context.mounted) appNavigate(context, Routes.scan);
             },
+            onBack: () => appNavigate(context, Routes.home),
+          ),
+        ),
+        GoRoute(
+          path: Routes.readText,
+          builder: (context, _) => ReadTextScreen(
+            speaker: session.speaker,
             onBack: () => appNavigate(context, Routes.home),
           ),
         ),

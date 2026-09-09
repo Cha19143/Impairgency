@@ -6,14 +6,16 @@ import '../voice_controller.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/voice_mic_button.dart';
 
-/// Three buttons, kept exactly as `ui.pdf` drew them.
+/// The three buttons `ui.pdf` drew, plus one.
 ///
-/// This screen is the best thing in the submitted design and it is left alone.
-/// Real subtraction is rare; three enormous, unambiguous choices is the right
-/// answer for someone operating a phone by ear.
+/// This screen is the best thing in the submitted design and it is mostly
+/// left alone. Real subtraction is rare; a few enormous, unambiguous choices
+/// is the right answer for someone operating a phone by ear.
 ///
-/// Two additions only: consent state that can be seen and changed, and a way
-/// into the vocabulary the microphone icons keep implying.
+/// The fourth, Read text, is the tester's: reading a label is not scanning
+/// a street, and folding it into Scan made Scan worse at both. Below the
+/// buttons: consent state that can be seen and changed, the microphone, and
+/// a way into the vocabulary.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     super.key,
@@ -22,6 +24,7 @@ class DashboardScreen extends StatefulWidget {
     required this.onSos,
     required this.onWhatCanISay,
     required this.onSettings,
+    this.onReadText,
     this.consent = const {},
     this.speaker = const SilentSpeaker(),
     this.voice,
@@ -32,6 +35,11 @@ class DashboardScreen extends StatefulWidget {
   final VoidCallback onSos;
   final VoidCallback onWhatCanISay;
   final VoidCallback onSettings;
+
+  /// Books, labels, documents. A fourth button, added at the tester's
+  /// request so that Scan stays about the street. Null hides it.
+  final VoidCallback? onReadText;
+
   final Map<String, bool> consent;
   final Speaker speaker;
 
@@ -127,6 +135,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         kind: ViButtonKind.secondary,
                         onPressed: widget.onAssist,
                       ),
+                      if (widget.onReadText != null)
+                        ViButton(
+                          label: 'READ TEXT',
+                          detail: 'Books, labels, documents, small print',
+                          icon: Icons.menu_book_outlined,
+                          kind: ViButtonKind.secondary,
+                          onPressed: widget.onReadText,
+                        ),
                       ViButton(
                         label: 'EMERGENCY SOS',
                         icon: Icons.emergency_outlined,

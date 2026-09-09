@@ -24,6 +24,8 @@ import 'package:impairgency/vi/screens/consent_centre_screen.dart';
 import 'package:impairgency/vi/screens/dashboard_screen.dart';
 import 'package:impairgency/vi/screens/learned_data_screen.dart';
 import 'package:impairgency/core/navigation/destination.dart';
+import 'package:impairgency/data/text_reader.dart';
+import 'package:impairgency/vi/screens/read_text_screen.dart';
 import 'package:impairgency/vi/screens/safety_notice_screen.dart';
 import 'package:impairgency/vi/screens/saved_places_screen.dart';
 import 'package:impairgency/vi/screens/smart_assistance_screen.dart';
@@ -63,6 +65,13 @@ SosReceipt _receipt() => const SosReceipt([
       LegResult(SosLeg.guardians, LegOutcome.notConfigured),
     ]);
 
+class _NoCamera extends TextReader {
+  @override
+  Future<bool> start() async => false;
+  @override
+  Future<void> dispose() async {}
+}
+
 /// Every reachable screen, built the way the router builds it.
 Map<String, Widget Function()> screens() => {
       'Safety notice': () => SafetyNoticeScreen(onAcknowledge: () async {}),
@@ -89,10 +98,11 @@ Map<String, Widget Function()> screens() => {
       'All set': () => AllSetScreen(onStart: () {}),
       'Dashboard': () => DashboardScreen(
             onScan: () {}, onAssist: () {}, onSos: () {},
-            onWhatCanISay: () {}, onSettings: () {},
+            onWhatCanISay: () {}, onSettings: () {}, onReadText: () {},
             consent: const {'location': true, 'history': false},
           ),
       'What can I say': () => WhatCanISayScreen(onBack: () {}),
+      'Read text': () => ReadTextScreen(reader: _NoCamera(), onBack: () {}),
       'Smart assistance': () => SmartAssistanceScreen(
             places: const [
               Destination(
@@ -234,6 +244,6 @@ void main() {
   testWidgets('the gate covers every screen in the app', (tester) async {
     // If a screen is added and not listed here, that is the omission this
     // assertion is meant to make visible.
-    expect(screens().length, greaterThanOrEqualTo(24));
+    expect(screens().length, greaterThanOrEqualTo(25));
   });
 }

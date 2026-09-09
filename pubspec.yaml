@@ -59,6 +59,16 @@ dependencies:
   tflite_flutter: ^0.11.0
   image: ^4.2.0
 
+  # Reading text - books, labels, documents - is a different job from
+  # spotting a chair, and the detector above cannot do it. This is the one
+  # maintained on-device OCR for Flutter; the alternative, Tesseract, needs
+  # trained-data files shipped with the app and a pixel pipeline of its own.
+  # It is the text-recognition half of ML Kit only, not the object detector
+  # the comment above declined: google_mlkit_commons 0.13 ships an arm64
+  # simulator slice, so the simulator objection no longer applies. Confirm
+  # with `flutter build ios --simulator` before relying on it.
+  google_mlkit_text_recognition: ^0.17.1
+
   permission_handler: ^11.3.0
   # flutter_contacts is deliberately NOT declared. Its iOS plugin registration
   # is:
