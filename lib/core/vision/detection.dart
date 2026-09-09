@@ -123,12 +123,23 @@ Guidance guidanceFor(List<Detection> detections) {
 /// How long to stay quiet after saying something ordinary.
 const Duration kSpeechCooldown = Duration(seconds: 3);
 
+/// How long the *same* hazard waits before it is shouted again.
+///
+/// Shorter than [kSpeechCooldown] because a hazard that is still there is
+/// still a hazard — but not zero. Zero is the bug the tester reported: the
+/// warning was reissued with every camera frame, each one restarting the
+/// sentence, and the user heard "Stop. Stop. Stop." and never what to stop
+/// for. Long enough for the whole sentence to be said; the speech queue
+/// itself refuses to restart a hazard that is still being spoken.
+const Duration kHazardRepeat = Duration(seconds: 4);
+
 /// Whether to actually speak [phrase] now.
 ///
-/// Two rules, both about not talking over yourself. The same sentence is not
-/// repeated until it has been quiet for a while; anything urgent goes through
-/// immediately, because "stop" arriving three seconds late is worse than not
-/// arriving.
+/// Three rules, all about not talking over yourself. The same sentence is not
+/// repeated until it has been quiet for a while; a *new* urgent warning goes
+/// through immediately, because "stop" arriving three seconds late is worse
+/// than not arriving; the *same* urgent warning is repeated, but only after
+/// it has had time to be heard in full.
 bool shouldSpeak({
   required String phrase,
   required bool urgent,
@@ -136,9 +147,13 @@ bool shouldSpeak({
   required DateTime? lastSpokenAt,
   required DateTime now,
   Duration cooldown = kSpeechCooldown,
+  Duration hazardRepeat = kHazardRepeat,
 }) {
-  if (urgent) return true;
   if (lastSpokenAt == null) return true;
+  if (urgent) {
+    if (phrase != lastPhrase) return true;
+    return now.difference(lastSpokenAt) >= hazardRepeat;
+  }
   if (phrase != lastPhrase) {
     // A different sentence still waits a moment, or a scene with two objects
     // alternating would produce a stream of chatter.

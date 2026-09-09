@@ -165,17 +165,62 @@ void main() {
       );
     });
 
-    test('urgent always goes through immediately', () {
+    test('a new hazard goes through immediately', () {
       // "Stop" arriving three seconds late is worse than not arriving.
       expect(
         shouldSpeak(
             phrase: 'Stop. chair right in front of you',
             urgent: true,
-            lastPhrase: 'Stop. chair right in front of you',
+            lastPhrase: 'table close, ahead',
             lastSpokenAt: now,
             now: now),
         isTrue,
       );
+    });
+
+    test('the same hazard is not reissued with every camera frame', () {
+      // The tester's bug: "Stop, tree in front of you" restarted on every
+      // frame, so they heard "Stop. Stop. Stop." and never the tree.
+      const phrase = 'Stop. tree right in front of you';
+      expect(
+        shouldSpeak(
+            phrase: phrase,
+            urgent: true,
+            lastPhrase: phrase,
+            lastSpokenAt: now,
+            now: now.add(const Duration(milliseconds: 200))),
+        isFalse,
+      );
+      expect(
+        shouldSpeak(
+            phrase: phrase,
+            urgent: true,
+            lastPhrase: phrase,
+            lastSpokenAt: now,
+            now: now.add(const Duration(seconds: 2))),
+        isFalse,
+        reason: 'long enough to have been said once, not yet to say again',
+      );
+    });
+
+    test('a hazard that is still there is repeated, after it has been heard',
+        () {
+      const phrase = 'Stop. tree right in front of you';
+      expect(
+        shouldSpeak(
+            phrase: phrase,
+            urgent: true,
+            lastPhrase: phrase,
+            lastSpokenAt: now,
+            now: now.add(kHazardRepeat)),
+        isTrue,
+      );
+    });
+
+    test('the hazard repeat is shorter than the ordinary cooldown', () {
+      // Still there means still dangerous; it is repeated sooner than chatter.
+      expect(kHazardRepeat, greaterThan(Duration.zero));
+      expect(kHazardRepeat, lessThanOrEqualTo(kSpeechCooldown + const Duration(seconds: 1)));
     });
   });
 
