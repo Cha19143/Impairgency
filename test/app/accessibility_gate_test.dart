@@ -23,7 +23,10 @@ import 'package:impairgency/vi/onboarding/welcome_screen.dart';
 import 'package:impairgency/vi/screens/consent_centre_screen.dart';
 import 'package:impairgency/vi/screens/dashboard_screen.dart';
 import 'package:impairgency/vi/screens/learned_data_screen.dart';
+import 'package:impairgency/core/navigation/destination.dart';
 import 'package:impairgency/vi/screens/safety_notice_screen.dart';
+import 'package:impairgency/vi/screens/saved_places_screen.dart';
+import 'package:impairgency/vi/screens/smart_assistance_screen.dart';
 import 'package:impairgency/vi/screens/settings_screen.dart';
 import 'package:impairgency/vi/screens/sign_out_screen.dart';
 import 'package:impairgency/vi/screens/sos_countdown_screen.dart';
@@ -90,6 +93,25 @@ Map<String, Widget Function()> screens() => {
             consent: const {'location': true, 'history': false},
           ),
       'What can I say': () => WhatCanISayScreen(onBack: () {}),
+      'Smart assistance': () => SmartAssistanceScreen(
+            places: const [
+              Destination(
+                  id: 'home', label: 'Home', latitude: 1, longitude: 2,
+                  kind: DestinationKind.home),
+            ],
+            onGo: (_) {},
+            onManagePlaces: () {},
+            onBack: () {},
+          ),
+      'Saved places': () => SavedPlacesScreen(
+            places: const [
+              Destination(id: 'p1', label: 'Clinic', latitude: 1, longitude: 2),
+            ],
+            onSaveHere: (_, __) async => null,
+            onRename: (_, __) async {},
+            onRemove: (_) async {},
+            onBack: () {},
+          ),
       'Sign in': () => SignInScreen(
             onSignIn: (_, __) async => null,
             onCreateAccount: () {},
@@ -99,6 +121,7 @@ Map<String, Widget Function()> screens() => {
             onConsent: () {}, onLearned: () {}, onDevice: () {},
             onEmergencyContact: () {}, onInviteGuardian: () {},
             onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
+            onSavedPlaces: () {},
           ),
       'Consent centre': () => ConsentCentreScreen(
           current: const {'location': true},
@@ -211,6 +234,6 @@ void main() {
   testWidgets('the gate covers every screen in the app', (tester) async {
     // If a screen is added and not listed here, that is the omission this
     // assertion is meant to make visible.
-    expect(screens().length, greaterThanOrEqualTo(22));
+    expect(screens().length, greaterThanOrEqualTo(24));
   });
 }

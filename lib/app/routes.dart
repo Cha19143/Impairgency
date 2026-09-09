@@ -39,11 +39,20 @@ abstract final class Routes {
   static const allSet = '/onboarding/done';
   static const home = '/home';
   static const scan = '/scan';
+
+  /// Smart assistance: where are you going? One tap sets the destination
+  /// and opens [scan] with directions.
+  static const assist = '/assist';
+
+  /// Reading books, labels and documents. Separate from [scan] on purpose:
+  /// different camera mode, different prompts, different pace.
+  static const readText = '/read';
   static const sos = '/sos';
   static const whatCanISay = '/what-can-i-say';
   static const settings = '/settings';
   static const consentCentre = '/settings/consent';
   static const learned = '/settings/learned';
+  static const savedPlaces = '/settings/places';
   static const signOut = '/settings/sign-out';
 
   // Guardian app (mobile)

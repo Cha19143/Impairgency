@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/contacts/emergency_contact.dart';
+import '../core/navigation/destination.dart';
 import '../core/session_store.dart';
 
 /// [SessionStore] backed by the device.
@@ -14,6 +15,7 @@ class PrefsSessionStore implements SessionStore {
   static const _safetyKey = 'safety_notice_acknowledged';
   static const _stepsKey = 'onboarding_completed_steps';
   static const _profileKey = 'cached_profile';
+  static const _placesKey = 'saved_places';
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
@@ -70,6 +72,29 @@ class PrefsSessionStore implements SessionStore {
   }
 
   @override
+  Future<List<Destination>> cachedPlaces() async {
+    final raw = (await _prefs).getString(_placesKey);
+    if (raw == null) return const [];
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      return data.entries
+          .map((e) => Destination.fromJson(e.key, e.value))
+          .nonNulls
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
+  Future<void> cachePlaces(List<Destination> places) async {
+    await (await _prefs).setString(
+      _placesKey,
+      jsonEncode({for (final p in places) p.id: p.toJson()}),
+    );
+  }
+
+  @override
   Future<void> markStepComplete(String route) async {
     final prefs = await _prefs;
     final steps = (prefs.getStringList(_stepsKey) ?? const <String>[]).toSet()
@@ -77,13 +102,14 @@ class PrefsSessionStore implements SessionStore {
     await prefs.setStringList(_stepsKey, steps.toList());
   }
 
-  /// Removes the three keys rather than calling `clear()`, which would also
+  /// Removes its own keys rather than calling `clear()`, which would also
   /// take anything another part of the app has stored under its own name.
   @override
   Future<void> forgetAccount() async {
     final prefs = await _prefs;
     await prefs.remove(_stepsKey);
     await prefs.remove(_profileKey);
+    await prefs.remove(_placesKey);
     await prefs.remove(_safetyKey);
   }
 }

@@ -21,6 +21,7 @@ class SettingsScreen extends StatelessWidget {
     required this.onSafetyNotice,
     required this.onSignOut,
     required this.onBack,
+    this.onSavedPlaces,
     this.contactCount = 0,
     this.hasGuardian = false,
     this.speaker = const SilentSpeaker(),
@@ -35,6 +36,9 @@ class SettingsScreen extends StatelessWidget {
 
   /// Opens the confirmation, not the sign-out itself.
   final VoidCallback onSignOut;
+
+  /// Home, work, school and the rest. Null hides the entry.
+  final VoidCallback? onSavedPlaces;
 
   final VoidCallback onBack;
 
@@ -69,6 +73,14 @@ class SettingsScreen extends StatelessWidget {
             kind: ViButtonKind.secondary,
             onPressed: onInviteGuardian,
           ),
+          if (onSavedPlaces != null)
+            ViButton(
+              label: 'Saved places',
+              detail: 'Home, work, school - the buttons in Smart assistance',
+              icon: Icons.edit_location_alt_outlined,
+              kind: ViButtonKind.secondary,
+              onPressed: onSavedPlaces,
+            ),
           ViButton(
             label: 'What the app is using',
             detail: 'Location, history, recording, faces',

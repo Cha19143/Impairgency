@@ -6,6 +6,7 @@
 library;
 
 import 'contacts/emergency_contact.dart';
+import 'navigation/destination.dart';
 
 /// The handful of facts the app needs before it can reach the network.
 class CachedProfile {
@@ -66,6 +67,10 @@ abstract interface class SessionStore {
 
   Future<void> cacheProfile(CachedProfile profile);
 
+  /// Saved destinations, so the Home button knows where Home is offline.
+  Future<List<Destination>> cachedPlaces();
+  Future<void> cachePlaces(List<Destination> places);
+
   /// Onboarding steps already finished, so setup can resume after a kill.
   Future<Set<String>> completedSteps();
   Future<void> markStepComplete(String route);
@@ -96,9 +101,17 @@ class InMemorySessionStore implements SessionStore {
   bool _acknowledged;
   final Set<String> _steps;
   CachedProfile _profile;
+  List<Destination> _places = const [];
 
   @override
   Future<CachedProfile> cachedProfile() async => _profile;
+
+  @override
+  Future<List<Destination>> cachedPlaces() async => [..._places];
+
+  @override
+  Future<void> cachePlaces(List<Destination> places) async =>
+      _places = [...places];
 
   @override
   Future<void> cacheProfile(CachedProfile profile) async => _profile = profile;
@@ -119,6 +132,7 @@ class InMemorySessionStore implements SessionStore {
   Future<void> forgetAccount() async {
     _steps.clear();
     _profile = const CachedProfile();
+    _places = const [];
     _acknowledged = false;
   }
 }
