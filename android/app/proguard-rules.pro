@@ -10,3 +10,14 @@
 # The interpreter is reached over JNI, so R8 cannot see those uses and would be
 # free to strip or rename the classes the native side looks up by name.
 -keep class org.tensorflow.lite.** { *; }
+
+# google_mlkit_text_recognition can drive five scripts and references the
+# options class for each, but only the Latin recogniser is declared as a
+# dependency - the other four are separate artifacts this app does not ship,
+# because a medicine label in the Philippines is Latin script. The same R8
+# behaviour as the GPU delegate above: a dangling reference is an error, and
+# the release build fails. These are the rules from missing_rules.txt.
+-dontwarn com.google.mlkit.vision.text.chinese.**
+-dontwarn com.google.mlkit.vision.text.devanagari.**
+-dontwarn com.google.mlkit.vision.text.japanese.**
+-dontwarn com.google.mlkit.vision.text.korean.**
