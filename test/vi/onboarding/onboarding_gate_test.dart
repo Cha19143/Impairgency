@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/speech/speaker.dart';
+import 'package:impairgency/guardian/screens/guardian_register_screen.dart';
 import 'package:impairgency/vi/onboarding/all_set_screen.dart';
 import 'package:impairgency/vi/onboarding/choose_role_screen.dart';
 import 'package:impairgency/vi/onboarding/forgot_password_screen.dart';
@@ -60,6 +61,11 @@ List<(String, Widget Function(Speaker))> screens() => [
             speaker: s,
             onSendReset: (_) async => null,
             onBack: () {},
+          )),
+      ('Guardian registration', (s) => GuardianRegisterScreen(
+            speaker: s,
+            onRegister: (_) async => null,
+            onSignIn: () {},
           )),
       ('Sign in', (s) => SignInScreen(
             speaker: s,

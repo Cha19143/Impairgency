@@ -48,6 +48,8 @@ abstract final class Routes {
   static const guardianHome = '/guardian';
   static const guardianAccept = '/guardian/accept';
 
+  /// The guardian's own door in. Reachable signed out, like [createAccount].
+  static const guardianRegister = '/guardian/register';
 
   // Admin dashboard (web)
   static const adminRoot = '/admin';
@@ -138,7 +140,8 @@ bool _isSignedOutRoute(String location) =>
     location.startsWith('/onboarding') ||
     location == Routes.welcome ||
     location == Routes.signIn ||
-    location == Routes.forgotPassword;
+    location == Routes.forgotPassword ||
+    location == Routes.guardianRegister;
 
 /// Where the app should send this request, or null to let it through.
 ///

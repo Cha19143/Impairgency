@@ -255,5 +255,23 @@ void main() {
       expect(session.state.isGuardian, isFalse);
     });
 
+    testWidgets('and the guardian door leads to the guardian form',
+        (tester) async {
+      final session = AppSession(
+        store: InMemorySessionStore(acknowledged: true),
+      );
+      await session.load();
+      final router = createRouter(session);
+      await tester.pumpWidget(
+          MaterialApp.router(theme: buildAppTheme(), routerConfig: router));
+      await tester.pumpAndSettle();
+
+      router.go(Routes.chooseRole);
+      await tester.pumpAndSettle();
+      await tapAction(tester, action('Guardian'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create a guardian account'), findsOneWidget);
+    });
   });
 }

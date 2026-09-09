@@ -223,6 +223,7 @@ void main() {
       for (final door in [
         Routes.chooseRole,
         Routes.forgotPassword,
+        Routes.guardianRegister,
       ]) {
         expect(
           resolveRedirect(isWeb: false, location: door, session: anon),
@@ -236,6 +237,7 @@ void main() {
       for (final door in [
         Routes.chooseRole,
         Routes.forgotPassword,
+        Routes.guardianRegister,
       ]) {
         expect(
           resolveRedirect(isWeb: false, location: door, session: settled),
@@ -246,6 +248,7 @@ void main() {
 
     test('choosing a role is not a step, so it is never resumed to', () {
       expect(Routes.onboardingFlow, isNot(contains(Routes.chooseRole)));
+      expect(Routes.onboardingFlow, isNot(contains(Routes.guardianRegister)));
     });
 
     test('personal information comes right after the account', () {
@@ -253,6 +256,22 @@ void main() {
       expect(Routes.onboardingFlow[1], Routes.profile);
     });
 
+    test('a guardian mid-registration stays on the guardian side', () {
+      // The role is cached before the account is created, so the guard sees
+      // a guardian from the first auth event.
+      const registering =
+          SessionState(signedIn: true, isGuardian: true, safetyAcknowledged: true);
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.guardianRegister, session: registering),
+        isNull,
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.createAccount, session: registering),
+        Routes.guardianHome,
+      );
+    });
   });
 
   group('onboarding resumes where it stopped', () {
