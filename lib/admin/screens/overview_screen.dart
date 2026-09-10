@@ -147,6 +147,7 @@ String _pretty(String kindName) {
     SessionEventKind.sosFired => 'SOS sent',
     SessionEventKind.sosCancelled => 'SOS cancelled',
     SessionEventKind.placeLearned => 'Places recognised',
+    SessionEventKind.destinationSet => 'Destinations set',
     null => kindName,
   };
 }

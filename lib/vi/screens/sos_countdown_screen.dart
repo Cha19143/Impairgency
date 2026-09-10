@@ -24,6 +24,7 @@ class SosCountdownScreen extends StatefulWidget {
     this.contactName,
     this.speaker = const SilentSpeaker(),
     this.voice,
+    this.startListening,
     this.duration = kArmingDuration,
   });
 
@@ -35,6 +36,11 @@ class SosCountdownScreen extends StatefulWidget {
   /// Spoken commands while the countdown runs. Only cancellation words are
   /// acted on — see [kCancellationCommands].
   final Stream<VoiceCommand>? voice;
+
+  /// Opens the microphone for the cancel word. Called once, as the countdown
+  /// starts, because a countdown that only *says* "say cancel" and is not
+  /// listening is a countdown that cannot be cancelled by voice.
+  final VoidCallback? startListening;
 
   final Duration duration;
 
@@ -62,6 +68,7 @@ class _SosCountdownScreenState extends State<SosCountdownScreen> {
       // user wants help, and stopping the SOS would be the opposite.
       if (command == VoiceCommand.cancel) _cancel();
     });
+    widget.startListening?.call();
   }
 
   @override

@@ -46,7 +46,7 @@ Widget _settings() => SettingsScreen(
       onSafetyNotice: () {},
       onSignOut: () {},
       onBack: () {},
-      hasContact: true,
+      contactCount: 1,
     );
 
 /// More choices than any phone has room for, so the actions area is always the
@@ -100,7 +100,7 @@ void main() {
     await pump(tester, _settings());
 
     for (final label in const [
-      'Emergency contact',
+      'Emergency contacts',
       'Guardian',
       'What the app is using',
       'What the app has learned',

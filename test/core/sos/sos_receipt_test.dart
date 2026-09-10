@@ -82,6 +82,37 @@ void main() {
       expect(missing.spoken, contains('You have no guardian'));
       expect(failed.spoken, contains('could not be reached'));
     });
+
+    test('an alert queued for a connection is neither reached nor failed', () {
+      final queued = receipt(guardians: LegOutcome.pending, call: LegOutcome.failed);
+      expect(queued.anyoneReached, isFalse);
+      expect(queued.headline, 'Nobody was reached');
+      expect(queued.spoken, contains('waiting for a connection'));
+      expect(queued.spoken, isNot(contains('could not be reached')));
+    });
+  });
+
+  group('several calls - the fan-out, one call at a time', () {
+    test('a second call is added in reading order and counted as reached', () {
+      final first = receipt(call: LegOutcome.failed);
+      expect(first.anyoneReached, isTrue, reason: 'guardian was told');
+      final noone = receipt(call: LegOutcome.failed, guardians: LegOutcome.notConfigured);
+      expect(noone.anyoneReached, isFalse);
+
+      final chained = noone.withCall(
+          const LegResult(SosLeg.call, LegOutcome.done, detail: 'Dad'));
+      expect(chained.calls.map((c) => c.detail), ['Mum', 'Dad']);
+      expect(chained.anyoneReached, isTrue);
+      expect(chained.legs.map((l) => l.leg), [
+        SosLeg.alarm,
+        SosLeg.call,
+        SosLeg.call,
+        SosLeg.location,
+        SosLeg.guardians,
+      ]);
+      expect(chained.spoken, contains('The call to Mum did not connect.'));
+      expect(chained.spoken, contains('Called Dad.'));
+    });
   });
 
   group('what it leads with', () {

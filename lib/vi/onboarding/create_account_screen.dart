@@ -85,7 +85,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   Widget build(BuildContext context) {
     return ViScreen(
       speaker: widget.speaker,
-      step: 'Step 1 of 6',
+      step: 'Step 1 of 7',
       title: 'Create your account',
       body: const [
         'Your email and a password of at least eight characters.',

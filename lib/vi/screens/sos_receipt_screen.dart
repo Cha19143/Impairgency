@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/contacts/emergency_contact.dart';
 import '../../core/sos/sos_receipt.dart';
 import '../../core/speech/speaker.dart';
 import '../widgets/vi_button.dart';
@@ -16,12 +17,27 @@ class SosReceiptScreen extends StatefulWidget {
     required this.receipt,
     required this.onDone,
     this.onCallAgain,
+    this.nextContact,
+    this.onCallNext,
+    this.contactCount = 0,
+    this.onTextAll,
     this.speaker = const SilentSpeaker(),
   });
 
   final SosReceipt receipt;
   final VoidCallback onDone;
   final VoidCallback? onCallAgain;
+
+  /// The next person in the calling order, if there is one, and the button
+  /// that rings them. A phone places one call at a time; this is how the
+  /// fan-out continues once the user is back from the first.
+  final EmergencyContact? nextContact;
+  final VoidCallback? onCallNext;
+
+  /// Everyone at once, by text. The one channel that genuinely fans out.
+  final int contactCount;
+  final VoidCallback? onTextAll;
+
   final Speaker speaker;
 
   @override
@@ -83,6 +99,25 @@ class _SosReceiptScreenState extends State<SosReceiptScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (widget.nextContact != null && widget.onCallNext != null)
+                    ViButton(
+                      label: 'Call ${widget.nextContact!.name}',
+                      detail: 'The next person on your list',
+                      icon: Icons.call,
+                      kind: ViButtonKind.emergency,
+                      onPressed: widget.onCallNext,
+                    ),
+                  if (widget.onTextAll != null && widget.contactCount > 0)
+                    ViButton(
+                      label: widget.contactCount == 1
+                          ? 'Text your contact'
+                          : 'Text all ${widget.contactCount} contacts',
+                      detail: 'Opens a message with your location filled in. '
+                          'You press send.',
+                      icon: Icons.sms_outlined,
+                      kind: ViButtonKind.secondary,
+                      onPressed: widget.onTextAll,
+                    ),
                   if (!reached && widget.onCallAgain != null)
                     ViButton(
                       label: 'Try again',

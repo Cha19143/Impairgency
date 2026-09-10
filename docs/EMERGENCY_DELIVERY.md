@@ -24,6 +24,33 @@ account and no guardian can still do the first.
 Legs 1 and 2 are on-device. **Legs 3–5 are the ones that can silently do
 nothing**, and they are the reason the receipt exists.
 
+### Several contacts: the calling order
+
+One contact became up to five at a tester's request. The rule, in one
+sentence: **the list is the calling order, and the user arranges it.** The
+app never reorders it.
+
+| When | Who is reached | How |
+|---|---|---|
+| Leg 2 | The **first** contact on the list | Dialled. A phone places one call at a time, so this is the only call the legs make. |
+| Leg 4 | Every guardian | The `sos_events` document now carries the **whole list** under `contacts`, so a guardian - and the Cloud Function, when there is one - sees everyone the user meant to reach. |
+| On the receipt | The **next** contact, one at a time | *Call Dad* rings the second person; once the user is back from that call the button names the third. Each call is added to the receipt as its own line, and "somebody was reached" is true if any of them connected. |
+| On the receipt | **All** contacts at once | *Text all N contacts* opens the messaging app with every number and the location sentence filled in. The user presses Send - no app may send a text unasked, and for an emergency text that is the right way round. |
+
+Texting is the one channel a phone can genuinely fan out on by itself,
+which is why it is offered to everyone at once while calls go one by one.
+Both are on the receipt rather than run automatically after the first call,
+because the first call takes the foreground and anything the app started
+behind it would be a second thing ringing while the user is talking.
+
+Contacts come in two ways: typed, or chosen one at a time from the phone's
+address book through the **system** picker (`ACTION_PICK` on Android,
+`CNContactPickerViewController` on iOS, over a method channel of our own -
+see `lib/data/contact_picker.dart` for why no package). The system picker
+hands over one row and never the address book, so no contacts permission is
+requested; the one vendor edge case that needs it is asked for once, at the
+moment it is needed, and explained if refused.
+
 ## Where each leg actually breaks
 
 ### Location

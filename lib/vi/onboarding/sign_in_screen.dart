@@ -25,10 +25,14 @@ class SignInScreen extends StatefulWidget {
     super.key,
     required this.onSignIn,
     required this.onCreateAccount,
+    this.onForgotPassword,
     this.speaker = const SilentSpeaker(),
   });
 
   final SignInHandler onSignIn;
+
+  /// Opens the reset flow, carrying whatever email has been typed so far.
+  final void Function(String email)? onForgotPassword;
 
   /// For someone who arrived here without an account. Without it this screen
   /// is the dead end it was written to fix, pointing the other way.
@@ -164,6 +168,14 @@ class _SignInScreenState extends State<SignInScreen> {
           kind: ViButtonKind.secondary,
           onPressed: _busy ? null : widget.onCreateAccount,
         ),
+        if (widget.onForgotPassword != null)
+          ViButton(
+            label: 'Forgot your password?',
+            kind: ViButtonKind.quiet,
+            onPressed: _busy
+                ? null
+                : () => widget.onForgotPassword!(_email.text.trim()),
+          ),
       ],
     );
   }

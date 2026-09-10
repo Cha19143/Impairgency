@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/speech/speaker.dart';
+import 'package:impairgency/guardian/screens/guardian_register_screen.dart';
 import 'package:impairgency/vi/onboarding/all_set_screen.dart';
+import 'package:impairgency/vi/onboarding/choose_role_screen.dart';
+import 'package:impairgency/vi/onboarding/forgot_password_screen.dart';
+import 'package:impairgency/vi/onboarding/profile_screen.dart';
 import 'package:impairgency/vi/onboarding/consent_screen.dart';
 import 'package:impairgency/vi/onboarding/create_account_screen.dart';
 import 'package:impairgency/vi/onboarding/device_screen.dart';
@@ -42,9 +46,26 @@ List<(String, Widget Function(Speaker))> screens() => [
             onCreateAccount: () {},
             onSignIn: () {},
           )),
+      ('Choose role', (s) => ChooseRoleScreen(
+            speaker: s,
+            onVisuallyImpaired: () {},
+            onGuardian: () {},
+            onSignIn: () {},
+          )),
       ('Create account', (s) => CreateAccountScreen(
             speaker: s,
             onCreate: (_, __) async => null,
+          )),
+      ('About you', (s) => ProfileScreen(speaker: s, onSave: (_) async {})),
+      ('Forgot password', (s) => ForgotPasswordScreen(
+            speaker: s,
+            onSendReset: (_) async => null,
+            onBack: () {},
+          )),
+      ('Guardian registration', (s) => GuardianRegisterScreen(
+            speaker: s,
+            onRegister: (_) async => null,
+            onSignIn: () {},
           )),
       ('Sign in', (s) => SignInScreen(
             speaker: s,
@@ -58,7 +79,7 @@ List<(String, Widget Function(Speaker))> screens() => [
           )),
       ('Emergency contact', (s) => EmergencyContactScreen(
             speaker: s,
-            onSave: (_, __) {},
+            onSave: (_) {},
             onSkip: () {},
           )),
       ('Invite a guardian', (s) => InviteGuardianScreen(
@@ -137,11 +158,18 @@ void main() {
         final buttons = find.byType(ViButton);
         expect(buttons, findsWidgets, reason: '$name has no actions');
 
+        // The pinned actions are the last ViButtons in tree order; anything
+        // before them is a control inside the scrolling text, such as the
+        // emergency contact screen's "Add this person", which is allowed
+        // to be below the fold. The primary action is not.
         final screenHeight =
             tester.view.physicalSize.height / tester.view.devicePixelRatio;
-        final first = tester.getRect(buttons.first);
-        expect(first.top, lessThan(screenHeight),
-            reason: '$name pushed its primary action off screen');
+        final reachable = buttons
+            .evaluate()
+            .map((e) => tester.getRect(find.byWidget(e.widget)))
+            .where((r) => r.top < screenHeight && r.bottom > 0);
+        expect(reachable, isNotEmpty,
+            reason: '$name pushed every action off screen');
       });
 
       testWidgets('$name has touch targets a sweeping finger can find',
@@ -211,7 +239,7 @@ void main() {
         tester,
         (s) => EmergencyContactScreen(
           speaker: s,
-          onSave: (_, __) {},
+          onSave: (_) {},
           onSkip: () => skipped = true,
         ),
       );

@@ -21,7 +21,8 @@ class SettingsScreen extends StatelessWidget {
     required this.onSafetyNotice,
     required this.onSignOut,
     required this.onBack,
-    this.hasContact = false,
+    this.onSavedPlaces,
+    this.contactCount = 0,
     this.hasGuardian = false,
     this.speaker = const SilentSpeaker(),
   });
@@ -36,9 +37,15 @@ class SettingsScreen extends StatelessWidget {
   /// Opens the confirmation, not the sign-out itself.
   final VoidCallback onSignOut;
 
+  /// Home, work, school and the rest. Null hides the entry.
+  final VoidCallback? onSavedPlaces;
+
   final VoidCallback onBack;
-  final bool hasContact;
+
+  /// How many people SOS rings. Zero is flagged, not hidden.
+  final int contactCount;
   final bool hasGuardian;
+  bool get hasContact => contactCount > 0;
   final Speaker speaker;
 
   @override
@@ -48,9 +55,10 @@ class SettingsScreen extends StatelessWidget {
         body: const [],
         actions: [
           ViButton(
-            label: 'Emergency contact',
+            label: 'Emergency contacts',
             detail: hasContact
-                ? 'Change who is called in an emergency'
+                ? '$contactCount ${contactCount == 1 ? 'person' : 'people'} '
+                    'called in an emergency. Change who, or the order.'
                 : 'Not set. SOS has nobody to call.',
             icon: Icons.phone_outlined,
             kind: hasContact ? ViButtonKind.secondary : ViButtonKind.emergency,
@@ -65,6 +73,14 @@ class SettingsScreen extends StatelessWidget {
             kind: ViButtonKind.secondary,
             onPressed: onInviteGuardian,
           ),
+          if (onSavedPlaces != null)
+            ViButton(
+              label: 'Saved places',
+              detail: 'Home, work, school - the buttons in Smart assistance',
+              icon: Icons.edit_location_alt_outlined,
+              kind: ViButtonKind.secondary,
+              onPressed: onSavedPlaces,
+            ),
           ViButton(
             label: 'What the app is using',
             detail: 'Location, history, recording, faces',

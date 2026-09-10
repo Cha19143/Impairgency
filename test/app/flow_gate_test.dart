@@ -25,6 +25,7 @@ void main() {
     test('a kill halfway through returns to the step that was next', () async {
       final store = InMemorySessionStore(acknowledged: true);
       await store.markStepComplete(Routes.createAccount);
+      await store.markStepComplete(Routes.profile);
       await store.markStepComplete(Routes.preferences);
 
       final session = await relaunch(store);

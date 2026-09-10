@@ -172,7 +172,11 @@ void main() {
       const midway = SessionState(
         signedIn: true,
         safetyAcknowledged: true,
-        completedSteps: {Routes.createAccount, Routes.preferences},
+        completedSteps: {
+          Routes.createAccount,
+          Routes.profile,
+          Routes.preferences,
+        },
       );
       expect(
         resolveRedirect(isWeb: false, location: Routes.signIn, session: midway),
@@ -213,6 +217,80 @@ void main() {
     });
   });
 
+  group('the doors added for the tester', () {
+    test('choosing a role, resetting a password and registering as a guardian '
+        'are reachable signed out', () {
+      for (final door in [
+        Routes.chooseRole,
+        Routes.forgotPassword,
+        Routes.guardianRegister,
+      ]) {
+        expect(
+          resolveRedirect(isWeb: false, location: door, session: anon),
+          isNull,
+          reason: '$door should be reachable without an account',
+        );
+      }
+    });
+
+    test('and are left behind once setup is done', () {
+      for (final door in [
+        Routes.chooseRole,
+        Routes.forgotPassword,
+        Routes.guardianRegister,
+      ]) {
+        expect(
+          resolveRedirect(isWeb: false, location: door, session: settled),
+          Routes.home,
+        );
+      }
+    });
+
+    test('choosing a role is not a step, so it is never resumed to', () {
+      expect(Routes.onboardingFlow, isNot(contains(Routes.chooseRole)));
+      expect(Routes.onboardingFlow, isNot(contains(Routes.guardianRegister)));
+    });
+
+    test('personal information comes right after the account', () {
+      expect(Routes.onboardingFlow[0], Routes.createAccount);
+      expect(Routes.onboardingFlow[1], Routes.profile);
+    });
+
+    test('a guardian can sign out, and is otherwise kept on their side', () {
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.signOut, session: guardian),
+        isNull,
+      );
+      expect(
+        resolveRedirect(isWeb: false, location: Routes.home, session: guardian),
+        Routes.guardianHome,
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.guardianHome, session: guardian),
+        isNull,
+      );
+    });
+
+    test('a guardian mid-registration stays on the guardian side', () {
+      // The role is cached before the account is created, so the guard sees
+      // a guardian from the first auth event.
+      const registering =
+          SessionState(signedIn: true, isGuardian: true, safetyAcknowledged: true);
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.guardianRegister, session: registering),
+        isNull,
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.createAccount, session: registering),
+        Routes.guardianHome,
+      );
+    });
+  });
+
   group('onboarding resumes where it stopped', () {
     test('a fresh account starts at step one', () {
       const fresh = SessionState(signedIn: true, safetyAcknowledged: true);
@@ -223,7 +301,11 @@ void main() {
       const midway = SessionState(
         signedIn: true,
         safetyAcknowledged: true,
-        completedSteps: {Routes.createAccount, Routes.preferences},
+        completedSteps: {
+          Routes.createAccount,
+          Routes.profile,
+          Routes.preferences,
+        },
       );
       expect(midway.resumeAt, Routes.emergencyContact);
       expect(

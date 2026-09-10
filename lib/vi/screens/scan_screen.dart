@@ -1,12 +1,19 @@
+import 'dart:async';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
+import '../../core/location/location_fix.dart';
+import '../../core/navigation/destination.dart';
+import '../../core/navigation/guidance.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/vision/detection.dart';
 import '../../data/scan_service.dart';
+import '../voice_controller.dart';
 import '../widgets/vi_button.dart';
+import '../widgets/voice_mic_button.dart';
 
 /// §2.A.1 and §2.A.3 — describing what is in front of the user.
 ///
@@ -21,13 +28,34 @@ class ScanScreen extends StatefulWidget {
     required this.onBack,
     this.speaker = const SilentSpeaker(),
     this.service,
+    this.voice,
+    this.destination,
+    this.positions,
+    this.onStopGuidance,
   });
 
   final VoidCallback onBack;
-  final Speaker speaker;
+
+  /// Where the user said they were going, if anywhere. With one, the screen
+  /// also gives directions - behind hazards in the speech queue, always.
+  final Destination? destination;
+
+  /// Position readings while walking. Null means no directions, whatever
+  /// [destination] says - a test, or a refused location permission.
+  final Stream<LocationFix>? positions;
+
+  /// Clears the destination and keeps scanning.
+  final VoidCallback? onStopGuidance;
+
+  /// Takes priorities, because this is the one screen where two things can
+  /// need saying at once and one of them is a hazard.
+  final PrioritySpeaker speaker;
 
   /// Injected in tests so the screen can be exercised without a camera.
   final ScanService? service;
+
+  /// "Repeat" and "help" by voice, mid-walk. Null hides the button.
+  final VoiceController? voice;
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -42,10 +70,39 @@ class _ScanScreenState extends State<ScanScreen> {
   bool _ready = false;
   bool _refused = false;
 
+  NavigationSession? _nav;
+  StreamSubscription<LocationFix>? _positions;
+  String? _direction;
+
   @override
   void initState() {
     super.initState();
     _begin();
+    _beginDirections();
+  }
+
+  void _beginDirections() {
+    final to = widget.destination;
+    final positions = widget.positions;
+    if (to == null || positions == null) return;
+    _nav = NavigationSession(destination: to);
+    _direction = 'Heading for ${to.label}. Waiting for your position…';
+    _positions = positions.listen(_onFix, onError: (_) {}, onDone: () {
+      if (mounted && _direction != null) {
+        setState(() => _direction = 'Directions stopped: no position.');
+      }
+    });
+  }
+
+  void _onFix(LocationFix fix) {
+    final nav = _nav;
+    if (nav == null || !mounted) return;
+    setState(() => _direction = nav.statusFor(fix));
+    final prompt = nav.update(fix);
+    if (prompt == null) return;
+    // Navigation, not hazard: it waits for a warning to finish and never
+    // cuts one off. The queue holds that rule.
+    widget.speaker.announce(prompt.phrase, priority: SpeechPriority.navigation);
   }
 
   Future<void> _begin() async {
@@ -75,8 +132,12 @@ class _ScanScreenState extends State<ScanScreen> {
       _ready = true;
       _guidance = kPathClear;
     });
-    await widget.speaker
-        .speak('Guidance ready. Hold the phone up and walk slowly.');
+    final to = widget.destination;
+    await widget.speaker.speak(to == null
+        ? 'Guidance ready. Hold the phone up and walk slowly.'
+        : 'Guidance ready. Heading for ${to.label}. Directions follow the '
+            'straight line to it, so listen for obstacles first. Hold the '
+            'phone up and walk slowly.');
   }
 
   void _onDetections(List<Detection> detections) {
@@ -98,13 +159,23 @@ class _ScanScreenState extends State<ScanScreen> {
     _lastSpokenAt = now;
     // A buzz as well as a word: someone in traffic may not hear it.
     if (guidance.urgent) HapticFeedback.heavyImpact();
-    widget.speaker.speak(guidance.phrase);
+    // Hazards preempt whatever else is being said and are never restarted
+    // while still in progress; ordinary descriptions wait their turn. The
+    // queue holds that rule, not this screen.
+    widget.speaker.announce(
+      guidance.phrase,
+      priority:
+          guidance.urgent ? SpeechPriority.hazard : SpeechPriority.info,
+    );
   }
 
-  Future<void> _repeat() => widget.speaker.speak(_guidance);
+  Future<void> _repeat() => widget.speaker.speak(
+      _direction == null ? _guidance : '$_guidance. $_direction');
 
   @override
   void dispose() {
+    _positions?.cancel();
+    widget.voice?.stop();
     _service.dispose();
     widget.speaker.stop();
     super.dispose();
@@ -122,7 +193,7 @@ class _ScanScreenState extends State<ScanScreen> {
           children: [
             Expanded(
               child: Semantics(
-                label: _guidance,
+                label: _direction == null ? _guidance : '$_guidance. $_direction',
                 button: true,
                 child: ExcludeSemantics(
                   // The whole view repeats. A user walking has one hand on a
@@ -147,14 +218,41 @@ class _ScanScreenState extends State<ScanScreen> {
                               color: AppColors.navy.withValues(alpha: 0.88),
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Text(
-                              _guidance,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                height: 1.3,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _guidance,
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    height: 1.3,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                if (_direction != null) ...[
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.navigation_outlined,
+                                          color: AppColors.cyan, size: 22),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          _direction!,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            height: 1.3,
+                                            color: AppColors.cyan,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                         ),
@@ -175,6 +273,19 @@ class _ScanScreenState extends State<ScanScreen> {
                     icon: Icons.replay,
                     onPressed: _repeat,
                   ),
+                  if (widget.voice != null)
+                    VoiceMicButton(
+                      controller: widget.voice!,
+                      detail: 'Say repeat, or help',
+                    ),
+                  if (widget.destination != null &&
+                      widget.onStopGuidance != null)
+                    ViButton(
+                      label: 'Stop directions to ${widget.destination!.label}',
+                      detail: 'Keeps warning you about obstacles',
+                      kind: ViButtonKind.quiet,
+                      onPressed: widget.onStopGuidance,
+                    ),
                   if (_refused)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 12),

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/router.dart';
 import 'package:impairgency/app/routes.dart';
 import 'package:impairgency/app/theme.dart';
+import 'package:impairgency/core/contacts/emergency_contact.dart';
 import 'package:impairgency/core/safety/safety_notice.dart';
 import 'package:impairgency/core/session_store.dart';
 import 'package:impairgency/data/prefs_session_store.dart';
@@ -19,6 +20,18 @@ void main() {
     // phone after a reinstall, resumes at step one — Create your account — for
     // an account they have just signed in to. These are the facts an account
     // carries with it that say otherwise.
+
+    test('a saved name means the personal information step is behind them',
+        () {
+      expect(
+        OnboardingController.stepsEvidencedBy({'name': 'Ana', 'age': 34}),
+        contains(Routes.profile),
+      );
+      expect(
+        OnboardingController.stepsEvidencedBy({'email': 'a@b.c'}),
+        isNot(contains(Routes.profile)),
+      );
+    });
 
     test('a saved preference means the preferences step is behind them', () {
       expect(
@@ -85,8 +98,7 @@ void main() {
       await store.markStepComplete(Routes.createAccount);
       await store.markStepComplete(Routes.preferences);
       await store.cacheProfile(const CachedProfile(
-        contactName: 'Mum',
-        contactNumber: '+639170000000',
+        contacts: [EmergencyContact(name: 'Mum', number: '+639170000000')],
         guardianCount: 2,
         consent: {'location': true},
       ));
@@ -121,7 +133,8 @@ void main() {
       final store = InMemorySessionStore(
         acknowledged: true,
         steps: {Routes.createAccount},
-        profile: const CachedProfile(contactName: 'Mum'),
+        profile: const CachedProfile(
+            contacts: [EmergencyContact(name: 'Mum', number: '0917')]),
       );
 
       await store.forgetAccount();

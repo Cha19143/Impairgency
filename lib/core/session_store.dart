@@ -5,19 +5,51 @@
 /// can run without a platform channel.
 library;
 
+import 'contacts/emergency_contact.dart';
+import 'navigation/destination.dart';
+
 /// The handful of facts the app needs before it can reach the network.
 class CachedProfile {
   const CachedProfile({
+    this.role,
     this.consent = const {},
-    this.contactName,
-    this.contactNumber,
+    this.contacts = const [],
     this.guardianCount = 0,
   });
 
+  /// 'vi' or 'guardian'. Cached so the router knows which app to open
+  /// before - or without - the account document being readable, and set
+  /// *before* the account is created so the guard never sees a guardian as
+  /// a visually impaired user mid-registration.
+  final String? role;
+
   final Map<String, bool> consent;
-  final String? contactName;
-  final String? contactNumber;
+
+  /// The emergency contacts, in calling order. See `emergency_contact.dart`
+  /// for what the order means.
+  final List<EmergencyContact> contacts;
+
   final int guardianCount;
+
+  /// The first contact, for anything that only wants one.
+  String? get contactName => contacts.isEmpty ? null : contacts.first.name;
+  String? get contactNumber =>
+      contacts.isEmpty ? null : contacts.first.number;
+
+  bool get isGuardian => role == 'guardian';
+
+  CachedProfile copyWith({
+    String? role,
+    Map<String, bool>? consent,
+    List<EmergencyContact>? contacts,
+    int? guardianCount,
+  }) =>
+      CachedProfile(
+        role: role ?? this.role,
+        consent: consent ?? this.consent,
+        contacts: contacts ?? this.contacts,
+        guardianCount: guardianCount ?? this.guardianCount,
+      );
 }
 
 abstract interface class SessionStore {
@@ -34,6 +66,10 @@ abstract interface class SessionStore {
   Future<CachedProfile> cachedProfile();
 
   Future<void> cacheProfile(CachedProfile profile);
+
+  /// Saved destinations, so the Home button knows where Home is offline.
+  Future<List<Destination>> cachedPlaces();
+  Future<void> cachePlaces(List<Destination> places);
 
   /// Onboarding steps already finished, so setup can resume after a kill.
   Future<Set<String>> completedSteps();
@@ -65,9 +101,17 @@ class InMemorySessionStore implements SessionStore {
   bool _acknowledged;
   final Set<String> _steps;
   CachedProfile _profile;
+  List<Destination> _places = const [];
 
   @override
   Future<CachedProfile> cachedProfile() async => _profile;
+
+  @override
+  Future<List<Destination>> cachedPlaces() async => [..._places];
+
+  @override
+  Future<void> cachePlaces(List<Destination> places) async =>
+      _places = [...places];
 
   @override
   Future<void> cacheProfile(CachedProfile profile) async => _profile = profile;
@@ -88,6 +132,7 @@ class InMemorySessionStore implements SessionStore {
   Future<void> forgetAccount() async {
     _steps.clear();
     _profile = const CachedProfile();
+    _places = const [];
     _acknowledged = false;
   }
 }

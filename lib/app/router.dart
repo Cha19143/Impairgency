@@ -7,9 +7,15 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/alerts/alert_presenter.dart';
+import '../core/contacts/emergency_contact.dart';
+import '../core/location/location_policy.dart';
+import '../core/location/location_source.dart';
+import '../core/navigation/destination.dart';
+import '../core/places/session_event.dart';
 import '../core/places/place.dart';
 import '../core/session_store.dart';
 import '../core/speech/speaker.dart';
+import '../core/voice/speech_recognizer.dart';
 import '../admin/screens/accessibility_screen.dart';
 import '../admin/screens/admin_page.dart';
 import '../admin/screens/admin_shell.dart';
@@ -21,14 +27,24 @@ import '../admin/screens/users_screen.dart';
 import '../core/places/session_summary.dart';
 import '../data/admin_repository.dart';
 import '../data/auth_service.dart';
+import '../data/contact_picker.dart';
 import '../data/geolocator_location_source.dart';
+import '../data/guardian_onboarding.dart';
+import '../data/guardian_repository.dart';
 import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
+import '../data/saved_places_repository.dart';
 import '../data/location_history_repository.dart';
 import '../data/sos_engine.dart';
+import '../data/stt_speech_recognizer.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
+import '../guardian/screens/guardian_home_page.dart';
+import '../guardian/screens/guardian_register_screen.dart';
 import '../shared/widgets/pending_screen.dart';
 import '../vi/onboarding/all_set_screen.dart';
+import '../vi/onboarding/choose_role_screen.dart';
+import '../vi/onboarding/forgot_password_screen.dart';
+import '../vi/onboarding/profile_screen.dart';
 import '../vi/onboarding/consent_screen.dart';
 import '../vi/onboarding/create_account_screen.dart';
 import '../vi/onboarding/device_screen.dart';
@@ -47,7 +63,12 @@ import '../vi/screens/sign_out_screen.dart';
 import '../vi/screens/location_debug_screen.dart';
 import '../vi/screens/sos_flow.dart';
 import '../vi/screens/what_can_i_say_screen.dart';
+import '../vi/screens/read_text_screen.dart';
 import '../vi/screens/safety_notice_screen.dart';
+import '../vi/screens/saved_places_screen.dart';
+import '../vi/screens/smart_assistance_screen.dart';
+import '../vi/voice_actions.dart';
+import '../vi/voice_controller.dart';
 import '../vi/widgets/vi_button.dart';
 import '../vi/widgets/vi_screen.dart';
 import 'routes.dart';
@@ -56,13 +77,67 @@ import 'routes.dart';
 /// against the new project. Until then it reports signed out, which is the
 /// correct default: the guard fails closed.
 class AppSession extends ChangeNotifier {
-  AppSession({SessionStore? store, Speaker? speaker, PairingRepository? pairing})
-      : store = store ?? InMemorySessionStore(),
+  AppSession({
+    SessionStore? store,
+    Speaker? speaker,
+    PairingRepository? pairing,
+    SpeechRecognizer? recognizer,
+  })  : store = store ?? InMemorySessionStore(),
         speaker = speaker ?? const SilentSpeaker(),
-        _pairing = pairing;
+        _pairing = pairing,
+        _recognizer = recognizer;
 
   final SessionStore store;
   final Speaker speaker;
+
+  /// [speaker], with priorities. The scan screen needs them; a test that
+  /// passed a plain recording speaker gets it back wrapped.
+  PrioritySpeaker get prioritySpeaker => withPriorities(speaker);
+
+  SpeechRecognizer? _recognizer;
+
+  /// Where a spoken command sends the user. Set by [createRouter].
+  void Function(String route)? navigate;
+
+  VoiceController? _voice;
+
+  /// The microphone, and everything between it and an action.
+  ///
+  /// One for the whole app rather than one per screen, so the permission is
+  /// asked for once, the failure is explained once, and a screen that opens
+  /// while another is listening does not end up with two microphones.
+  VoiceController get voice => _voice ??= VoiceController(
+        recognizer: _recognizer ??= SttSpeechRecognizer(),
+        speaker: speaker,
+        actions: () => VoiceActions(
+          location: const GeolocatorLocationSource(),
+          fetchFix: _fixForVoice,
+          contactName: _state.contactName,
+          hasGuardian: _state.guardianCount > 0,
+        ),
+        onNavigate: (route) => navigate?.call(route),
+      );
+
+  /// What "where am I" reads back: the SOS location policy's sentence, so the
+  /// answer carries the same honesty about age and accuracy.
+  Future<({LocationAvailability availability, String? summary})>
+      _fixForVoice() async {
+    const source = GeolocatorLocationSource();
+    final availability = await source.requestPermission();
+    if (availability != LocationAvailability.ready) {
+      return (availability: availability, summary: null);
+    }
+    final fix = await bestEffortFix(source);
+    final outcome = resolveLocationForSos(
+      availability: availability,
+      fix: fix,
+      now: DateTime.now(),
+    );
+    return (
+      availability: availability,
+      summary: outcome.hasSomethingToSend ? outcome.spoken : null,
+    );
+  }
 
   // Constructed lazily so a widget test that never opens a Firestore-backed
   // screen does not need Firebase initialised.
@@ -84,6 +159,47 @@ class AppSession extends ChangeNotifier {
 
   SosEngine? _sos;
   SosEngine get sos => _sos ??= SosEngine(speaker: speaker);
+
+  SavedPlacesRepository? _places;
+  SavedPlacesRepository get places =>
+      _places ??= SavedPlacesRepository(store: store);
+
+  /// Where the user has said they are going. Cleared when they arrive or
+  /// stop, and by sign-out. In memory only: a destination is for a journey,
+  /// not a setting.
+  Destination? destination;
+
+  /// Records the destination the way §2.A.7 records a journey, and remembers
+  /// it for the scan screen. Best effort on the record: it needs history
+  /// consent and a connection, and the directions need neither.
+  Future<void> setDestination(Destination? place) async {
+    destination = place;
+    notifyListeners();
+    final uid = _state.uid;
+    if (place == null || uid == null) return;
+    try {
+      await history.recordEvent(
+        uid,
+        sessionId: 'journey-${DateTime.now().millisecondsSinceEpoch}',
+        kind: SessionEventKind.destinationSet,
+        detail: place.label,
+      );
+    } catch (_) {
+      // No consent, or no network. The directions do not depend on it.
+    }
+  }
+
+  GuardianRepository? _guardian;
+  GuardianRepository get guardian =>
+      _guardian ??= GuardianRepository(pairing: pairing);
+
+  GuardianOnboarding? _guardianOnboarding;
+  GuardianOnboarding get guardianOnboarding =>
+      _guardianOnboarding ??= GuardianOnboarding(
+        auth: auth,
+        store: store,
+        pairing: pairing,
+      );
 
   OnboardingController? _onboarding;
   OnboardingController get onboarding => _onboarding ??= OnboardingController(
@@ -111,15 +227,18 @@ class AppSession extends ChangeNotifier {
         return;
       }
       final isAdmin = await admin.isAdmin(user.uid);
+      // Which app this account is for, decided before the guard runs: a
+      // guardian sent through the visually impaired flow would be asked to
+      // create the account they have just created.
+      final isGuardian = await _isGuardian(user.uid);
       update(SessionState(
         uid: user.uid,
         consent: _state.consent,
-        contactName: _state.contactName,
-        contactNumber: _state.contactNumber,
+        contacts: _state.contacts,
         guardianCount: _state.guardianCount,
         signedIn: true,
         isAdmin: isAdmin,
-        isGuardian: _state.isGuardian,
+        isGuardian: isGuardian,
         safetyAcknowledged: _state.safetyAcknowledged,
         completedSteps: _state.completedSteps,
       ));
@@ -142,12 +261,11 @@ class AppSession extends ChangeNotifier {
       uid: _state.uid,
       signedIn: _state.signedIn,
       isAdmin: _state.isAdmin,
-      isGuardian: _state.isGuardian,
+      isGuardian: _state.isGuardian || profile.isGuardian,
       safetyAcknowledged: await store.safetyAcknowledged(),
       completedSteps: await store.completedSteps(),
       consent: profile.consent,
-      contactName: profile.contactName,
-      contactNumber: profile.contactNumber,
+      contacts: profile.contacts,
       guardianCount: profile.guardianCount,
     ));
   }
@@ -163,17 +281,80 @@ class AppSession extends ChangeNotifier {
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = snapshot.data();
       if (data == null) return;
-      final contact = data['emergencyContact'] as Map<String, dynamic>?;
       await store.cacheProfile(CachedProfile(
+        role: data['role'] as String?,
         consent: Map<String, bool>.from(data['consent'] as Map? ?? const {}),
-        contactName: contact?['name'] as String?,
-        contactNumber: contact?['number'] as String?,
-        guardianCount: (data['guardianCount'] as num?)?.toInt() ?? 0,
+        contacts: emergencyContactsFrom(data),
+        guardianCount: await _countGuardians(uid),
       ));
       await load();
     } catch (_) {
       // Offline. The cache is what the app runs on until the network returns.
     }
+  }
+
+  /// Counted from the pairings, because nothing on the client may write a
+  /// count onto the user document and nothing on the server does either.
+  /// Falls back to what was cached rather than to zero: offline, "no
+  /// guardian" would be a claim, and the wrong one.
+  Future<int> _countGuardians(String uid) async {
+    try {
+      return (await pairing.guardiansOf(uid)).length;
+    } catch (_) {
+      return _state.guardianCount;
+    }
+  }
+
+  /// The role, from the device first and the account second.
+  ///
+  /// The device's copy is written before an account is created and cleared
+  /// at sign-out, so it is right whenever it is present. The account is read
+  /// only when it is not - a sign-in on a new phone - and bounded, because
+  /// this runs before the first screen and a phone with no signal must still
+  /// reach one.
+  Future<bool> _isGuardian(String uid) async {
+    final cached = await store.cachedProfile();
+    if (cached.role != null) return cached.isGuardian;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(const Duration(seconds: 6));
+      final role = snapshot.data()?['role'] as String?;
+      if (role != null) await store.cacheProfile(cached.copyWith(role: role));
+      return role == 'guardian';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Records which app a new account is for, before it is created.
+  Future<void> rememberRole(String role) async {
+    final cached = await store.cachedProfile();
+    await store.cacheProfile(cached.copyWith(role: role));
+    await load();
+  }
+
+  /// Puts a just-saved emergency contact where SOS reads it from.
+  ///
+  /// The bug this closes: the contact was written to Firestore and the
+  /// device's copy - the one SOS and Settings actually read - was refreshed
+  /// only at sign-in. Save a contact during setup, press SOS, and the
+  /// receipt said no contact was saved. The tester was right that the
+  /// feature did not work; it worked on the next launch, with a network.
+  Future<void> rememberContacts(List<EmergencyContact> contacts) async {
+    final cached = await store.cachedProfile();
+    await store.cacheProfile(cached.copyWith(contacts: dedupeContacts(contacts)));
+    await load();
+  }
+
+  /// Same shape, for consent. The consent centre used to re-read Firestore
+  /// after saving, which offline meant a switch that did not move.
+  Future<void> rememberConsent(Map<String, bool> consent) async {
+    final cached = await store.cachedProfile();
+    await store.cacheProfile(cached.copyWith(consent: consent));
+    await load();
   }
 
   void update(SessionState next) {
@@ -201,6 +382,7 @@ class AppSession extends ChangeNotifier {
   Future<void> signOut() async {
     await auth.signOut();
     await store.forgetAccount();
+    destination = null;
     await load();
   }
 
@@ -223,7 +405,8 @@ class AppSession extends ChangeNotifier {
 /// Empty by default, so nothing about the normal launch changes.
 const String _startOverride = String.fromEnvironment('START');
 
-GoRouter createRouter(AppSession session) => GoRouter(
+GoRouter createRouter(AppSession session) {
+  final router = GoRouter(
       initialLocation: _startOverride.isNotEmpty
           ? _startOverride
           : (kIsWeb ? Routes.adminRoot : Routes.welcome),
@@ -271,9 +454,29 @@ GoRouter createRouter(AppSession session) => GoRouter(
           path: Routes.welcome,
           builder: (context, _) => WelcomeScreen(
             speaker: session.speaker,
-            onCreateAccount: () =>
-                appNavigate(context, Routes.createAccount),
+            onCreateAccount: () => appNavigate(context, Routes.chooseRole),
             onSignIn: () => appNavigate(context, Routes.signIn),
+          ),
+        ),
+        GoRoute(
+          path: Routes.chooseRole,
+          builder: (context, _) => ChooseRoleScreen(
+            speaker: session.speaker,
+            onVisuallyImpaired: () async {
+              await session.rememberRole('vi');
+              if (context.mounted) appNavigate(context, Routes.createAccount);
+            },
+            onGuardian: () => appNavigate(context, Routes.guardianRegister),
+            onSignIn: () => appNavigate(context, Routes.signIn),
+          ),
+        ),
+        GoRoute(
+          path: Routes.forgotPassword,
+          builder: (context, state) => ForgotPasswordScreen(
+            speaker: session.speaker,
+            initialEmail: state.uri.queryParameters['email'],
+            onSendReset: session.auth.sendPasswordReset,
+            onBack: () => appNavigate(context, Routes.signIn),
           ),
         ),
         GoRoute(
@@ -291,7 +494,14 @@ GoRouter createRouter(AppSession session) => GoRouter(
               await session.load();
               return null;
             },
-            onCreateAccount: () => appNavigate(context, Routes.createAccount),
+            onCreateAccount: () => appNavigate(context, Routes.chooseRole),
+            onForgotPassword: (email) => appNavigate(
+              context,
+              Uri(
+                path: Routes.forgotPassword,
+                queryParameters: email.isEmpty ? null : {'email': email},
+              ).toString(),
+            ),
           ),
         ),
         GoRoute(
@@ -304,6 +514,14 @@ GoRouter createRouter(AppSession session) => GoRouter(
               if (failure == null) await session.load();
               return failure;
             },
+          ),
+        ),
+        GoRoute(
+          path: Routes.profile,
+          builder: (context, _) => ProfileScreen(
+            speaker: session.speaker,
+            onSave: (info) => session.advance(
+                () => session.onboarding.savePersonalInfo(info)),
           ),
         ),
         GoRoute(
@@ -320,8 +538,12 @@ GoRouter createRouter(AppSession session) => GoRouter(
           path: Routes.emergencyContact,
           builder: (context, _) => EmergencyContactScreen(
             speaker: session.speaker,
-            onSave: (name, number) => session.advance(() =>
-                session.onboarding.saveEmergencyContact(name, number)),
+            initial: session.state.contacts,
+            picker: const SystemContactPicker(),
+            onSave: (contacts) => session.advance(() async {
+              await session.onboarding.saveEmergencyContacts(contacts);
+              await session.rememberContacts(contacts);
+            }),
             onSkip: () => session.advance(
                 () => session.onboarding.skip(Routes.emergencyContact)),
           ),
@@ -360,8 +582,10 @@ GoRouter createRouter(AppSession session) => GoRouter(
           path: Routes.consent,
           builder: (context, _) => ConsentScreen(
             speaker: session.speaker,
-            onContinue: (values) =>
-                session.advance(() => session.onboarding.saveConsent(values)),
+            onContinue: (values) => session.advance(() async {
+              await session.onboarding.saveConsent(values);
+              await session.rememberConsent(values);
+            }),
           ),
         ),
         GoRoute(
@@ -395,9 +619,11 @@ GoRouter createRouter(AppSession session) => GoRouter(
           path: Routes.home,
           builder: (context, _) => DashboardScreen(
             speaker: session.speaker,
+            voice: session.voice,
             consent: session.state.consent,
             onScan: () => appNavigate(context, Routes.scan),
-            onAssist: () => appNavigate(context, Routes.home),
+            onAssist: () => appNavigate(context, Routes.assist),
+            onReadText: () => appNavigate(context, Routes.readText),
             onSos: () => appNavigate(context, Routes.sos),
             onWhatCanISay: () => appNavigate(context, Routes.whatCanISay),
             onSettings: () => appNavigate(context, Routes.settings),
@@ -406,18 +632,72 @@ GoRouter createRouter(AppSession session) => GoRouter(
         GoRoute(
           path: Routes.scan,
           builder: (context, _) => ScanScreen(
+            speaker: session.prioritySpeaker,
+            voice: session.voice,
+            destination: session.destination,
+            positions: session.destination == null
+                ? null
+                : const GeolocatorLocationSource().positions(),
+            onStopGuidance: () async {
+              await session.setDestination(null);
+              if (context.mounted) appNavigate(context, Routes.scan);
+            },
+            onBack: () => appNavigate(context, Routes.home),
+          ),
+        ),
+        GoRoute(
+          path: Routes.readText,
+          builder: (context, _) => ReadTextScreen(
             speaker: session.speaker,
             onBack: () => appNavigate(context, Routes.home),
+          ),
+        ),
+        GoRoute(
+          path: Routes.assist,
+          builder: (context, _) => AdminFreeFuture<List<Destination>>(
+            load: () => session.places.list(session.state.uid ?? ''),
+            builder: (_, places) => SmartAssistanceScreen(
+              speaker: session.speaker,
+              voice: session.voice,
+              places: places,
+              onGo: (place) async {
+                await session.setDestination(place);
+                if (context.mounted) appNavigate(context, Routes.scan);
+              },
+              onManagePlaces: () => appNavigate(context, Routes.savedPlaces),
+              onBack: () => appNavigate(context, Routes.home),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: Routes.savedPlaces,
+          builder: (context, _) => AdminFreeFuture<List<Destination>>(
+            load: () => session.places.list(session.state.uid ?? ''),
+            builder: (_, places) => SavedPlacesScreen(
+              speaker: session.speaker,
+              places: places,
+              onSaveHere: (kind, label) => _saveHere(session, kind, label),
+              onRename: (place, label) async {
+                await session.places
+                    .save(session.state.uid ?? '', place.copyWith(label: label));
+                if (context.mounted) appNavigate(context, Routes.savedPlaces);
+              },
+              onRemove: (place) async {
+                await session.places.remove(session.state.uid ?? '', place.id);
+                if (context.mounted) appNavigate(context, Routes.savedPlaces);
+              },
+              onBack: () => appNavigate(context, Routes.settings),
+            ),
           ),
         ),
         GoRoute(
           path: Routes.sos,
           builder: (context, _) => SosFlow(
             engine: session.sos,
-            userId: session.state.uid ?? 'unknown',
+            userId: session.state.uid,
             speaker: session.speaker,
-            contactName: session.state.contactName,
-            contactNumber: session.state.contactNumber,
+            voiceController: session.voice,
+            contacts: session.state.contacts,
             guardianCount: session.state.guardianCount,
             onFinished: () => appNavigate(context, Routes.home),
           ),
@@ -426,10 +706,11 @@ GoRouter createRouter(AppSession session) => GoRouter(
           path: Routes.settings,
           builder: (context, _) => SettingsScreen(
             speaker: session.speaker,
-            hasContact: session.state.contactNumber != null,
+            contactCount: session.state.contacts.length,
             hasGuardian: session.state.guardianCount > 0,
             onConsent: () => appNavigate(context, Routes.consentCentre),
             onLearned: () => appNavigate(context, Routes.learned),
+            onSavedPlaces: () => appNavigate(context, Routes.savedPlaces),
             onDevice: () => appNavigate(context, Routes.device),
             onEmergencyContact: () =>
                 appNavigate(context, Routes.emergencyContact),
@@ -457,7 +738,8 @@ GoRouter createRouter(AppSession session) => GoRouter(
             current: session.state.consent,
             onSave: (values) async {
               await session.onboarding.saveConsent(values);
-              await session.refreshProfile();
+              await session.rememberConsent(values);
+              unawaited(session.refreshProfile());
             },
             onBack: () => appNavigate(context, Routes.settings),
           ),
@@ -492,7 +774,30 @@ GoRouter createRouter(AppSession session) => GoRouter(
         ),
 
         // ---- guardian app (mobile) ----
-        _page(Routes.guardianHome, 'Guardian', 'Phase 1', '§3.1, §3.2'),
+        GoRoute(
+          path: Routes.guardianHome,
+          builder: (context, _) => GuardianHomePage(
+            guardianId: session.state.uid ?? '',
+            repository: session.guardian,
+            presenter: session.alerts,
+            speaker: session.speaker,
+            onEnterCode: () => appNavigate(context, Routes.guardianAccept),
+            onSignOut: () => appNavigate(context, Routes.signOut),
+          ),
+        ),
+        GoRoute(
+          path: Routes.guardianRegister,
+          builder: (context, _) => GuardianRegisterScreen(
+            speaker: session.speaker,
+            onRegister: (registration) async {
+              final failure =
+                  await session.guardianOnboarding.register(registration);
+              await session.load();
+              return failure;
+            },
+            onSignIn: () => appNavigate(context, Routes.signIn),
+          ),
+        ),
         GoRoute(
           path: Routes.guardianAccept,
           builder: (context, _) => AcceptInvitationScreen(
@@ -612,6 +917,12 @@ GoRouter createRouter(AppSession session) => GoRouter(
         ),
       ],
     );
+  // A spoken "help" has to end up on the SOS screen. The controller is
+  // app-wide and the router is the only thing that can move the user, so it
+  // is wired here rather than in a screen.
+  session.navigate = router.go;
+  return router;
+}
 
 GoRoute _page(String path, String title, String phase, String requirement) =>
     GoRoute(
@@ -637,6 +948,43 @@ Future<String?> _redeem(AppSession session, String code) async {
   };
 }
 
+/// Saves the current position under [kind]. Returns null, or why not.
+///
+/// Waits longer than the SOS location budget - nobody is in danger here,
+/// and a place saved from a cell-tower guess is a Home button that points
+/// at the wrong street.
+Future<String?> _saveHere(
+    AppSession session, DestinationKind kind, String label) async {
+  const source = GeolocatorLocationSource();
+  final availability = await source.requestPermission();
+  if (availability != LocationAvailability.ready) {
+    return permissionGuidance(availability);
+  }
+  final fix = await source.currentFix(timeout: const Duration(seconds: 15));
+  if (fix == null) {
+    return 'Could not get your position. Try again outdoors, or near a '
+        'window.';
+  }
+  if (fix.accuracyMetres > 100) {
+    return 'Your position is only known to about ${fix.accuracyMetres.round()} '
+        'metres. Wait a moment and try again.';
+  }
+  final uid = session.state.uid ?? '';
+  final id = destinationIdFor(kind,
+      fresh: () => 'place-${DateTime.now().millisecondsSinceEpoch}');
+  await session.places.save(
+    uid,
+    Destination(
+      id: id,
+      label: label,
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      kind: kind,
+    ),
+  );
+  return null;
+}
+
 /// Extracted so the navigation on success is one named thing rather than an
 /// inline closure inside a route table.
 void appNavigate(BuildContext context, String location) =>
@@ -656,7 +1004,7 @@ class _CouldNotIssueCode extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ViScreen(
         speaker: speaker,
-        step: 'Step 4 of 6',
+        step: 'Step 5 of 7',
         title: 'Could not create an invitation',
         body: const [
           'This usually means there is no connection. You can invite a guardian '

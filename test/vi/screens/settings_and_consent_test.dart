@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/router.dart';
 import 'package:impairgency/app/routes.dart';
+import 'package:impairgency/core/contacts/emergency_contact.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/places/place.dart';
 import 'package:impairgency/core/places/stay.dart';
@@ -71,7 +72,7 @@ void main() {
       await pump(
         tester,
         SettingsScreen(
-          hasContact: false,
+          contactCount: 0,
           onConsent: () {}, onLearned: () {}, onDevice: () {},
           onEmergencyContact: () {}, onInviteGuardian: () {},
           onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
@@ -271,8 +272,9 @@ void main() {
         steps: Routes.onboardingFlow.toSet(),
         profile: const CachedProfile(
           consent: {'location': true},
-          contactName: 'Mum',
-          contactNumber: '+639171234567',
+          contacts: [
+            EmergencyContact(name: 'Mum', number: '+639171234567'),
+          ],
           guardianCount: 1,
         ),
       );

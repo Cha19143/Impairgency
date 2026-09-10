@@ -17,7 +17,25 @@ class GeolocatorLocationSource implements LocationSource {
         longitude: p.longitude,
         accuracyMetres: p.accuracy,
         at: p.timestamp,
+        headingDegrees: p.heading,
+        speedMetresPerSecond: p.speed,
       );
+
+  /// Readings as the user moves, for turn-by-turn guidance.
+  ///
+  /// Every couple of metres rather than every reading: guidance changes with
+  /// position, not with time, and a stationary user does not need a stream
+  /// of identical fixes. Never throws for a refused permission - the stream
+  /// simply ends, and the screen says guidance is off.
+  Stream<LocationFix> positions() async* {
+    if (await availability() != LocationAvailability.ready) return;
+    yield* Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 2,
+      ),
+    ).map(_toFix).handleError((_) {});
+  }
 
   LocationAvailability _map(LocationPermission permission) =>
       switch (permission) {

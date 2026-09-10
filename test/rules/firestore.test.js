@@ -737,3 +737,49 @@ describe('everything else', () => {
     await assertFails(setDoc(doc(as(VI), 'anything', 'at-all'), { x: 1 }));
   });
 });
+
+describe('saved places — home, work, school', () => {
+  it('the owner reads and writes their own', async () => {
+    const db = as(VI);
+    await assertSucceeds(
+      setDoc(doc(db, 'users', VI, 'saved_places', 'home'), {
+        label: 'Home',
+        lat: 14.79,
+        lng: 120.92,
+        kind: 'home',
+      }),
+    );
+    await assertSucceeds(getDoc(doc(db, 'users', VI, 'saved_places', 'home')));
+    await assertSucceeds(deleteDoc(doc(db, 'users', VI, 'saved_places', 'home')));
+  });
+
+  it('a paired guardian is not given them, consent or not', async () => {
+    // Where someone *is* is granted by location consent. Where they *go*
+    // is a different thing to know about a person, and nobody asked for it.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', VI, 'saved_places', 'home'), {
+        label: 'Home',
+        lat: 14.79,
+        lng: 120.92,
+        kind: 'home',
+      });
+      await updateDoc(doc(ctx.firestore(), 'users', VI), {
+        'consent.location': true,
+      });
+    });
+    await assertFails(
+      getDoc(doc(as(GUARDIAN), 'users', VI, 'saved_places', 'home')),
+    );
+  });
+
+  it('nobody else can write one against your account', async () => {
+    await assertFails(
+      setDoc(doc(as(STRANGER), 'users', VI, 'saved_places', 'home'), {
+        label: 'Home',
+        lat: 0,
+        lng: 0,
+        kind: 'home',
+      }),
+    );
+  });
+});

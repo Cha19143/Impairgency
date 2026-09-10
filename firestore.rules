@@ -107,6 +107,14 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // Saved destinations - home, work, school, and whatever else the user
+    // names. Owner only. A guardian is deliberately not given these: where
+    // someone *is* is granted by location consent; where they *go* is a
+    // different thing to know about a person, and nobody asked for it.
+    match /users/{userId}/saved_places/{placeId} {
+      allow read, write: if isOwner(userId);
+    }
+
     // ---- pairing -------------------------------------------------------
 
     // A code is written by the user who owns it and redeemed by whoever is

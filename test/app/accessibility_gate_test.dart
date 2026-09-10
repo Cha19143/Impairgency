@@ -4,8 +4,14 @@ import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/places/place.dart';
 import 'package:impairgency/core/places/stay.dart';
 import 'package:impairgency/core/sos/sos_receipt.dart';
+import 'package:impairgency/core/guardian/watched_user.dart';
 import 'package:impairgency/guardian/screens/accept_invitation_screen.dart';
+import 'package:impairgency/guardian/screens/guardian_home_screen.dart';
+import 'package:impairgency/guardian/screens/guardian_register_screen.dart';
 import 'package:impairgency/vi/onboarding/all_set_screen.dart';
+import 'package:impairgency/vi/onboarding/choose_role_screen.dart';
+import 'package:impairgency/vi/onboarding/forgot_password_screen.dart';
+import 'package:impairgency/vi/onboarding/profile_screen.dart';
 import 'package:impairgency/vi/onboarding/consent_screen.dart';
 import 'package:impairgency/vi/onboarding/create_account_screen.dart';
 import 'package:impairgency/vi/onboarding/device_screen.dart';
@@ -17,7 +23,12 @@ import 'package:impairgency/vi/onboarding/welcome_screen.dart';
 import 'package:impairgency/vi/screens/consent_centre_screen.dart';
 import 'package:impairgency/vi/screens/dashboard_screen.dart';
 import 'package:impairgency/vi/screens/learned_data_screen.dart';
+import 'package:impairgency/core/navigation/destination.dart';
+import 'package:impairgency/data/text_reader.dart';
+import 'package:impairgency/vi/screens/read_text_screen.dart';
 import 'package:impairgency/vi/screens/safety_notice_screen.dart';
+import 'package:impairgency/vi/screens/saved_places_screen.dart';
+import 'package:impairgency/vi/screens/smart_assistance_screen.dart';
 import 'package:impairgency/vi/screens/settings_screen.dart';
 import 'package:impairgency/vi/screens/sign_out_screen.dart';
 import 'package:impairgency/vi/screens/sos_countdown_screen.dart';
@@ -54,17 +65,31 @@ SosReceipt _receipt() => const SosReceipt([
       LegResult(SosLeg.guardians, LegOutcome.notConfigured),
     ]);
 
+class _NoCamera extends TextReader {
+  @override
+  Future<bool> start() async => false;
+  @override
+  Future<void> dispose() async {}
+}
+
 /// Every reachable screen, built the way the router builds it.
 Map<String, Widget Function()> screens() => {
       'Safety notice': () => SafetyNoticeScreen(onAcknowledge: () async {}),
       'Welcome': () =>
           WelcomeScreen(onCreateAccount: () {}, onSignIn: () {}),
+      'Choose role': () => ChooseRoleScreen(
+          onVisuallyImpaired: () {}, onGuardian: () {}, onSignIn: () {}),
       'Create account': () =>
           CreateAccountScreen(onCreate: (_, __) async => null),
+      'About you': () => ProfileScreen(onSave: (_) async {}),
+      'Forgot password': () =>
+          ForgotPasswordScreen(onSendReset: (_) async => null, onBack: () {}),
+      'Guardian registration': () =>
+          GuardianRegisterScreen(onRegister: (_) async => null, onSignIn: () {}),
       'Preferences': () =>
           PreferencesScreen(onChoose: (_) {}, onSkip: () {}),
       'Emergency contact': () =>
-          EmergencyContactScreen(onSave: (_, __) {}, onSkip: () {}),
+          EmergencyContactScreen(onSave: (_) {}, onSkip: () {}),
       'Invite guardian': () => InviteGuardianScreen(
           code: 'FH29MR47', onDone: () {}, onSkip: () {}),
       'Consent': () => ConsentScreen(onContinue: (_) {}),
@@ -73,10 +98,30 @@ Map<String, Widget Function()> screens() => {
       'All set': () => AllSetScreen(onStart: () {}),
       'Dashboard': () => DashboardScreen(
             onScan: () {}, onAssist: () {}, onSos: () {},
-            onWhatCanISay: () {}, onSettings: () {},
+            onWhatCanISay: () {}, onSettings: () {}, onReadText: () {},
             consent: const {'location': true, 'history': false},
           ),
       'What can I say': () => WhatCanISayScreen(onBack: () {}),
+      'Read text': () => ReadTextScreen(reader: _NoCamera(), onBack: () {}),
+      'Smart assistance': () => SmartAssistanceScreen(
+            places: const [
+              Destination(
+                  id: 'home', label: 'Home', latitude: 1, longitude: 2,
+                  kind: DestinationKind.home),
+            ],
+            onGo: (_) {},
+            onManagePlaces: () {},
+            onBack: () {},
+          ),
+      'Saved places': () => SavedPlacesScreen(
+            places: const [
+              Destination(id: 'p1', label: 'Clinic', latitude: 1, longitude: 2),
+            ],
+            onSaveHere: (_, __) async => null,
+            onRename: (_, __) async {},
+            onRemove: (_) async {},
+            onBack: () {},
+          ),
       'Sign in': () => SignInScreen(
             onSignIn: (_, __) async => null,
             onCreateAccount: () {},
@@ -86,6 +131,7 @@ Map<String, Widget Function()> screens() => {
             onConsent: () {}, onLearned: () {}, onDevice: () {},
             onEmergencyContact: () {}, onInviteGuardian: () {},
             onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
+            onSavedPlaces: () {},
           ),
       'Consent centre': () => ConsentCentreScreen(
           current: const {'location': true},
@@ -102,6 +148,16 @@ Map<String, Widget Function()> screens() => {
       'SOS receipt': () => SosReceiptScreen(receipt: _receipt(), onDone: () {}),
       'Guardian accept invitation': () =>
           AcceptInvitationScreen(onRedeem: (_) async => null),
+      'Guardian home': () => GuardianHomeScreen(
+            users: const [
+              WatchedUser(uid: 'u1', name: 'Ana', phone: '0917'),
+              WatchedUser(uid: 'u2', name: 'Ben'),
+            ],
+            onCall: (_) async => true,
+            onOpenMap: (_) {},
+            onEnterCode: () {},
+            onSignOut: () {},
+          ),
     };
 
 Future<void> pump(
@@ -188,6 +244,6 @@ void main() {
   testWidgets('the gate covers every screen in the app', (tester) async {
     // If a screen is added and not listed here, that is the omission this
     // assertion is meant to make visible.
-    expect(screens().length, greaterThanOrEqualTo(17));
+    expect(screens().length, greaterThanOrEqualTo(25));
   });
 }

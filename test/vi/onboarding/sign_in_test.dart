@@ -227,7 +227,7 @@ void main() {
 
       expect(find.text('Sign in'), findsWidgets);
       expect(find.text('Create your account'), findsNothing);
-      expect(find.text('Step 1 of 6'), findsNothing,
+      expect(find.textContaining('Step 1 of'), findsNothing,
           reason: 'signing in is not step one of setting up');
     });
 
@@ -246,7 +246,32 @@ void main() {
       await tapAction(tester, action('Create an account instead'));
       await tester.pumpAndSettle();
 
+      // Via the question the tester asked for: which app is this for?
+      expect(find.text('Who is this account for?'), findsOneWidget);
+      await tapAction(tester, action('Visually impaired user'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Create your account'), findsOneWidget);
+      expect(session.state.isGuardian, isFalse);
+    });
+
+    testWidgets('and the guardian door leads to the guardian form',
+        (tester) async {
+      final session = AppSession(
+        store: InMemorySessionStore(acknowledged: true),
+      );
+      await session.load();
+      final router = createRouter(session);
+      await tester.pumpWidget(
+          MaterialApp.router(theme: buildAppTheme(), routerConfig: router));
+      await tester.pumpAndSettle();
+
+      router.go(Routes.chooseRole);
+      await tester.pumpAndSettle();
+      await tapAction(tester, action('Guardian'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create a guardian account'), findsOneWidget);
     });
   });
 }

@@ -38,6 +38,13 @@ enum LegOutcome {
   /// Distinct from [failed] because the remedy is different and the user
   /// should hear which it was.
   notConfigured,
+
+  /// Attempted, and not confirmed either way: the alert is queued on the
+  /// phone for a connection that is not there. Not a success - nobody has
+  /// been reached - and not a failure - it will go when the network returns.
+  /// Saying which is the difference between a user who waits and one who
+  /// gives up.
+  pending,
 }
 
 class LegResult {
@@ -60,9 +67,21 @@ class SosReceipt {
   LegResult? of(SosLeg leg) =>
       legs.where((l) => l.leg == leg).firstOrNull;
 
+  /// Every call, in the order they were placed. More than one when the
+  /// user rang the next contact from the receipt.
+  List<LegResult> get calls => legs.where((l) => l.leg == SosLeg.call).toList();
+
   bool get anyoneReached =>
-      (of(SosLeg.call)?.succeeded ?? false) ||
+      calls.any((c) => c.succeeded) ||
       (of(SosLeg.guardians)?.succeeded ?? false);
+
+  /// The receipt with one more call on it, kept in reading order.
+  SosReceipt withCall(LegResult call) {
+    final index = legs.lastIndexWhere((l) => l.leg == SosLeg.call);
+    final next = [...legs];
+    next.insert(index < 0 ? 1 : index + 1, call);
+    return SosReceipt(next);
+  }
 
   bool get everythingWorked => legs.every((l) => l.succeeded);
 
@@ -79,7 +98,7 @@ class SosReceipt {
   }
 
   String _whoWasReached() {
-    final called = of(SosLeg.call)?.succeeded ?? false;
+    final called = calls.any((c) => c.succeeded);
     final guardians = of(SosLeg.guardians)?.succeeded ?? false;
     if (called && guardians) return 'Your contact answered and your guardian was told.';
     if (called) return 'Your contact answered.';
@@ -114,7 +133,12 @@ class SosReceipt {
               : '${result.detail} were told.',
         (SosLeg.guardians, LegOutcome.notConfigured) =>
           'You have no guardian, so nobody was alerted.',
-        (SosLeg.guardians, _) => 'Your guardian could not be reached.',
+        (SosLeg.guardians, LegOutcome.pending) =>
+          'Your guardian alert is waiting for a connection, and will be sent '
+              'as soon as this phone has one.',
+        (SosLeg.guardians, _) => result.detail == null
+            ? 'Your guardian could not be reached.'
+            : 'Your guardian could not be reached. ${result.detail}',
       };
 
   /// One line for the top of the screen, and the first thing spoken.

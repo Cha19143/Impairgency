@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../data/prefs_session_store.dart';
-import '../data/tts_speaker.dart';
+import '../core/speech/speech_queue.dart';
+import '../data/tts_engine.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../admin/admin_theme.dart';
@@ -18,7 +19,9 @@ class ImpairGencyApp extends StatefulWidget {
 class _ImpairGencyAppState extends State<ImpairGencyApp> {
   late final AppSession _session = AppSession(
     store: PrefsSessionStore(),
-    speaker: TtsSpeaker(),
+    // One queue for everything the app says. Hazards preempt; nothing else
+    // cuts a sentence short. See core/speech/speech_queue.dart.
+    speaker: SpeechQueue(engine: TtsEngine()),
   );
   late final _router = createRouter(_session);
 

@@ -2,6 +2,8 @@
 /// can be unit tested. `router.dart` wires this to go_router.
 library;
 
+import '../core/contacts/emergency_contact.dart';
+
 abstract final class Routes {
   /// Debug-only proving ground for a real GPS fix and a real notification.
   /// Registered only in debug builds - see router.dart.
@@ -18,7 +20,17 @@ abstract final class Routes {
   /// [onboardingFlow]: signing in is not a step of setting up, it is the
   /// alternative to it.
   static const signIn = '/sign-in';
+
+  /// Also not a step: the reset link is used *at* sign-in, not during setup.
+  static const forgotPassword = '/forgot-password';
+
+  /// Which app the new account is for. Before [createAccount], and not a
+  /// step of it: a guardian who chose the other door never sees the flow.
+  static const chooseRole = '/onboarding/role';
   static const createAccount = '/onboarding/account';
+
+  /// Name, age, type of impairment - and a number a guardian can call.
+  static const profile = '/onboarding/profile';
   static const preferences = '/onboarding/preferences';
   static const emergencyContact = '/onboarding/contact';
   static const inviteGuardian = '/onboarding/guardian';
@@ -27,16 +39,28 @@ abstract final class Routes {
   static const allSet = '/onboarding/done';
   static const home = '/home';
   static const scan = '/scan';
+
+  /// Smart assistance: where are you going? One tap sets the destination
+  /// and opens [scan] with directions.
+  static const assist = '/assist';
+
+  /// Reading books, labels and documents. Separate from [scan] on purpose:
+  /// different camera mode, different prompts, different pace.
+  static const readText = '/read';
   static const sos = '/sos';
   static const whatCanISay = '/what-can-i-say';
   static const settings = '/settings';
   static const consentCentre = '/settings/consent';
   static const learned = '/settings/learned';
+  static const savedPlaces = '/settings/places';
   static const signOut = '/settings/sign-out';
 
   // Guardian app (mobile)
   static const guardianHome = '/guardian';
   static const guardianAccept = '/guardian/accept';
+
+  /// The guardian's own door in. Reachable signed out, like [createAccount].
+  static const guardianRegister = '/guardian/register';
 
   // Admin dashboard (web)
   static const adminRoot = '/admin';
@@ -51,6 +75,7 @@ abstract final class Routes {
   /// blind user restarting from scratch after a crash would be punishing.
   static const onboardingFlow = <String>[
     createAccount,
+    profile,
     preferences,
     emergencyContact,
     inviteGuardian,
@@ -70,8 +95,7 @@ class SessionState {
     this.safetyAcknowledged = false,
     this.completedSteps = const <String>{},
     this.consent = const {},
-    this.contactName,
-    this.contactNumber,
+    this.contacts = const [],
     this.guardianCount = 0,
   });
 
@@ -93,9 +117,14 @@ class SessionState {
   /// dashboard so consent is visible without opening a settings screen.
   final Map<String, bool> consent;
 
-  /// The emergency contact, so SOS does not have to fetch it mid-emergency.
-  final String? contactName;
-  final String? contactNumber;
+  /// The emergency contacts, in calling order, so SOS does not have to
+  /// fetch them mid-emergency.
+  final List<EmergencyContact> contacts;
+
+  /// The first contact - the one rung first - for anything that wants one.
+  String? get contactName => contacts.isEmpty ? null : contacts.first.name;
+  String? get contactNumber =>
+      contacts.isEmpty ? null : contacts.first.number;
 
   /// How many guardians are paired. Zero means the SOS receipt says so rather
   /// than reporting a failure that was never attempted.
@@ -125,7 +154,9 @@ bool _isGuardianRoute(String location) =>
 bool _isSignedOutRoute(String location) =>
     location.startsWith('/onboarding') ||
     location == Routes.welcome ||
-    location == Routes.signIn;
+    location == Routes.signIn ||
+    location == Routes.forgotPassword ||
+    location == Routes.guardianRegister;
 
 /// Where the app should send this request, or null to let it through.
 ///
@@ -192,6 +223,9 @@ String? resolveRedirect({
   }
 
   if (session.isGuardian) {
+    // Signing out lives under the visually impaired app's settings path,
+    // but a guardian has to be able to leave too.
+    if (location == Routes.signOut) return null;
     return _isGuardianRoute(location) ? null : Routes.guardianHome;
   }
 
