@@ -388,12 +388,22 @@ class AppSession extends ChangeNotifier {
 
   Future<void> acknowledgeSafety() async {
     await store.acknowledgeSafety();
+    // Everything else carries forward. This used to rebuild the state from
+    // five fields and drop the rest, so every acknowledgement - on each cold
+    // start, and again from Settings - emptied the contacts, consent, guardian
+    // count and uid in memory until the next load(). Settings then said "SOS
+    // has nobody to call", the contact screen opened blank, and a Save there
+    // would have written that blank over the real contact.
     update(SessionState(
+      uid: _state.uid,
       signedIn: _state.signedIn,
       isAdmin: _state.isAdmin,
       isGuardian: _state.isGuardian,
       safetyAcknowledged: true,
       completedSteps: _state.completedSteps,
+      consent: _state.consent,
+      contacts: _state.contacts,
+      guardianCount: _state.guardianCount,
     ));
   }
 }
