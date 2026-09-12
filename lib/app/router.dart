@@ -540,11 +540,11 @@ GoRouter createRouter(AppSession session) {
             speaker: session.speaker,
             initial: session.state.contacts,
             picker: const SystemContactPicker(),
-            onSave: (contacts) => session.advance(() async {
+            onSave: (contacts) => _step(context, session, () async {
               await session.onboarding.saveEmergencyContacts(contacts);
               await session.rememberContacts(contacts);
             }),
-            onSkip: () => session.advance(
+            onSkip: () => _step(context, session,
                 () => session.onboarding.skip(Routes.emergencyContact)),
           ),
         ),
@@ -563,16 +563,16 @@ GoRouter createRouter(AppSession session) {
                 // never issued would fail with no way to tell why.
                 return _CouldNotIssueCode(
                   speaker: session.speaker,
-                  onSkip: () => session.advance(
+                  onSkip: () => _step(context, session,
                       () => session.onboarding.skip(Routes.inviteGuardian)),
                 );
               }
               return InviteGuardianScreen(
                 speaker: session.speaker,
                 code: code,
-                onDone: () => session
-                    .advance(session.onboarding.markGuardianInvited),
-                onSkip: () => session.advance(
+                onDone: () => _step(context, session,
+                    session.onboarding.markGuardianInvited),
+                onSkip: () => _step(context, session,
                     () => session.onboarding.skip(Routes.inviteGuardian)),
               );
             },
@@ -592,11 +592,11 @@ GoRouter createRouter(AppSession session) {
           path: Routes.device,
           builder: (context, _) => DeviceScreen(
             speaker: session.speaker,
-            onHasDevice: () => session.advance(
+            onHasDevice: () => _step(context, session,
                 () => session.onboarding.saveDevice(hasDevice: true)),
-            onNoDevice: () => session.advance(
+            onNoDevice: () => _step(context, session,
                 () => session.onboarding.saveDevice(hasDevice: false)),
-            onSkip: () => session.advance(
+            onSkip: () => _step(context, session,
                 () => session.onboarding.skip(Routes.device)),
           ),
         ),
@@ -989,6 +989,22 @@ Future<String?> _saveHere(
 /// inline closure inside a route table.
 void appNavigate(BuildContext context, String location) =>
     GoRouter.of(context).go(location);
+
+/// Runs an onboarding step that Settings can reopen once setup is done.
+///
+/// During onboarding the refreshed session is the navigation: the redirect
+/// moves the user to the next incomplete step. After setup nothing does - the
+/// redirect lets [Routes.revisitable] through on purpose - so a step reopened
+/// from Settings has to send the user back there itself.
+Future<void> _step(
+  BuildContext context,
+  AppSession session,
+  Future<void> Function() work,
+) async {
+  final revisiting = session.state.setupComplete;
+  await session.advance(work);
+  if (revisiting && context.mounted) appNavigate(context, Routes.settings);
+}
 
 
 /// Shown when a pairing code could not be issued.

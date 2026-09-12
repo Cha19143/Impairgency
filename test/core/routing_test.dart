@@ -425,4 +425,47 @@ void main() {
       );
     });
   });
+
+  group('settings reopens the steps that stay useful after setup', () {
+    // Emergency contacts, Guardian and Connect a device on the settings
+    // screen all point at onboarding routes. Before this, a settled user
+    // tapping any of them was bounced straight back to home.
+    test('a settled user reaches contacts, guardian and device', () {
+      for (final step in Routes.revisitable) {
+        expect(
+          resolveRedirect(isWeb: false, location: step, session: settled),
+          isNull,
+          reason: step,
+        );
+      }
+    });
+
+    test('but not the rest of onboarding', () {
+      final rest = Routes.onboardingFlow
+          .where((step) => !Routes.revisitable.contains(step));
+      for (final step in rest) {
+        expect(
+          resolveRedirect(isWeb: false, location: step, session: settled),
+          Routes.home,
+          reason: step,
+        );
+      }
+    });
+
+    test('a half-finished user is still held to the order', () {
+      const midway = SessionState(
+        signedIn: true,
+        safetyAcknowledged: true,
+        completedSteps: {
+          Routes.createAccount,
+          Routes.profile,
+          Routes.preferences,
+        },
+      );
+      expect(
+        resolveRedirect(isWeb: false, location: Routes.device, session: midway),
+        Routes.emergencyContact,
+      );
+    });
+  });
 }
