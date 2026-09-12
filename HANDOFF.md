@@ -1,80 +1,73 @@
-# Where we left off — 2026-09-08
+# Where we left off — 2026-09-12
 
-## Done and committed (`75b2015`)
+## What happened
 
-1. **Android could never launch.** `MainActivity.kt` declared `package
-   ph.impairgency.impairgency`; the Gradle namespace is `ph.impairgency.app`.
-   The manifest's `.MainActivity` resolved to a class that was never compiled.
-   Broken since the first scaffold commit `0745c29` — no Android build had ever
-   started. Release was worse: R8 stripped the unreachable class, so release
-   APKs shipped with no launcher activity at all. Fixed by moving the file.
-2. **"Sign in" was a dead end.** `onSignIn` navigated to `Routes.createAccount`
-   and no sign-in screen existed. Added `lib/vi/onboarding/sign_in_screen.dart`,
-   `Routes.signIn`, and the redirect handling. `AuthService.signIn` already
-   worked — only the screen and route were missing.
+The updated main was installed on a real iPhone 15 Pro Max and on a wiped
+Pixel 7 / Android 16 emulator, and every screen was driven by hand with
+screenshots and logcat. Each bug below was found that way and verified fixed
+the same way. `flutter analyze` is clean; 779 tests pass.
 
-`flutter analyze` clean, 490 tests pass. Verified on device: Sign in reaches the
-screen, and a bad credential surfaces Firebase's own message as a `content-desc`
-(so TalkBack announces it).
+Test APKs live on the private GitHub release `apk-2026-09-10`
+(`gh release view apk-2026-09-10`). Replace its assets rather than making a
+new release; the notes there list every fix.
 
-## NOT verified — pick up here
+## Fixed this round
 
-- **Create-account and sign-in end to end.** Only the failure path was exercised
-  on device. The app supports `--dart-define=USE_EMULATOR=true` (auth emulator
-  on 9099, see `lib/main.dart`), so seed a test user in the *emulator* rather
-  than creating a real account:
-  ```
-  firebase emulators:start
-  flutter run --dart-define=USE_EMULATOR=true -d <device>
-  ```
-- **Object detection has never been run.** Not once this session — the emulator
-  camera is a synthetic scene, so it proves nothing.
+1. **Android could never launch.** `MainActivity.kt` sat in
+   `ph.impairgency.impairgency`; the namespace is `ph.impairgency.app`. Moved.
+2. **Release APK hung on the splash on a fresh install.** R8 under AGP 9
+   stripped the no-arg constructors of the Firebase registrars (Crashlytics,
+   Messaging, Installations); Firebase init threw before the first frame.
+   One keep rule in `android/app/proguard-rules.pro`.
+3. **Scan's Back button crashed the app** (SIGSEGV in
+   `libtensorflowlite_jni`, DartWorker thread). `ScanService.dispose()`
+   closed the interpreter under an inference still running on the worker
+   isolate. It now waits for the run in flight, capped at 2 s.
+4. **Settings' Emergency contacts, Guardian and Connect a device bounced to
+   home.** The redirect sent any finished user off `/onboarding/*`.
+   `Routes.revisitable` names the three that Settings reopens; `_step()` in
+   `router.dart` returns them to Settings afterwards.
+5. **Emergency contact read "Not set" after every launch; contact screen
+   opened blank.** `acknowledgeSafety()` rebuilt the session from five
+   fields and dropped contacts, consent, guardian count and uid. A Save on
+   that blank screen would have written `[]` over the real contact.
+6. **Safety notice, then Welcome, on every cold start.** The router was built
+   before `load()` and before Firebase's first auth event. `app.dart` now
+   waits for both (`AppSession.firstAuth`, 5 s cap) behind a navy scaffold.
+7. **"Stop directions" did nothing.** `go()` to the current route is a no-op,
+   so the scan screen was never rebuilt. It forgets the destination itself.
 
-## Object detection — read before touching it
+## Verified working on device / emulator
 
-**It is not YOLO11.** `assets/models/ssd_mobilenet.tflite` is SSD MobileNet V1,
-quantised, 300x300 (graph nodes are `FeatureExtractor/MobilenetV1/...`). There is
-no YOLO anywhere in the repo. `lib/data/scan_service_io.dart` is written against
-SSD's 4-output layout and matches the model correctly.
+iPhone: launch, safety notice spoken to the end, scan with the real camera
+(YOLO11 announces chair / person / bed / laptop with distance and side).
+Emulator: dashboard (scan, smart assistance with saved places, read text end
+to end, SOS countdown + cancel, tap to speak with its no-mic fallback, what
+can I say), all eight Settings entries, consent save / turn everything off,
+sign out, welcome / create-account / sign-in reachable on a wiped install.
 
-**It cannot detect stairs.** The 90 COCO labels contain no `stairs`, no `step`,
-no `curb`. `door` (index 70) is one of COCO's *placeholder* labels — in the label
-map but never trained — so it will effectively never fire. Same for `window`,
-`mirror`, `desk`, `street sign`, `hat`, `shoe`, `eye glasses`, `plate`,
-`blender`, `hair brush`.
+## Known, not fixed
 
-This is a fall risk for the users this app is for, and `docs/BUILD_PLAN.md`
-already flags it as unbuilt: *"Stairs specifically is a fall risk and should be
-attempted — a dedicated class, or a floor-plane heuristic, and an honest
-confidence threshold that stays silent rather than guessing."*
+- Camera preview is not clipped to its card on Scan and Read text (white
+  strip above, colour spill below). Cosmetic.
+- Android system back exits the app from any screen: every navigation is
+  `go()`, which replaces the stack. A blind user's back gesture leaves the app.
+- Screens are built from `session.state` at navigation time and do not
+  rebuild when the profile refresh from Firestore lands.
+- `flutter_tts` and `speech_to_text` still apply the legacy Kotlin plugin.
+- YOLO11n is AGPL-3.0 (see pubspec.yaml). Distribution needs the source
+  published under the same terms or an Ultralytics licence.
 
-Getting stairs requires one of:
-- a model trained with a stairs class (custom dataset — YOLO11 or otherwise),
-- a floor-plane / depth heuristic,
-- honest silence plus a spoken limitation, which is what the safety notice
-  currently implies but does not name.
+## Environment notes
 
-Swapping SSD for YOLO11 means rewriting `_process()` in
-`lib/data/scan_service_io.dart`: YOLO has a single output tensor needing
-transpose and NMS, not SSD's four pre-processed ones.
-
-## Known issues, not addressed
-
-- `flutter_tts` and `speech_to_text` still apply the legacy Kotlin Gradle
-  Plugin; Flutter warns future versions will fail to build. Both are load-bearing
-  for a blind-user app.
-- No sign-out anywhere in the VI app.
-- Android emulator crashes under `-gpu host` (hanging QEMU threads after Vulkan
-  init). Use `-gpu swiftshader_indirect`.
-
-## Environment (set up this session, persists)
-
-Flutter is not on the Bash PATH; prefix commands with:
-```
-export PATH="$HOME/development/flutter/bin:$HOME/.pub-cache/bin:$PATH"
-```
-AVD `impairgency_api36` (Pixel 7, Android 16) now exists. `flutter doctor` is
-fully green including the Android toolchain.
-```
-~/Library/Android/sdk/emulator/emulator -avd impairgency_api36 -gpu swiftshader_indirect
-```
+- Flutter is not on the Bash PATH:
+  `export PATH="$HOME/development/flutter/bin:$HOME/.pub-cache/bin:$PATH"`
+- **Do not run `dart format`.** The repo is in the pre-3.7 style; the SDK's
+  formatter rewrites whole files.
+- Emulator: `~/Library/Android/sdk/emulator/emulator -avd impairgency_api36
+  -gpu swiftshader_indirect`. Drive it with `adb shell input tap` and
+  `adb exec-out screencap -p`; `uiautomator dump` lags Flutter's semantics
+  and misled once, so trust screenshots.
+- iPhone: `flutter build ios --release`, then `xcrun devicectl device
+  install app`. `idevicesyslog -p Runner` (brew libimobiledevice) shows what
+  the app speaks; screenshots and remote taps are not possible on iOS 26.
