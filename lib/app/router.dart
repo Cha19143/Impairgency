@@ -208,6 +208,20 @@ class AppSession extends ChangeNotifier {
         pairing: pairing,
       );
 
+  final _firstAuth = Completer<void>();
+
+  /// Completes once Firebase has said who is signed in, or that nobody is.
+  ///
+  /// Until then [state.signedIn] is a placeholder. A router built on the
+  /// placeholder sends a signed-in user to Welcome for the second or two the
+  /// answer takes, and reads it to them. Never completes if [bindAuth] is not
+  /// called, so callers put a timeout on it.
+  Future<void> get firstAuth => _firstAuth.future;
+
+  void _settleAuth() {
+    if (!_firstAuth.isCompleted) _firstAuth.complete();
+  }
+
   /// Follows Firebase auth so the router's guard reflects who is signed in.
   ///
   /// Called from app.dart once Firebase is up. Left uncalled in tests, where
@@ -224,6 +238,7 @@ class AppSession extends ChangeNotifier {
           safetyAcknowledged: await store.safetyAcknowledged(),
           completedSteps: await store.completedSteps(),
         ));
+        _settleAuth();
         return;
       }
       final isAdmin = await admin.isAdmin(user.uid);
@@ -244,6 +259,7 @@ class AppSession extends ChangeNotifier {
       ));
       // Best effort, and deliberately not awaited by the guard.
       unawaited(refreshProfile());
+      _settleAuth();
     });
   }
 
