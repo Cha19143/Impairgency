@@ -73,4 +73,32 @@ void main() {
     expect(session.state.contactNumber, '0917');
     expect(session.state.consent['location'], isFalse);
   });
+
+  test('acknowledging the safety notice does not forget the contact', () async {
+    // Every cold start re-shows the notice, and Settings can reopen it. The
+    // acknowledgement used to rebuild the session from a handful of fields,
+    // so the contact, consent, guardian count and uid vanished from memory
+    // until the next load() - and the contact screen, opened from Settings
+    // in that window, offered to save an empty list over the real one.
+    final session = await signedIn(InMemorySessionStore(acknowledged: false));
+    await session.rememberContacts(
+        [const EmergencyContact(name: 'Mum', number: '+639170000000')]);
+    await session.rememberConsent({'location': true});
+    session.update(SessionState(
+      uid: 'u1',
+      signedIn: true,
+      completedSteps: Routes.onboardingFlow.toSet(),
+      consent: session.state.consent,
+      contacts: session.state.contacts,
+      guardianCount: 2,
+    ));
+
+    await session.acknowledgeSafety();
+
+    expect(session.state.safetyAcknowledged, isTrue);
+    expect(session.state.uid, 'u1');
+    expect(session.state.contactName, 'Mum');
+    expect(session.state.consent['location'], isTrue);
+    expect(session.state.guardianCount, 2);
+  });
 }

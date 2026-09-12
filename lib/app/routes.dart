@@ -37,6 +37,12 @@ abstract final class Routes {
   static const consent = '/onboarding/consent';
   static const device = '/onboarding/device';
   static const allSet = '/onboarding/done';
+
+  /// The onboarding steps Settings can reopen once setup is done. Each is a
+  /// thing that changes after the first week - a new contact, a guardian who
+  /// moved away, a watch bought later - and the redirect lets a settled user
+  /// back into these three only. The rest of the flow stays behind them.
+  static const revisitable = <String>{emergencyContact, inviteGuardian, device};
   static const home = '/home';
   static const scan = '/scan';
 
@@ -234,7 +240,10 @@ String? resolveRedirect({
     return location == next ? null : next;
   }
 
-  // Setup is done; onboarding is behind them.
-  if (_isSignedOutRoute(location)) return Routes.home;
+  // Setup is done; onboarding is behind them - except the steps Settings
+  // reopens on purpose, which must not bounce straight back to home.
+  if (_isSignedOutRoute(location) && !Routes.revisitable.contains(location)) {
+    return Routes.home;
+  }
   return null;
 }

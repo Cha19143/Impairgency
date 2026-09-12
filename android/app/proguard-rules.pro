@@ -21,3 +21,12 @@
 -dontwarn com.google.mlkit.vision.text.devanagari.**
 -dontwarn com.google.mlkit.vision.text.japanese.**
 -dontwarn com.google.mlkit.vision.text.korean.**
+
+# Firebase finds its SDK modules by reflection: each ships a ComponentRegistrar
+# that FirebaseInitProvider instantiates through its no-argument constructor.
+# firebase-components' own consumer rule keeps the classes but, under AGP 9's
+# R8, not that constructor - so on a fresh install the release build logged
+# "Could not instantiate CrashlyticsRegistrar ... NoSuchMethodException <init>",
+# the first Crashlytics call threw "component is not present" from main(),
+# and the app never left the splash screen. Keep the constructor too.
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }

@@ -74,6 +74,28 @@ class _ScanScreenState extends State<ScanScreen> {
   StreamSubscription<LocationFix>? _positions;
   String? _direction;
 
+  /// Set when directions are stopped from this screen. The route is not
+  /// rebuilt for it - the router's go() to the location it is already at is
+  /// a no-op - so [widget.destination] keeps its value and the screen has to
+  /// forget it here: the link stayed, the arrival line stayed, and the tester
+  /// pressed "Stop directions" three times to no visible effect.
+  bool _directionsStopped = false;
+
+  void _stopDirections() {
+    _positions?.cancel();
+    _positions = null;
+    _nav = null;
+    setState(() {
+      _directionsStopped = true;
+      _direction = null;
+    });
+    widget.speaker.announce(
+      'Directions stopped. Still warning you about obstacles.',
+      priority: SpeechPriority.navigation,
+    );
+    widget.onStopGuidance?.call();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -279,12 +301,13 @@ class _ScanScreenState extends State<ScanScreen> {
                       detail: 'Say repeat, or help',
                     ),
                   if (widget.destination != null &&
+                      !_directionsStopped &&
                       widget.onStopGuidance != null)
                     ViButton(
                       label: 'Stop directions to ${widget.destination!.label}',
                       detail: 'Keeps warning you about obstacles',
                       kind: ViButtonKind.quiet,
-                      onPressed: widget.onStopGuidance,
+                      onPressed: _stopDirections,
                     ),
                   if (_refused)
                     const Padding(

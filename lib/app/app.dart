@@ -25,10 +25,28 @@ class _ImpairGencyAppState extends State<ImpairGencyApp> {
   );
   late final _router = createRouter(_session);
 
+  /// Whether the device and Firebase have both answered yet. The router's
+  /// first redirect runs against whatever the session holds at that moment;
+  /// before load() the safety notice reads as unacknowledged, the redirect
+  /// goes to /safety, and - because /safety stays reachable on purpose once
+  /// acknowledged - nothing moves the user off it when the real value
+  /// arrives. So every cold start re-read the notice to someone who had heard
+  /// it. And before Firebase's first answer nobody is signed in, so a settled
+  /// user heard Welcome for a second or two. The router is not built until
+  /// both have landed.
+  bool _loaded = false;
+
   @override
   void initState() {
     super.initState();
-    _session.load();
+    Future.wait<void>([
+      _session.load(),
+      // Firebase answers in well under a second on a phone. If it never does,
+      // the app opens anyway rather than sit on a blank screen for good.
+      _session.firstAuth.timeout(const Duration(seconds: 5), onTimeout: () {}),
+    ]).whenComplete(() {
+      if (mounted) setState(() => _loaded = true);
+    });
     _session.bindAuth();
   }
 
@@ -40,6 +58,13 @@ class _ImpairGencyAppState extends State<ImpairGencyApp> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_loaded) {
+      // The same dark ground as every screen, for the few frames it takes.
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(backgroundColor: AppColors.navy),
+      );
+    }
     return MaterialApp.router(
       // MaterialApp's title becomes the browser tab title on web, overriding
       // the one in index.html.

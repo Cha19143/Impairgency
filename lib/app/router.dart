@@ -208,6 +208,20 @@ class AppSession extends ChangeNotifier {
         pairing: pairing,
       );
 
+  final _firstAuth = Completer<void>();
+
+  /// Completes once Firebase has said who is signed in, or that nobody is.
+  ///
+  /// Until then [state.signedIn] is a placeholder. A router built on the
+  /// placeholder sends a signed-in user to Welcome for the second or two the
+  /// answer takes, and reads it to them. Never completes if [bindAuth] is not
+  /// called, so callers put a timeout on it.
+  Future<void> get firstAuth => _firstAuth.future;
+
+  void _settleAuth() {
+    if (!_firstAuth.isCompleted) _firstAuth.complete();
+  }
+
   /// Follows Firebase auth so the router's guard reflects who is signed in.
   ///
   /// Called from app.dart once Firebase is up. Left uncalled in tests, where
@@ -224,6 +238,7 @@ class AppSession extends ChangeNotifier {
           safetyAcknowledged: await store.safetyAcknowledged(),
           completedSteps: await store.completedSteps(),
         ));
+        _settleAuth();
         return;
       }
       final isAdmin = await admin.isAdmin(user.uid);
@@ -244,6 +259,7 @@ class AppSession extends ChangeNotifier {
       ));
       // Best effort, and deliberately not awaited by the guard.
       unawaited(refreshProfile());
+      _settleAuth();
     });
   }
 
@@ -388,12 +404,22 @@ class AppSession extends ChangeNotifier {
 
   Future<void> acknowledgeSafety() async {
     await store.acknowledgeSafety();
+    // Everything else carries forward. This used to rebuild the state from
+    // five fields and drop the rest, so every acknowledgement - on each cold
+    // start, and again from Settings - emptied the contacts, consent, guardian
+    // count and uid in memory until the next load(). Settings then said "SOS
+    // has nobody to call", the contact screen opened blank, and a Save there
+    // would have written that blank over the real contact.
     update(SessionState(
+      uid: _state.uid,
       signedIn: _state.signedIn,
       isAdmin: _state.isAdmin,
       isGuardian: _state.isGuardian,
       safetyAcknowledged: true,
       completedSteps: _state.completedSteps,
+      consent: _state.consent,
+      contacts: _state.contacts,
+      guardianCount: _state.guardianCount,
     ));
   }
 }
@@ -540,11 +566,11 @@ GoRouter createRouter(AppSession session) {
             speaker: session.speaker,
             initial: session.state.contacts,
             picker: const SystemContactPicker(),
-            onSave: (contacts) => session.advance(() async {
+            onSave: (contacts) => _step(context, session, () async {
               await session.onboarding.saveEmergencyContacts(contacts);
               await session.rememberContacts(contacts);
             }),
-            onSkip: () => session.advance(
+            onSkip: () => _step(context, session,
                 () => session.onboarding.skip(Routes.emergencyContact)),
           ),
         ),
@@ -563,16 +589,16 @@ GoRouter createRouter(AppSession session) {
                 // never issued would fail with no way to tell why.
                 return _CouldNotIssueCode(
                   speaker: session.speaker,
-                  onSkip: () => session.advance(
+                  onSkip: () => _step(context, session,
                       () => session.onboarding.skip(Routes.inviteGuardian)),
                 );
               }
               return InviteGuardianScreen(
                 speaker: session.speaker,
                 code: code,
-                onDone: () => session
-                    .advance(session.onboarding.markGuardianInvited),
-                onSkip: () => session.advance(
+                onDone: () => _step(context, session,
+                    session.onboarding.markGuardianInvited),
+                onSkip: () => _step(context, session,
                     () => session.onboarding.skip(Routes.inviteGuardian)),
               );
             },
@@ -592,11 +618,11 @@ GoRouter createRouter(AppSession session) {
           path: Routes.device,
           builder: (context, _) => DeviceScreen(
             speaker: session.speaker,
-            onHasDevice: () => session.advance(
+            onHasDevice: () => _step(context, session,
                 () => session.onboarding.saveDevice(hasDevice: true)),
-            onNoDevice: () => session.advance(
+            onNoDevice: () => _step(context, session,
                 () => session.onboarding.saveDevice(hasDevice: false)),
-            onSkip: () => session.advance(
+            onSkip: () => _step(context, session,
                 () => session.onboarding.skip(Routes.device)),
           ),
         ),
@@ -989,6 +1015,22 @@ Future<String?> _saveHere(
 /// inline closure inside a route table.
 void appNavigate(BuildContext context, String location) =>
     GoRouter.of(context).go(location);
+
+/// Runs an onboarding step that Settings can reopen once setup is done.
+///
+/// During onboarding the refreshed session is the navigation: the redirect
+/// moves the user to the next incomplete step. After setup nothing does - the
+/// redirect lets [Routes.revisitable] through on purpose - so a step reopened
+/// from Settings has to send the user back there itself.
+Future<void> _step(
+  BuildContext context,
+  AppSession session,
+  Future<void> Function() work,
+) async {
+  final revisiting = session.state.setupComplete;
+  await session.advance(work);
+  if (revisiting && context.mounted) appNavigate(context, Routes.settings);
+}
 
 
 /// Shown when a pairing code could not be issued.
