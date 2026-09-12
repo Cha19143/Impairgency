@@ -180,7 +180,8 @@ class ScanService {
     final inputBytes = _inputBytes;
     final outputBytes = _outputBytes;
     final output = _output;
-    if (_busy ||
+    if (_disposed ||
+        _busy ||
         interpreter == null ||
         inputBytes == null ||
         outputBytes == null ||
@@ -361,6 +362,18 @@ class ScanService {
     }
     await _controller?.dispose();
     _controller = null;
+
+    // A run that has not returned still has the interpreter's memory in hand
+    // on the worker's thread. Closing the interpreter under it is a SIGSEGV
+    // in libtensorflowlite_jni, not an exception the caller could catch: the
+    // app died on the scan screen's Back button, mid-inference. The stream is
+    // stopped above, so nothing new starts; wait for what is already running,
+    // and give up on it after two seconds rather than hang the screen.
+    var waited = 0;
+    while (_busy && waited < 100) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      waited++;
+    }
 
     // The worker holds the interpreter by address, so it has to be stopped
     // before the interpreter is closed under it.
