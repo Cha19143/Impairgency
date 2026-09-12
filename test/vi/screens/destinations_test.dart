@@ -231,6 +231,44 @@ void main() {
       expect(find.text('Stop directions to Home'), findsOneWidget);
     });
 
+    testWidgets('stopping directions clears them without a rebuild',
+        (tester) async {
+      // The router's go() to the route it is already on is a no-op, so the
+      // screen is never rebuilt with destination null; it has to forget the
+      // destination itself, or the link and the arrival line stay put.
+      final speaker = RecordingSpeaker();
+      final positions = StreamController<LocationFix>();
+      addTearDown(positions.close);
+      var stopped = 0;
+
+      await tester.pumpWidget(host(ScanScreen(
+        speaker: speaker,
+        service: FakeScan(),
+        destination: home,
+        positions: positions.stream,
+        onStopGuidance: () => stopped++,
+        onBack: () {},
+      )));
+      await tester.pump();
+      positions.add(fix(14.788, heading: 90));
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining('Turn left.'), findsOneWidget);
+
+      await tester.tap(find.text('Stop directions to Home'));
+      await tester.pump();
+
+      expect(stopped, 1);
+      expect(find.textContaining('Stop directions'), findsNothing);
+      expect(find.textContaining('Turn left.'), findsNothing);
+      expect(speaker.said.last.$1, startsWith('Directions stopped'));
+
+      // A later fix must not bring the directions back.
+      positions.add(fix(14.789, heading: 90));
+      await tester.pump();
+      expect(find.textContaining('Turn left.'), findsNothing);
+    });
+
     testWidgets('without a destination, nothing about directions',
         (tester) async {
       final speaker = RecordingSpeaker();
