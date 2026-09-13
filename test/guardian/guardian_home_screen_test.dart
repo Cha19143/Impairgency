@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/theme.dart';
+import 'package:impairgency/core/guardian/activity.dart';
 import 'package:impairgency/core/guardian/watched_user.dart';
 import 'package:impairgency/core/location/location_fix.dart';
 import 'package:impairgency/core/speech/speaker.dart';
@@ -152,5 +153,84 @@ void main() {
     )));
     await tester.pump();
     expect(find.text('Called for help 2 minutes ago.'), findsOneWidget);
+  });
+
+  testWidgets('recent activity: the last few things, newest first',
+      (tester) async {
+    final user = WatchedUser(
+      uid: 'u1',
+      name: 'Ana',
+      sharesActivity: true,
+      activity: [
+        ActivityEvent(
+            kind: ActivityKind.obstacle,
+            detail: 'chair',
+            at: now.subtract(const Duration(minutes: 2))),
+        ActivityEvent(
+            kind: ActivityKind.textRead,
+            detail: 'MEDICINE',
+            at: now.subtract(const Duration(minutes: 15))),
+        ActivityEvent(
+            kind: ActivityKind.journey,
+            detail: 'Work',
+            at: now.subtract(const Duration(hours: 1))),
+        ActivityEvent(
+            kind: ActivityKind.obstacle,
+            detail: 'car',
+            at: now.subtract(const Duration(hours: 2))),
+      ],
+    );
+    await tester.pumpWidget(host(screen(users: [user])));
+    await tester.pump();
+    expect(find.text('Recent activity'), findsOneWidget);
+    expect(find.text('Obstacle: chair'), findsOneWidget);
+    expect(find.text('Read: MEDICINE'), findsOneWidget);
+    expect(find.text('Set off for Work'), findsOneWidget);
+    // Three on the card, not four.
+    expect(find.text('Obstacle: car'), findsNothing);
+  });
+
+  testWidgets('says when activity is not shared, and when nothing happened',
+      (tester) async {
+    await tester.pumpWidget(host(screen(
+        users: const [WatchedUser(uid: 'u1', name: 'Ana')])));
+    await tester.pump();
+    expect(find.textContaining('not sharing what the app notices'),
+        findsOneWidget);
+
+    await tester.pumpWidget(host(screen(users: const [
+      WatchedUser(uid: 'u1', name: 'Ana', sharesActivity: true)
+    ])));
+    await tester.pump();
+    expect(find.text('Nothing noticed yet.'), findsOneWidget);
+  });
+
+  testWidgets('Live location needs a position and a handler',
+      (tester) async {
+    final withFix = WatchedUser(
+      uid: 'u1',
+      name: 'Ana',
+      sharesLocation: true,
+      fix: LocationFix(
+          latitude: 14.79, longitude: 120.92, accuracyMetres: 10, at: now),
+    );
+    WatchedUser? opened;
+    await tester.pumpWidget(host(GuardianHomeScreen(
+      users: [withFix],
+      now: () => now,
+      speaker: RecordingSpeaker(),
+      onCall: (_) async => true,
+      onOpenMap: (_) {},
+      onLiveLocation: (u) => opened = u,
+      onEnterCode: () {},
+      onSignOut: () {},
+    )));
+    await tester.pump();
+    await tester.tap(find.text('Live location'));
+    expect(opened?.uid, 'u1');
+
+    await tester.pumpWidget(host(screen(users: [withFix])));
+    await tester.pump();
+    expect(find.text('Live location'), findsNothing);
   });
 }

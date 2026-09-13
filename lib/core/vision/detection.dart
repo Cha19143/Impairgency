@@ -59,9 +59,12 @@ class Detection {
 
 /// What to say about a frame, or null to stay silent.
 class Guidance {
-  const Guidance({required this.phrase, required this.urgent});
+  const Guidance({required this.phrase, required this.urgent, this.label});
 
   final String phrase;
+
+  /// The nearest object's name, for anything that records what was said.
+  final String? label;
 
   /// Something is close enough to walk into. Interrupts, and buzzes.
   final bool urgent;
@@ -117,6 +120,7 @@ Guidance guidanceFor(List<Detection> detections) {
     phrase: phrase,
     urgent: primary.proximity == Proximity.veryClose &&
         primary.score >= kUrgentScore,
+    label: primary.label,
   );
 }
 

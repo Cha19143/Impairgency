@@ -26,9 +26,14 @@ class ReadTextScreen extends StatefulWidget {
     this.speaker = const SilentSpeaker(),
     this.reader,
     this.gap = kReadingGap,
+    this.onRead,
   });
 
   final VoidCallback onBack;
+
+  /// A page was found and is about to be read. Gets the whole text; the
+  /// session keeps only its first line for the guardian.
+  final void Function(String text)? onRead;
   final Speaker speaker;
 
   /// Injected in tests so the screen can be exercised without a camera.
@@ -99,6 +104,7 @@ class _ReadTextScreenState extends State<ReadTextScreen> {
       return;
     }
     setState(() => _session = session);
+    widget.onRead?.call(text ?? '');
     await widget.speaker.speak('${session.total} '
         '${session.total == 1 ? 'line' : 'lines'} found. Reading.');
     await _readFrom(session);

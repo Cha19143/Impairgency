@@ -1,4 +1,49 @@
-# Where we left off — 2026-09-12
+# Where we left off — 2026-09-13
+
+## Guardian side, this round
+
+Built and verified with two emulators (guardian on 5554, a signed-in user
+on 5556 with `adb emu geo fix`), one at a time - this Mac cannot run both.
+
+1. **Location sharing.** Nothing in the user app ever published a position;
+   the guardian card said "none recorded yet" forever. `LocationSharer`
+   (`lib/data/location_sharer.dart`) polls every 30 s while the app is in
+   the foreground and `consent.location` is on, and writes `users/{uid}
+   .lastFix`. `SharePolicy` sends the first reading, a move of 15 m, or a
+   5-minute heartbeat; never a cell-tower guess. It asks the OS for
+   permission once, because nothing else on a normal path does. Turning
+   consent off deletes the field. The guardian reads `lastFix` off the
+   profile; `location_history/fixes` stays as a fallback.
+2. **Recent activity.** New consent `activity` ("Share what the app
+   notices"), new collection `users/{uid}/activity` (rules deployed
+   2026-09-13), `ActivityRepository`, and `AppSession.recordActivity`.
+   Rows: obstacle warnings (throttled to one per object per minute), the
+   first line of a page read, and destinations set. The card shows three.
+3. **Live location.** `LiveLocationScreen` - flutter_map + OpenStreetMap
+   tiles, marker, accuracy circle, "Updated N ago, to within M metres",
+   rebuilds on each new fix. Route `/guardian/live?uid=`.
+4. The pairing-code screen has a Back arrow; before, system back left the
+   app.
+
+Not built: "Mode: Active now" and battery on the mock. SOS still lives on
+its own line, not in the activity feed.
+
+## Seen, not fixed
+
+- A `saved_places` write was refused by the rules once, right after
+  sign-in on a fresh device; later writes went through. Probably the
+  write racing the auth token. Worth a look.
+- Back from Saved places goes to Settings even when reached from Smart
+  assistance.
+- The guardian's log shows a permission-denied read of `admins/{uid}` on
+  every launch: the admin check for a non-admin. Harmless noise.
+- Xcode has no Apple ID signed in, so no iPhone build can be signed until
+  someone signs in (Settings, Accounts). The iPhone still has the
+  2026-09-12 build.
+
+---
+
+# Previous round — 2026-09-12
 
 ## What happened
 

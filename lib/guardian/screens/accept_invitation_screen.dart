@@ -21,7 +21,12 @@ class AcceptInvitationScreen extends StatefulWidget {
     super.key,
     required this.onRedeem,
     this.onAccepted,
+    this.onBack,
   });
+
+  /// Back to wherever the guardian came from. Without it this screen had no
+  /// way out but a valid code: the system back gesture left the app.
+  final VoidCallback? onBack;
 
   /// Returns null on success, or a message to show on failure.
   final RedeemHandler onRedeem;
@@ -75,7 +80,16 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('ImpairGency')),
+      appBar: AppBar(
+        title: const Text('ImpairGency'),
+        leading: widget.onBack == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Back',
+                onPressed: widget.onBack,
+              ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),

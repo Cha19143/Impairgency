@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'dart:async';
 
@@ -35,6 +36,11 @@ import '../data/local_alert_presenter.dart';
 import '../data/pairing_repository.dart';
 import '../data/saved_places_repository.dart';
 import '../data/location_history_repository.dart';
+import '../data/location_sharer.dart';
+import '../data/activity_repository.dart';
+import '../core/guardian/activity.dart';
+import '../core/guardian/watched_user.dart';
+import '../guardian/screens/live_location_screen.dart';
 import '../data/sos_engine.dart';
 import '../data/stt_speech_recognizer.dart';
 import '../guardian/screens/accept_invitation_screen.dart';
@@ -82,10 +88,73 @@ class AppSession extends ChangeNotifier {
     Speaker? speaker,
     PairingRepository? pairing,
     SpeechRecognizer? recognizer,
+    LocationSharing? sharer,
+    ActivityRecorder? activity,
   })  : store = store ?? InMemorySessionStore(),
         speaker = speaker ?? const SilentSpeaker(),
         _pairing = pairing,
-        _recognizer = recognizer;
+        _recognizer = recognizer,
+        _sharer = sharer,
+        _activity = activity;
+
+  /// Where "what the app noticed" goes for the guardian. Null in tests.
+  final ActivityRecorder? _activity;
+  final _activityThrottle = ActivityThrottle();
+
+  /// Tells the guardian what the app noticed - if the user said it may,
+  /// and not the same thing twice in a minute.
+  void recordActivity(ActivityKind kind, String detail) {
+    final recorder = _activity;
+    final uid = _state.uid;
+    if (recorder == null || uid == null) return;
+    if (_state.consent['activity'] != true) return;
+    final headline = ActivityEvent.headline(detail);
+    if (headline.isEmpty) return;
+    final now = DateTime.now();
+    if (!_activityThrottle.admit(kind, headline, now)) return;
+    unawaited(recorder
+        .record(uid, ActivityEvent(kind: kind, detail: headline, at: now))
+        .catchError((_) {}));
+  }
+
+  /// Publishes the user's position for their guardians. Null in tests and
+  /// nothing then happens; app.dart passes the real one.
+  final LocationSharing? _sharer;
+
+  /// Whether the app is on screen. Sharing runs only while it is: the app
+  /// does no background work, so a guardian's card should age honestly
+  /// rather than show a position the phone stopped reading.
+  bool _foreground = true;
+
+  void setForeground(bool foreground) {
+    _foreground = foreground;
+    _syncSharing(_state);
+  }
+
+  /// Keeps the sharer in step with the session: on while a visually impaired
+  /// user is signed in, has said "Share where I am", and has the app open;
+  /// off otherwise. Switching the consent off also removes the published
+  /// point, so the guardian's card says "not sharing" and not somewhere
+  /// stale.
+  void _syncSharing(SessionState before) {
+    final sharer = _sharer;
+    if (sharer == null) return;
+    final uid = _state.uid;
+    final consented = _state.consent['location'] == true;
+    if (_state.signedIn && !_state.isGuardian && uid != null && consented) {
+      if (_foreground) {
+        sharer.start(uid, recordHistory: _state.consent['history'] == true);
+      } else {
+        sharer.stop();
+      }
+      return;
+    }
+    sharer.stop();
+    final wasConsented = before.consent['location'] == true;
+    if (wasConsented && !consented && uid != null) {
+      unawaited(sharer.forget(uid));
+    }
+  }
 
   final SessionStore store;
   final Speaker speaker;
@@ -175,6 +244,7 @@ class AppSession extends ChangeNotifier {
   Future<void> setDestination(Destination? place) async {
     destination = place;
     notifyListeners();
+    if (place != null) recordActivity(ActivityKind.journey, place.label);
     final uid = _state.uid;
     if (place == null || uid == null) return;
     try {
@@ -374,8 +444,16 @@ class AppSession extends ChangeNotifier {
   }
 
   void update(SessionState next) {
+    final before = _state;
     _state = next;
+    _syncSharing(before);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _sharer?.stop();
+    super.dispose();
   }
 
   /// Runs an onboarding step's work, then re-reads what is complete.
@@ -668,6 +746,8 @@ GoRouter createRouter(AppSession session) {
               await session.setDestination(null);
               if (context.mounted) appNavigate(context, Routes.scan);
             },
+            onObstacle: (label) =>
+                session.recordActivity(ActivityKind.obstacle, label),
             onBack: () => appNavigate(context, Routes.home),
           ),
         ),
@@ -675,6 +755,7 @@ GoRouter createRouter(AppSession session) {
           path: Routes.readText,
           builder: (context, _) => ReadTextScreen(
             speaker: session.speaker,
+            onRead: (text) => session.recordActivity(ActivityKind.textRead, text),
             onBack: () => appNavigate(context, Routes.home),
           ),
         ),
@@ -809,7 +890,25 @@ GoRouter createRouter(AppSession session) {
             speaker: session.speaker,
             onEnterCode: () => appNavigate(context, Routes.guardianAccept),
             onSignOut: () => appNavigate(context, Routes.signOut),
+            onLiveLocation: (user) => appNavigate(
+                context, '${Routes.guardianLive}?uid=${user.uid}'),
           ),
+        ),
+        GoRoute(
+          path: Routes.guardianLive,
+          builder: (context, state) {
+            final uid = state.uri.queryParameters['uid'];
+            return LiveLocationScreen(
+              user: session.guardian
+                  .watch(session.state.uid ?? '')
+                  .map((users) => users
+                      .cast<WatchedUser?>()
+                      .firstWhere((u) => u!.uid == uid, orElse: () => null)),
+              onBack: () => appNavigate(context, Routes.guardianHome),
+              onOpenMap: (fix) => launchUrl(mapLinkFor(fix),
+                  mode: LaunchMode.externalApplication),
+            );
+          },
         ),
         GoRoute(
           path: Routes.guardianRegister,
@@ -829,6 +928,7 @@ GoRouter createRouter(AppSession session) {
           builder: (context, _) => AcceptInvitationScreen(
             onRedeem: (code) => _redeem(session, code),
             onAccepted: () => appNavigate(context, Routes.guardianHome),
+            onBack: () => appNavigate(context, Routes.guardianHome),
           ),
         ),
 

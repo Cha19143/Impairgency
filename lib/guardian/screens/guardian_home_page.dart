@@ -24,9 +24,12 @@ class GuardianHomePage extends StatefulWidget {
     required this.presenter,
     required this.onEnterCode,
     required this.onSignOut,
+    this.onLiveLocation,
     this.speaker = const SilentSpeaker(),
     this.reachabilityNote,
   });
+
+  final void Function(WatchedUser user)? onLiveLocation;
 
   final String guardianId;
   final GuardianRepository repository;
@@ -113,6 +116,7 @@ class _GuardianHomePageState extends State<GuardianHomePage> {
         reachabilityNote: widget.reachabilityNote,
         onCall: _call,
         onOpenMap: _openMap,
+        onLiveLocation: widget.onLiveLocation,
         onEnterCode: widget.onEnterCode,
         onSignOut: widget.onSignOut,
       );

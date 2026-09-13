@@ -65,6 +65,9 @@ abstract final class Routes {
   static const guardianHome = '/guardian';
   static const guardianAccept = '/guardian/accept';
 
+  /// The map that follows one watched person. `?uid=` says who.
+  static const guardianLive = '/guardian/live';
+
   /// The guardian's own door in. Reachable signed out, like [createAccount].
   static const guardianRegister = '/guardian/register';
 

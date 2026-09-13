@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/alerts/sos_alert.dart';
+import '../core/guardian/activity.dart';
 import '../core/guardian/watched_user.dart';
 import '../core/location/location_fix.dart';
+import 'activity_repository.dart';
 import 'pairing_repository.dart';
 
 /// What the guardian dashboard reads.
@@ -23,6 +25,10 @@ class GuardianRepository {
   final PairingRepository _pairing;
   FirebaseFirestore? _firestore;
   FirebaseFirestore get _db => _firestore ??= FirebaseFirestore.instance;
+
+  ActivityRepository? _activityRepo;
+  ActivityRepository get _activity =>
+      _activityRepo ??= ActivityRepository(firestore: _db);
 
   /// Everything the dashboard shows, kept live.
   ///
@@ -43,6 +49,7 @@ class GuardianRepository {
       final contact = data['emergencyContact'] as Map<String, dynamic>?;
       final consent = data['consent'] as Map<String, dynamic>?;
       final shares = consent?['location'] == true;
+      final sharesActivity = consent?['activity'] == true;
       final base = WatchedUser(
         uid: uid,
         name: (data['name'] ?? data['displayName']) as String?,
@@ -50,26 +57,57 @@ class GuardianRepository {
         contactName: contact?['name'] as String?,
         contactNumber: contact?['number'] as String?,
         sharesLocation: shares,
+        sharesActivity: sharesActivity,
       );
 
-      // Only asked for when consent says the server will answer. Asking
-      // anyway would be a permission error on every snapshot.
-      final fixes = shares
-          ? _latestFix(uid)
-          : Stream<LocationFix?>.value(null);
+      // The user app writes its position onto its own document as
+      // `lastFix` while sharing is on (see LocationSharer), so the point
+      // arrives with the profile. The history collection is the fallback
+      // for an account that has a trail but no field yet, and is only asked
+      // for when consent says the server will answer - asking anyway would
+      // be a permission error on every snapshot.
+      final direct = shares ? _fixFrom(data['lastFix']) : null;
+      final fixes = direct != null
+          ? Stream<LocationFix?>.value(direct)
+          : shares
+              ? _latestFix(uid)
+              : Stream<LocationFix?>.value(null);
       final sos = _lastSos(uid);
+      // Same gate as the fixes: only asked for when the rules will answer.
+      final activity = sharesActivity
+          ? _activity
+              .recent(uid)
+              .handleError((_) {}, test: (_) => true)
+              .startWithValue(const <ActivityEvent>[])
+          : Stream.value(const <ActivityEvent>[]);
 
-      return _combine2(fixes, sos).map((pair) => WatchedUser(
+      return _combine2(_combine2(fixes, sos), activity).map((all) => WatchedUser(
             uid: base.uid,
             name: base.name,
             phone: base.phone,
             contactName: base.contactName,
             contactNumber: base.contactNumber,
             sharesLocation: base.sharesLocation,
-            fix: pair.$1,
-            lastSos: pair.$2,
+            fix: all.$1.$1,
+            lastSos: all.$1.$2,
+            sharesActivity: base.sharesActivity,
+            activity: all.$2,
           ));
     });
+  }
+
+  static LocationFix? _fixFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final lat = raw['lat'];
+    final lng = raw['lng'];
+    final at = raw['at'];
+    if (lat is! num || lng is! num || at is! Timestamp) return null;
+    return LocationFix(
+      latitude: lat.toDouble(),
+      longitude: lng.toDouble(),
+      accuracyMetres: (raw['accuracy'] as num?)?.toDouble() ?? 0,
+      at: at.toDate(),
+    );
   }
 
   Stream<LocationFix?> _latestFix(String uid) => _db
@@ -216,6 +254,13 @@ extension _SwitchMap<T> on Stream<T> {
       },
     );
     return controller.stream;
+  }
+}
+
+extension _StartWithValue<T> on Stream<T> {
+  Stream<T> startWithValue(T value) async* {
+    yield value;
+    yield* this;
   }
 }
 
