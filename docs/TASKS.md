@@ -31,8 +31,8 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
-| Tester feedback round 2 — September 15 | `███████████░` | 31 / 35 |
-| **Overall** | | **134 / 139  (96%)** |
+| Tester feedback round 2 — September 15 | `███████████░` | 33 / 36 |
+| **Overall** | | **136 / 140  (97%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -478,9 +478,10 @@ the scope table now states.
       Saved places
 - [x] "Where am I" names the street when the map can say quickly
 - [x] OpenStreetMap credited on the scan screen and on the guardian's map
-- [ ] Record one real OSRM and one real Photon answer as fixtures, with the
-      team's agreement — the tests use hand-written ones in the documented
-      shape
+- [x] Real OSRM and Photon answers recorded between two Malolos landmarks
+      (`test/core/navigation/recorded/`). A walk along the real route is
+      guided turn by turn in a test; the real search found two Jollibees on
+      one highway being merged, now fixed
 - [ ] Walk a route on a real phone in Malolos: prompt timing at walking
       pace, off-route false alarms at 10–20 m GPS error
 
@@ -494,8 +495,10 @@ the scope table now states.
 - [x] Faces kept on the phone as numbers, excluded from Android and iOS
       backups, deleted when the consent is turned off and at sign-out
 - [x] People I know, under Settings: forget one, or everyone
-- [ ] Download the two face models, with the team's agreement on each file
-      and its licence — see [`VISION.md`](VISION.md)
+- [x] BlazeFace downloaded from Google's MediaPipe assets; hash and tensor
+      shapes checked (`tool/tflite_shapes.py`)
+- [ ] MobileFaceNet: agree the exact file and its weights' licence, then add
+      it — see [`VISION.md`](VISION.md)
 - [ ] Calibrate the match threshold with volunteers, at 0.5–3 m, in daylight
       and indoors
 

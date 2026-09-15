@@ -59,7 +59,7 @@ the point.
 ```
 Requirements built            16 of 21
 Declared out of scope          5, each with a reason
-Flutter tests               1129
+Flutter tests               1136
 Security rules tests          90
 Browser tests                 12
 Platforms building             2 of 3 checked this round: Android and web.

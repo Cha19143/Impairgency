@@ -2,10 +2,11 @@
 ///
 /// Written by hand in the shape each service documents - OSRM's
 /// `/route/v1` with `steps=true&geometries=geojson&overview=full`, and
-/// Photon's GeoJSON - rather than recorded, because recording one means
-/// sending a real position to a real server. Swap in a recorded answer when
-/// one has been taken with the team's agreement; the tests should not need to
-/// change.
+/// Photon's GeoJSON - so each rule can be tested on a route simple enough to
+/// check by eye. Real answers, recorded between two landmarks in Malolos, are
+/// in `recorded/` and tested in `recorded_answers_test.dart`: they are what
+/// proved these shapes right, and found two branches of one shop being
+/// merged into one.
 ///
 /// The route is a made-up walk in Malolos, laid on a square grid so its
 /// distances can be checked by eye:

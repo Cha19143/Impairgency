@@ -60,6 +60,28 @@ void main() {
       expect(found[1].area, 'Longos', reason: 'a district, when there is no city');
     });
 
+    test('two branches with one name and one street are both offered', () {
+      final found = parsePhoton({
+        'features': [
+          for (final (lon, lat, city) in [
+            (120.8237, 14.8499, 'Malolos'),
+            (120.8739, 14.8282, 'Guiguinto'),
+          ])
+            {
+              'geometry': {'coordinates': [lon, lat]},
+              'properties': {
+                'osm_type': 'N',
+                'osm_id': city.length,
+                'name': 'Jollibee',
+                'street': 'MacArthur Highway',
+                'city': city,
+              },
+            },
+        ],
+      });
+      expect(found.map((p) => p.area), ['Malolos', 'Guiguinto']);
+    });
+
     test('far away is not what someone walking means', () {
       final near = nearbyCandidates(parsePhoton(map.photonJollibee), map.a);
       expect(near.map((p) => p.street), ['Paseo del Congreso', 'MacArthur Highway']);

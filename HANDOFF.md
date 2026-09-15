@@ -4,7 +4,7 @@
 
 The testers' list of September 15, all of it, on branch
 `claude/tester-feedback-sept-15`. Nothing committed or deployed yet.
-`flutter analyze` is clean; **1129** Flutter tests, **90** rules tests and
+`flutter analyze` is clean; **1136** Flutter tests, **90** rules tests and
 **12** browser tests pass. A release APK and the web app build. The checklist
 is in [`docs/TASKS.md`](docs/TASKS.md), "Tester feedback round 2".
 
@@ -28,14 +28,18 @@ is in [`docs/TASKS.md`](docs/TASKS.md), "Tester feedback round 2".
    deleted with the consent and at sign-out. **Needs the two face models,
    which are not downloaded** — see `docs/VISION.md`, "Faces".
 
+Since then (2026-09-16): **Firestore rules and hosting deployed**; PR
+calmadex/impairgency#83 open; real OSRM and Photon answers recorded as
+fixtures, which caught place search merging two branches of one shop; the
+BlazeFace model added and checked; the test APKs on release `apk-2026-09-10`
+updated.
+
 ## Waiting on someone
 
-- **Firestore rules** changed (verified email for invitations, account
-  removal, admin edit limits). Not deployed:
-  `firebase deploy --only firestore:rules`.
-- **Hosting** not redeployed. `build/web` is a plain release build.
-- **Face models** — one agreement per file, with its licence.
-- **Recorded fixtures** from one real OSRM and one real Photon request.
+- **MobileFaceNet** — agree the exact file and the weights' licence (see
+  `docs/VISION.md`, "Faces"). Until then recognition says it is unavailable.
+- **Two superseded APKs** are still attached to the release, marked as such;
+  delete them when the new ones are confirmed to install.
 - **iOS build** — the build Mac's Xcode licence has not been accepted
   (`sudo xcodebuild -license`), so git and `flutter build ios` fail with exit
   69 in a normal shell. The session worked around it with

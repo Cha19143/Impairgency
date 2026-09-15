@@ -138,7 +138,6 @@ List<PlaceCandidate> parsePhoton(Object? json) {
         MapServiceFailure.unavailable, 'no features');
   }
   final found = <PlaceCandidate>[];
-  final seen = <String>{};
   for (final feature in features) {
     if (feature is! Map) continue;
     final geometry = feature['geometry'];
@@ -172,13 +171,25 @@ List<PlaceCandidate> parsePhoton(Object? json) {
       id: '${text('osm_type')}${properties['osm_id'] ?? ''}',
     );
     if (candidate.label.isEmpty) continue;
-    // The same shop mapped as a point and as a building comes back twice.
-    final key = '${candidate.label.toLowerCase()}|${candidate.street}';
-    if (!seen.add(key)) continue;
+    // The same shop mapped as a point and as a building comes back twice, a
+    // few metres apart. Two branches on the same highway are kilometres
+    // apart, and both are worth offering - the recorded search found two
+    // Jollibees on MacArthur Highway, in different towns.
+    final label = candidate.label.toLowerCase();
+    if (found.any((f) =>
+        f.label.toLowerCase() == label &&
+        metresBetween(f.latitude, f.longitude, candidate.latitude,
+                candidate.longitude) <
+            kSamePlaceMetres)) {
+      continue;
+    }
     found.add(candidate);
   }
   return found;
 }
+
+/// Two results with one name this close together are one place.
+const double kSamePlaceMetres = 60;
 
 /// Found places further than this are not what someone walking means.
 const double kSearchRadiusMetres = 30000;

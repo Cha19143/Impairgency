@@ -192,10 +192,18 @@ frame or more), or a friend being saved. Never more often than every 400 ms.
 Both are **checked at load**, by shape, as the detector is. The recogniser's
 output length is read off the model, so a 128- or 192-number variant both work.
 
-**Neither file is in the repository yet.** Each is downloaded only with the
-team's agreement on that file, its source and its licence. A build without them
-runs normally: the scan screen says *"Recognising people is not available on
-this phone yet"* when asked, and nothing else changes.
+**The detector is in; the recogniser is not yet.** Each file is added only with
+the team's agreement on that file, its source and its licence. A build without
+both runs normally: the scan screen says *"Recognising people is not available
+on this phone yet"* when asked, and nothing else changes.
+
+| File | Source | Size | Checked |
+|---|---|---|---|
+| `face_detection_short_range.tflite` | Google, `https://storage.googleapis.com/mediapipe-assets/face_detection_short_range.tflite` | 229,032 bytes, SHA-256 `3bc182eb9f33925d9e58b5c8d59308a760f4adea8f282370e428c51212c26633` | MD5 matches Google's; `input [1,128,128,3]`, `regressors [1,896,16]`, `classificators [1,896,1]`, all float32 |
+| `mobilefacenet.tflite` | Proposed: `MCarlomagno/FaceRecognitionAuth`, `assets/mobilefacenet.tflite` (repository BSD-3-Clause, archived) | 5,233,552 bytes | Not downloaded. Check `input [1,112,112,3]` and `[1,N]` output with `tool/tflite_shapes.py` before adding |
+
+`tool/tflite_shapes.py` reads a model's tensors without TensorFlow; it reports
+YOLO11n as `[1,3,640,640]` in and `[1,84,8400]` out, as `ScanService` expects.
 
 ## How a face is read
 
@@ -240,7 +248,7 @@ activity feed or the history.
 
 ## Licences
 
-- **BlazeFace** is published by Google under **Apache-2.0**.
+- **BlazeFace** is published by Google under **Apache-2.0** (MediaPipe).
 - **MobileFaceNet**: the architecture and most published code are Apache-2.0 or
   MIT, but the widely shared weights were trained on **MS-Celeb-1M**-derived
   data (MS1M / MS1MV2), released for **non-commercial research use**. That is
