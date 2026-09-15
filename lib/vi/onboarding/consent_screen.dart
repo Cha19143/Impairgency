@@ -41,6 +41,13 @@ const kConsentChoices = <ConsentChoice>[
         'back.',
   ),
   ConsentChoice(
+    key: 'activity',
+    title: 'Share what the app notices',
+    detail: 'Your guardian can see the last few obstacles it warned you '
+        'about, the first line of anything it read to you, and where you '
+        'set off for. Never the camera itself.',
+  ),
+  ConsentChoice(
     key: 'faces',
     title: 'Recognise people I know',
     detail: 'Names people you have saved. Stays on this phone and is never '

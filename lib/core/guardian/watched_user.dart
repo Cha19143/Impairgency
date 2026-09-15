@@ -7,6 +7,7 @@ library;
 
 import '../location/location_fix.dart';
 import '../location/location_policy.dart';
+import 'activity.dart';
 
 /// What the guardian dashboard knows about one visually impaired user.
 class WatchedUser {
@@ -19,6 +20,8 @@ class WatchedUser {
     this.sharesLocation = false,
     this.fix,
     this.lastSos,
+    this.sharesActivity = false,
+    this.activity = const [],
   });
 
   final String uid;
@@ -40,6 +43,13 @@ class WatchedUser {
 
   /// When they last fired an SOS that was not cancelled, if ever.
   final DateTime? lastSos;
+
+  /// `consent.activity`. Off means the rows below are refused and the card
+  /// says so.
+  final bool sharesActivity;
+
+  /// The last few things the app noticed, newest first.
+  final List<ActivityEvent> activity;
 
   String get displayName =>
       name?.trim().isNotEmpty == true ? name!.trim() : 'Someone you watch over';

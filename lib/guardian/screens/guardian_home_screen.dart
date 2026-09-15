@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/guardian/activity.dart';
 import '../../core/guardian/watched_user.dart';
+import '../../core/location/location_policy.dart' show describeAge;
 import '../../core/speech/speaker.dart';
 import '../../vi/widgets/vi_button.dart';
 
@@ -23,6 +25,7 @@ class GuardianHomeScreen extends StatefulWidget {
     required this.users,
     required this.onCall,
     required this.onOpenMap,
+    this.onLiveLocation,
     required this.onEnterCode,
     required this.onSignOut,
     this.loading = false,
@@ -37,6 +40,9 @@ class GuardianHomeScreen extends StatefulWidget {
   /// Dials [CallTarget.number]. Returns false if the dialler refused.
   final Future<bool> Function(CallTarget target) onCall;
   final void Function(WatchedUser user) onOpenMap;
+
+  /// The map that follows them, in the app. Null hides the button.
+  final void Function(WatchedUser user)? onLiveLocation;
   final VoidCallback onEnterCode;
   final VoidCallback onSignOut;
 
@@ -156,6 +162,10 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
                         onOpenMap: user.fix == null
                             ? null
                             : () => widget.onOpenMap(user),
+                        onLiveLocation:
+                            user.fix == null || widget.onLiveLocation == null
+                                ? null
+                                : () => widget.onLiveLocation!(user),
                       ),
                   if (_notice != null)
                     Semantics(
@@ -222,12 +232,14 @@ class _UserCard extends StatelessWidget {
     required this.now,
     required this.onCall,
     required this.onOpenMap,
+    required this.onLiveLocation,
   });
 
   final WatchedUser user;
   final DateTime now;
   final VoidCallback onCall;
   final VoidCallback? onOpenMap;
+  final VoidCallback? onLiveLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -299,6 +311,8 @@ class _UserCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _RecentActivity(user: user, now: now),
           const SizedBox(height: 14),
           ViButton(
             label: 'Call',
@@ -308,6 +322,14 @@ class _UserCard extends StatelessWidget {
             kind: ViButtonKind.emergency,
             onPressed: onCall,
           ),
+          if (onLiveLocation != null)
+            ViButton(
+              label: 'Live location',
+              detail: 'A map that follows them',
+              icon: Icons.my_location,
+              kind: ViButtonKind.primary,
+              onPressed: onLiveLocation,
+            ),
           if (onOpenMap != null)
             ViButton(
               label: 'Open on a map',
@@ -318,6 +340,88 @@ class _UserCard extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// The last few things the app noticed - the tester's "recent activity".
+///
+/// Three rows at most on the card; the point is the newest one. Says so
+/// when the user has not agreed to share this, rather than showing nothing
+/// and leaving the guardian to wonder whether the app is working.
+class _RecentActivity extends StatelessWidget {
+  const _RecentActivity({required this.user, required this.now});
+
+  final WatchedUser user;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = user.activity.take(3).toList();
+    final String? note = !user.sharesActivity
+        ? '${user.displayName} is not sharing what the app notices.'
+        : rows.isEmpty
+            ? 'Nothing noticed yet.'
+            : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Recent activity',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        if (note != null)
+          Text(
+            note,
+            style: const TextStyle(
+                fontSize: 16, height: 1.4, color: AppColors.textSecondary),
+          ),
+        for (final event in rows)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Semantics(
+              label: describeActivity(event, now: now),
+              child: ExcludeSemantics(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      switch (event.kind) {
+                        ActivityKind.obstacle => Icons.warning_amber_outlined,
+                        ActivityKind.textRead => Icons.menu_book_outlined,
+                        ActivityKind.journey => Icons.directions_walk,
+                      },
+                      size: 20,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        activityHeadline(event),
+                        style: const TextStyle(
+                            fontSize: 16,
+                            height: 1.3,
+                            color: AppColors.textPrimary),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      describeAge(now.difference(event.at)),
+                      style: const TextStyle(
+                          fontSize: 14, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

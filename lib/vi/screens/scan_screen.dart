@@ -32,6 +32,7 @@ class ScanScreen extends StatefulWidget {
     this.destination,
     this.positions,
     this.onStopGuidance,
+    this.onObstacle,
   });
 
   final VoidCallback onBack;
@@ -46,6 +47,10 @@ class ScanScreen extends StatefulWidget {
 
   /// Clears the destination and keeps scanning.
   final VoidCallback? onStopGuidance;
+
+  /// Something close enough to walk into was warned about, by name. The
+  /// session tells the guardian, if the user said it may.
+  final void Function(String label)? onObstacle;
 
   /// Takes priorities, because this is the one screen where two things can
   /// need saying at once and one of them is a hazard.
@@ -181,6 +186,9 @@ class _ScanScreenState extends State<ScanScreen> {
     _lastSpokenAt = now;
     // A buzz as well as a word: someone in traffic may not hear it.
     if (guidance.urgent) HapticFeedback.heavyImpact();
+    if (guidance.urgent && guidance.label != null) {
+      widget.onObstacle?.call(guidance.label!);
+    }
     // Hazards preempt whatever else is being said and are never restarted
     // while still in progress; ordinary descriptions wait their turn. The
     // queue holds that rule, not this screen.

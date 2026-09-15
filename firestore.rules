@@ -115,6 +115,18 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // What the app noticed - an obstacle's name, a page's first line, a
+    // destination - for the guardian's "recent activity". Its own consent:
+    // agreeing to be located is not agreeing to be narrated.
+    match /users/{userId}/activity/{eventId} {
+      allow read: if isOwner(userId)
+                  || isAdmin()
+                  || (isPairedGuardianOf(userId) && hasConsent(userId, 'activity'));
+      allow create: if isOwner(userId) && hasConsent(userId, 'activity');
+      allow update: if false;
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
     // ---- pairing -------------------------------------------------------
 
     // A code is written by the user who owns it and redeemed by whoever is

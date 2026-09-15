@@ -160,4 +160,24 @@ void main() {
     expect(find.textContaining('does not contain the letter O'),
         findsOneWidget);
   });
+
+  testWidgets('has a way back when given one', (tester) async {
+    // Without onBack the screen had no way out but a valid code, and the
+    // system back gesture left the app.
+    var back = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: AcceptInvitationScreen(
+        onRedeem: (_) async => null,
+        onBack: () => back++,
+      ),
+    ));
+    expect(find.byTooltip('Back'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    expect(back, 1);
+
+    await tester.pumpWidget(MaterialApp(
+      home: AcceptInvitationScreen(onRedeem: (_) async => null),
+    ));
+    expect(find.byTooltip('Back'), findsNothing);
+  });
 }

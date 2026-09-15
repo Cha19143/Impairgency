@@ -196,4 +196,26 @@ void main() {
     expect(find.text('SCAN ENVIRONMENT'), findsOneWidget,
         reason: 'scan stays what it was');
   });
+
+  testWidgets('tells the caller what page was found, once, before reading',
+      (tester) async {
+    final speaker = SlowSpeaker();
+    final read = <String>[];
+    await tester.pumpWidget(host(ReadTextScreen(
+      speaker: speaker,
+      reader: FakeReader(),
+      gap: Duration.zero,
+      onBack: () {},
+      onRead: read.add,
+    )));
+    await settle(tester);
+    speaker.finish();
+    await settle(tester);
+    expect(read, isEmpty);
+
+    await tester.tap(find.text('Read'));
+    await settle(tester);
+    expect(read, hasLength(1));
+    expect(read.single, isNotEmpty);
+  });
 }

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../data/activity_repository.dart';
+import '../data/geolocator_location_source.dart';
+import '../data/location_history_repository.dart';
+import '../data/location_sharer.dart';
 import '../data/prefs_session_store.dart';
 import '../core/speech/speech_queue.dart';
 import '../data/tts_engine.dart';
@@ -16,12 +20,22 @@ class ImpairGencyApp extends StatefulWidget {
   State<ImpairGencyApp> createState() => _ImpairGencyAppState();
 }
 
-class _ImpairGencyAppState extends State<ImpairGencyApp> {
+class _ImpairGencyAppState extends State<ImpairGencyApp>
+    with WidgetsBindingObserver {
   late final AppSession _session = AppSession(
     store: PrefsSessionStore(),
     // One queue for everything the app says. Hazards preempt; nothing else
     // cuts a sentence short. See core/speech/speech_queue.dart.
     speaker: SpeechQueue(engine: TtsEngine()),
+    // The guardian's copy of where the user is. The session switches it on
+    // and off with consent and with the app coming to the front.
+    activity: ActivityRepository(),
+    sharer: LocationSharer(
+      source: const GeolocatorLocationSource(),
+      sink: FirestoreLastFixSink(),
+      recordHistory: (uid, fix) => LocationHistoryRepository()
+          .record(uid, fix, sessionId: 'sharing'),
+    ),
   );
   late final _router = createRouter(_session);
 
@@ -39,6 +53,7 @@ class _ImpairGencyAppState extends State<ImpairGencyApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.wait<void>([
       _session.load(),
       // Firebase answers in well under a second on a phone. If it never does,
@@ -51,7 +66,13 @@ class _ImpairGencyAppState extends State<ImpairGencyApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _session.setForeground(state == AppLifecycleState.resumed);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _session.dispose();
     super.dispose();
   }

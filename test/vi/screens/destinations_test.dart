@@ -269,6 +269,31 @@ void main() {
       expect(find.textContaining('Turn left.'), findsNothing);
     });
 
+    testWidgets('names an obstacle it warned about, not a clear path',
+        (tester) async {
+      final scan = FakeScan();
+      final named = <String>[];
+      await tester.pumpWidget(host(ScanScreen(
+        speaker: RecordingSpeaker(),
+        service: scan,
+        onObstacle: named.add,
+        onBack: () {},
+      )));
+      await tester.pump();
+      scan.onFrame!([
+        const Detection(label: 'car', score: 0.9, centerX: 0.5, extent: 0.7),
+      ]);
+      await tester.pump();
+      expect(named, ['car']);
+
+      // Far away is guidance, not an obstacle warning.
+      scan.onFrame!([
+        const Detection(label: 'bench', score: 0.9, centerX: 0.5, extent: 0.1),
+      ]);
+      await tester.pump();
+      expect(named, ['car']);
+    });
+
     testWidgets('without a destination, nothing about directions',
         (tester) async {
       final speaker = RecordingSpeaker();
