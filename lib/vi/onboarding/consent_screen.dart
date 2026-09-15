@@ -50,8 +50,9 @@ const kConsentChoices = <ConsentChoice>[
   ConsentChoice(
     key: 'faces',
     title: 'Recognise people I know',
-    detail: 'Names people you have saved. Stays on this phone and is never '
-        'uploaded.',
+    detail: 'The scan screen names friends who agreed to be saved. Their faces '
+        'stay on this phone and are never uploaded; turning this off deletes '
+        'them.',
   ),
 ];
 
@@ -100,7 +101,8 @@ class _ConsentScreenState extends State<ConsentScreen> {
         'Everything here starts switched off. Nothing is shared until you turn '
             'it on, and you can change any of it later.',
       ],
-      spokenSuffix: 'There are four switches. All of them are off.',
+      spokenSuffix: 'There are ${kConsentChoices.length} switches. All of them '
+          'are off.',
       extra: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -142,6 +144,7 @@ class _ConsentSwitch extends StatelessWidget {
     return Semantics(
       toggled: value,
       label: '${choice.title}. ${choice.detail}',
+      onTap: () => onChanged(!value),
       child: ExcludeSemantics(
         child: Padding(
           padding: const EdgeInsets.only(bottom: 10),

@@ -75,6 +75,21 @@ service cloud.firestore {
       return userDoc(userId).consent[key] == true;
     }
 
+    // An administrator removed this account. Its Firebase sign-in cannot be
+    // deleted without a server, so it is marked instead, and everything that
+    // account could write, it now cannot.
+    function isRemoved(userId) {
+      return exists(/databases/$(database)/documents/removed_accounts/$(userId));
+    }
+
+    // What an administrator may change on someone's account - the same list as
+    // AdminRepository.editableKeys. Not consent: whether someone's location is
+    // shared is theirs to decide.
+    function adminEditable() {
+      return ['name', 'displayName', 'age', 'impairment', 'impairmentDetail',
+              'phone', 'deviceId', 'role', 'updatedAt', 'updatedBy'];
+    }
+
     // Fields the client must never set on itself.
     function noPrivilegeEscalation() {
       return !request.resource.data.diff(resource.data)
@@ -90,10 +105,18 @@ service cloud.firestore {
                   || isPairedGuardianOf(userId);
 
       allow create: if isOwner(userId)
+                    && !isRemoved(userId)
                     && request.resource.data.role in ['vi', 'guardian']
                     && request.resource.data.uid == userId;
 
-      allow update: if (isOwner(userId) && noPrivilegeEscalation()) || isAdmin();
+      allow update: if (isOwner(userId)
+                        && !isRemoved(userId)
+                        && noPrivilegeEscalation())
+                    || (isAdmin()
+                        && request.resource.data.diff(resource.data)
+                             .affectedKeys().hasOnly(adminEditable())
+                        && request.resource.data.get('role', 'vi')
+                             in ['vi', 'guardian']);
 
       allow delete: if isAdmin();
     }
@@ -104,7 +127,8 @@ service cloud.firestore {
     // granted here at all - a token another account can read is a token another
     // account can impersonate a device with.
     match /users/{userId}/push_tokens/{tokenId} {
-      allow read, write: if isOwner(userId);
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && !isRemoved(userId);
     }
 
     // Saved destinations - home, work, school, and whatever else the user
@@ -112,7 +136,9 @@ service cloud.firestore {
     // someone *is* is granted by location consent; where they *go* is a
     // different thing to know about a person, and nobody asked for it.
     match /users/{userId}/saved_places/{placeId} {
-      allow read, write: if isOwner(userId);
+      // Readable and deletable after removal, so the phone can erase them.
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && !isRemoved(userId);
     }
 
     // What the app noticed - an obstacle's name, a page's first line, a
@@ -137,6 +163,7 @@ service cloud.firestore {
       allow list: if isAdmin();
 
       allow create: if signedIn()
+                    && !isRemoved(request.auth.uid)
                     && request.resource.data.ownerId == request.auth.uid
                     && request.resource.data.usedBy == null
                     && request.resource.data.expiresAt > request.time;
@@ -149,7 +176,8 @@ service cloud.firestore {
                     && request.resource.data.usedBy == request.auth.uid
                     && request.resource.data.ownerId == resource.data.ownerId;
 
-      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow delete: if (signedIn() && resource.data.ownerId == request.auth.uid)
+                    || isAdmin();
     }
 
     // Deterministic id: {guardianUid}_{viUserId}. Either side can read it,
@@ -162,6 +190,7 @@ service cloud.firestore {
                       || isAdmin());
 
       allow create: if signedIn()
+                    && !isRemoved(request.auth.uid)
                     && request.resource.data.guardianId == request.auth.uid
                     && pairingId == request.auth.uid + '_' + request.resource.data.viUserId
                     && redeemedCodeFor(request.resource.data.code,
@@ -250,18 +279,21 @@ service cloud.firestore {
     // §1.2 asks administrators to manage accounts. It does not ask them to know
     // anyone's password, and they must not.
     //
-    // Creating a Firebase Auth account from the dashboard would mean either a
-    // server (a billing account this project does not have) or the admin
-    // choosing someone else's password and signing themselves out doing it. So
-    // an administrator issues an invitation instead: the role and any device
-    // assignment, keyed by email. The person registers themselves, chooses
-    // their own password, and picks the invitation up on the way in.
+    // The dashboard can now add an account directly - through a second Firebase
+    // app, so the administrator stays signed in, with a random password nobody
+    // sees and a reset email to the person. An invitation is still the other
+    // way: the role and any device assignment, keyed by email, for someone who
+    // registers themselves.
     //
     // Document id is the lowercased email, so the invitee can find their own.
+    // Only once that email is confirmed: anyone can make an account that
+    // *claims* an address, and a claim is not enough to read what an
+    // administrator wrote for the person who really owns it.
     match /user_invites/{email} {
       allow read: if isAdmin()
                   || (signedIn()
                       && request.auth.token.email != null
+                      && request.auth.token.email_verified == true
                       && email == request.auth.token.email.lower());
 
       allow create, update, delete: if isAdmin();
@@ -298,6 +330,21 @@ service cloud.firestore {
       allow read: if isAdmin()
                   || (signedIn() && resource.data.assignedTo == request.auth.uid);
       allow write: if isAdmin();
+    }
+
+    // ---- removed accounts --------------------------------------------------
+
+    // Written by an administrator when an account is removed from the
+    // dashboard; read by that account's phone, which signs out on seeing it.
+    // Never for an administrator - the roster is the Firebase console's.
+    match /removed_accounts/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.removedBy == request.auth.uid
+                    && !exists(/databases/$(database)/documents/admins/$(userId));
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     // ---- admin roster ----------------------------------------------------

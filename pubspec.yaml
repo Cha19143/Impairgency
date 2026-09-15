@@ -48,13 +48,17 @@ dependencies:
   # Kit's MLImage.framework ships no arm64 simulator slice and breaks every iOS
   # simulator build, so leaving it out is both correct and free.
   #
-  # The model is now YOLO11n rather than that SSD, exported to LiteRT at 320.
+  # The model is now YOLO11n rather than that SSD, exported to LiteRT at 640.
   # It is a better detector on the things this app is for - people, chairs,
   # doors, cars - and it is also the thing that makes the scan screen's output
   # worth trusting rather than merely present. Note the licence: Ultralytics
   # ship YOLO11 under AGPL-3.0, so distributing this APK means either
   # publishing the source under the same terms or holding an Ultralytics
   # enterprise licence. See docs/VISION.md.
+  #
+  # The same interpreter runs the two face models for recognising friends,
+  # which are not in the repository: see docs/VISION.md, "Faces". Without them
+  # the app runs and says recognition is not available.
   camera: ^0.12.0
   tflite_flutter: ^0.11.0
   image: ^4.2.0
@@ -90,6 +94,13 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
+  # Walking routes (routing.openstreetmap.de) and place search
+  # (photon.komoot.io). Already in the lock file through Firebase; named here
+  # because the app now calls it itself.
+  http: ^1.6.0
+  # Where saved friends' faces are kept: the app's own support folder, on the
+  # phone, excluded from backup. Already in the lock file through Firebase.
+  path_provider: ^2.1.5
 dev_dependencies:
   flutter_test:
     sdk: flutter

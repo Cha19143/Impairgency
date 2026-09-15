@@ -54,12 +54,6 @@ class _SosReceiptScreenState extends State<SosReceiptScreen> {
   }
 
   @override
-  void dispose() {
-    widget.speaker.stop();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final reached = widget.receipt.anyoneReached;
 

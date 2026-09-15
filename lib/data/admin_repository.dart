@@ -1,46 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/admin/admin_user.dart';
 import '../core/places/session_summary.dart';
+import '../core/profile/impairment.dart';
 
-/// An account an administrator has asked for, not yet registered.
-class UserInvite {
-  const UserInvite({required this.email, required this.role, this.deviceId});
-
-  final String email;
-  final String role;
-  final String? deviceId;
-}
-
-/// One row of §1.2's user management table.
-class AdminUserRow {
-  const AdminUserRow({
-    required this.uid,
-    required this.role,
-    this.displayName,
-    this.email,
-    this.deviceId,
-    this.linkedTo = const [],
-  });
-
-  final String uid;
-
-  /// 'vi', 'guardian' or 'admin'. §1.2 asks for all three.
-  final String role;
-
-  final String? displayName;
-  final String? email;
-
-  /// §1.2's "device connections". Optional — the requirement asks admins to
-  /// manage them, not to insist every account has one.
-  final String? deviceId;
-
-  /// For a guardian, the users they watch. For a VI user, their guardians.
-  final List<String> linkedTo;
-
-  String get name => displayName?.trim().isNotEmpty == true
-      ? displayName!.trim()
-      : (email ?? uid);
-}
+export '../core/admin/admin_user.dart';
 
 /// Reads for the web dashboard.
 ///
@@ -137,6 +101,13 @@ class AdminRepository {
         email: data['email'] as String?,
         deviceId: data['deviceId'] as String?,
         linkedTo: links[doc.id] ?? const [],
+        impairment: data['impairment'] is String
+            ? impairmentFromKey(data['impairment'] as String)
+            : null,
+        category: data['category'] as String?,
+        phone: data['phone'] as String?,
+        age: (data['age'] as num?)?.toInt(),
+        createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       );
     }).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -176,6 +147,113 @@ class AdminRepository {
 
   Future<void> withdrawInvite(String email) =>
       _db.collection('user_invites').doc(email.trim().toLowerCase()).delete();
+
+  /// What an administrator may change on someone's account. The security
+  /// rules hold the same list, so a key added here and not there is refused
+  /// rather than quietly allowed. Consent is not on it: whether someone's
+  /// location is shared is theirs to decide, not an administrator's.
+  static const Set<String> editableKeys = {
+    'name',
+    'displayName',
+    'age',
+    'impairment',
+    'impairmentDetail',
+    'phone',
+    'deviceId',
+    'role',
+  };
+
+  /// Changes the details on an account.
+  ///
+  /// A null value removes the field. A change of role also removes the
+  /// account's links: a guardian's pairings mean nothing on a visually
+  /// impaired account, and the reverse.
+  Future<void> updateUser(
+    AdminUserRow user,
+    Map<String, Object?> changes, {
+    required String adminUid,
+  }) async {
+    final allowed = {
+      for (final entry in changes.entries)
+        if (editableKeys.contains(entry.key))
+          entry.key: entry.value ?? FieldValue.delete(),
+    };
+    if (allowed.isEmpty) return;
+    await _db.collection('users').doc(user.uid).update({
+      ...allowed,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedBy': adminUid,
+    });
+    final role = changes['role'];
+    if (role is String && role != user.role) {
+      await _deletePairingsOf(user.uid);
+    }
+  }
+
+  /// Removes an account from ImpairGency.
+  ///
+  /// The Firebase sign-in record cannot be removed from here - that needs the
+  /// Admin SDK, and so a server - so the account is marked removed *first*.
+  /// The rules then refuse that account every write, the app signs it out,
+  /// and if anything below fails part way, pressing Remove again finishes
+  /// the job rather than leaving an account half deleted and still usable.
+  ///
+  /// Saved places and device tokens are not read here to be deleted: that
+  /// would put someone's home address in front of an administrator. The
+  /// person's own phone erases them when it sees the account was removed.
+  Future<void> removeUser(AdminUserRow user, {required String adminUid}) async {
+    final uid = user.uid;
+    await _db.collection('removed_accounts').doc(uid).set({
+      'email': user.email?.trim().toLowerCase(),
+      'role': user.role,
+      'removedAt': FieldValue.serverTimestamp(),
+      'removedBy': adminUid,
+    });
+    await _deletePairingsOf(uid);
+    await _deleteAll(
+        _db.collection('pairing_codes').where('ownerId', isEqualTo: uid));
+    final history = _db.collection('location_history').doc(uid);
+    await _deleteAll(history.collection('fixes'));
+    await _deleteAll(history.collection('events'));
+    await _deleteAll(_db.collection('users').doc(uid).collection('activity'));
+    await _deleteAll(
+        _db.collection('session_summaries').where('userId', isEqualTo: uid));
+    await _db.collection('users').doc(uid).delete();
+  }
+
+  /// Whether [email] belonged to an account that was removed. Its sign-in
+  /// record still exists in Firebase, so the address cannot be used again
+  /// until that record is deleted in the console.
+  Future<bool> wasRemoved(String email) async {
+    final snap = await _db
+        .collection('removed_accounts')
+        .where('email', isEqualTo: email.trim().toLowerCase())
+        .limit(1)
+        .get();
+    return snap.docs.isNotEmpty;
+  }
+
+  Future<void> _deletePairingsOf(String uid) async {
+    await _deleteAll(
+        _db.collection('pairings').where('viUserId', isEqualTo: uid));
+    await _deleteAll(
+        _db.collection('pairings').where('guardianId', isEqualTo: uid));
+  }
+
+  /// Deletes everything [query] finds, a batch at a time.
+  Future<void> _deleteAll(Query<Map<String, dynamic>> query) async {
+    const page = 400;
+    while (true) {
+      final snap = await query.limit(page).get();
+      if (snap.docs.isEmpty) return;
+      final batch = _db.batch();
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      if (snap.docs.length < page) return;
+    }
+  }
 
   /// Writes a summary for the session that just ended.
   ///

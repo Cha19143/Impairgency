@@ -6,6 +6,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var contactPicker: ContactPickerChannel?
+  private var backup: BackupChannel?
 
   override func application(
     _ application: UIApplication,
@@ -20,6 +21,38 @@ import UIKit
     // See lib/data/contact_picker.dart for why no package is used.
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ImpairGencyContacts") {
       contactPicker = ContactPickerChannel(messenger: registrar.messenger())
+    }
+    // Keeps saved friends' faces out of iCloud and computer backups. See
+    // lib/data/friend_store_io.dart.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ImpairGencyBackup") {
+      backup = BackupChannel(messenger: registrar.messenger())
+    }
+  }
+}
+
+/// Marks a folder as not to be backed up. Application Support is backed up by
+/// default on iOS; the faces folder in it must not be.
+final class BackupChannel {
+  private let channel: FlutterMethodChannel
+
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(name: "ph.impairgency/backup", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "excludeFromBackup",
+            let args = call.arguments as? [String: Any],
+            let path = args["path"] as? String else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      var url = URL(fileURLWithPath: path, isDirectory: true)
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      do {
+        try url.setResourceValues(values)
+        result(nil)
+      } catch {
+        result(FlutterError(code: "backup", message: error.localizedDescription, details: nil))
+      }
     }
   }
 }

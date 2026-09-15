@@ -47,11 +47,23 @@ export const signInButton = (page) =>
 /// focused. Filling before that drops the text silently: the form then submits
 /// empty and the auth emulator answers INVALID_EMAIL, which looks like a
 /// credentials bug and is not one.
+///
+/// Focus arriving is not quite the same moment as the connection opening, so a
+/// fill can still land in the gap and vanish. It is tried again rather than
+/// failing the test: a person typing never hits this, because a keypress
+/// arrives long after the connection is open.
 export async function fill(field, text) {
-  await field.click();
-  await expect(field).toBeFocused();
-  await field.fill(text);
-  await expect(field).toHaveValue(text);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await field.click();
+    await expect(field).toBeFocused();
+    await field.fill(text);
+    try {
+      await expect(field).toHaveValue(text, { timeout: 3_000 });
+      return;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+  }
 }
 
 export async function signIn(page, { email, password }) {

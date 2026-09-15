@@ -136,6 +136,7 @@ class _PlaceCard extends StatelessWidget {
                 Semantics(
                   button: true,
                   label: 'Forget $name',
+                  onTap: onForget,
                   child: ExcludeSemantics(
                     child: TextButton.icon(
                       onPressed: onForget,

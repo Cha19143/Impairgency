@@ -276,6 +276,12 @@ void main() {
     test('a guardian mid-registration stays on the guardian side', () {
       // The role is cached before the account is created, so the guard sees
       // a guardian from the first auth event.
+      //
+      // Staying is right: the account exists before the code is checked, and
+      // a refused code has to be fixable on the same form. It also means the
+      // redirect never moves a guardian whose registration *worked* - that is
+      // the screen's onRegistered, and a registration that relied on the
+      // redirect is the one the tester reported as doing nothing.
       const registering =
           SessionState(signedIn: true, isGuardian: true, safetyAcknowledged: true);
       expect(
@@ -466,6 +472,167 @@ void main() {
         resolveRedirect(isWeb: false, location: Routes.device, session: midway),
         Routes.emergencyContact,
       );
+    });
+  });
+
+  group('a new account confirms its email first', () {
+    // The tester's made-up email got straight in. A new, unconfirmed account
+    // now waits at "Check your email" whatever it asks for.
+    final unconfirmed = SessionState(
+      signedIn: true,
+      safetyAcknowledged: true,
+      needsEmailVerification: true,
+      completedSteps: const {Routes.createAccount},
+    );
+    const unconfirmedGuardian = SessionState(
+      signedIn: true,
+      isGuardian: true,
+      safetyAcknowledged: true,
+      needsEmailVerification: true,
+    );
+
+    test('every other screen sends it to Check your email', () {
+      for (final location in [
+        Routes.home,
+        Routes.scan,
+        Routes.profile,
+        Routes.settings,
+        Routes.welcome,
+        Routes.signIn,
+      ]) {
+        expect(
+          resolveRedirect(
+              isWeb: false, location: location, session: unconfirmed),
+          Routes.verifyEmail,
+          reason: location,
+        );
+      }
+      expect(
+        resolveRedirect(
+            isWeb: false,
+            location: Routes.guardianHome,
+            session: unconfirmedGuardian),
+        Routes.verifyEmail,
+      );
+    });
+
+    test('it can stay there, and it can still sign out', () {
+      for (final session in [unconfirmed, unconfirmedGuardian]) {
+        expect(
+          resolveRedirect(
+              isWeb: false, location: Routes.verifyEmail, session: session),
+          isNull,
+        );
+        expect(
+          resolveRedirect(
+              isWeb: false, location: Routes.signOut, session: session),
+          isNull,
+        );
+      }
+    });
+
+    test('a guardian mid-registration finishes on the form', () {
+      // So a refused code is said on the form that sent it.
+      expect(
+        resolveRedirect(
+            isWeb: false,
+            location: Routes.guardianRegister,
+            session: unconfirmedGuardian),
+        isNull,
+      );
+    });
+
+    test('Create account finishes its own step, then moves on', () {
+      const creating = SessionState(
+        signedIn: true,
+        safetyAcknowledged: true,
+        needsEmailVerification: true,
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.createAccount, session: creating),
+        isNull,
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.createAccount, session: unconfirmed),
+        Routes.verifyEmail,
+      );
+    });
+
+    test('once confirmed, it is sent on rather than left on the page', () {
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.verifyEmail, session: settled),
+        Routes.home,
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.verifyEmail, session: guardian),
+        Routes.guardianHome,
+      );
+      const newUser = SessionState(
+        signedIn: true,
+        safetyAcknowledged: true,
+        completedSteps: {Routes.createAccount},
+      );
+      expect(
+        resolveRedirect(
+            isWeb: false, location: Routes.verifyEmail, session: newUser),
+        Routes.profile,
+      );
+    });
+
+    test('never redirects a page to itself', () {
+      final locations = [
+        Routes.verifyEmail,
+        Routes.home,
+        Routes.guardianHome,
+        Routes.guardianRegister,
+        Routes.createAccount,
+        Routes.signOut,
+      ];
+      for (final session in [unconfirmed, unconfirmedGuardian, settled]) {
+        for (final location in locations) {
+          expect(
+            resolveRedirect(isWeb: false, location: location, session: session),
+            isNot(location),
+            reason: location,
+          );
+        }
+      }
+    });
+
+    test('the web dashboard is unaffected', () {
+      const unconfirmedAdmin =
+          SessionState(signedIn: true, isAdmin: true, needsEmailVerification: true);
+      expect(
+        resolveRedirect(
+            isWeb: true,
+            location: Routes.adminOverview,
+            session: unconfirmedAdmin),
+        isNull,
+      );
+    });
+
+    test('copyWith keeps every field it is not given', () {
+      final before = SessionState(
+        uid: 'u1',
+        signedIn: true,
+        isGuardian: true,
+        safetyAcknowledged: true,
+        completedSteps: const {Routes.createAccount},
+        consent: const {'location': true},
+        guardianCount: 2,
+        needsEmailVerification: true,
+      );
+      final after = before.copyWith(needsEmailVerification: false);
+      expect(after.uid, 'u1');
+      expect(after.isGuardian, isTrue);
+      expect(after.consent, {'location': true});
+      expect(after.guardianCount, 2);
+      expect(after.completedSteps, {Routes.createAccount});
+      expect(after.needsEmailVerification, isFalse);
     });
   });
 }

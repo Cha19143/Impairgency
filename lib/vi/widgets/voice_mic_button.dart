@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
 import '../../core/voice/voice_commands.dart';
@@ -33,6 +34,29 @@ class VoiceMicButton extends StatelessWidget {
   /// words the current vocabulary accepts.
   final String? detail;
 
+  /// What a tap does, by what the microphone is doing.
+  ///
+  /// During the app's own listening - the dashboard opens it after its
+  /// prompt - a tap used to close the microphone without a word, which read as
+  /// a button that does nothing. It now takes over: the app's window is shut,
+  /// "Listening." is said, and a window of the user's own opens, whose
+  /// failures are always said out loud. The word is said before the
+  /// microphone opens so the microphone does not hear it.
+  @visibleForTesting
+  static Future<void> tap(VoiceController controller,
+      {Set<VoiceCommand>? only}) async {
+    if (controller.isBusy && !controller.isAutoListening) {
+      await controller.stop();
+      await controller.speaker.speak('Stopped listening.');
+      return;
+    }
+    HapticFeedback.selectionClick();
+    await controller.listenNow(
+      only: only,
+      cue: controller.isAutoListening ? 'Listening.' : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: controller,
@@ -40,7 +64,21 @@ class VoiceMicButton extends StatelessWidget {
           final phase = controller.phase;
           final examples =
               VoiceController.examplesFor(only ?? kEverydayCommands);
+          // Hands-free: the microphone is open between phrases by itself, so
+          // the button says so steadily rather than flickering between
+          // "Listening…" and "Tap to speak" with every window.
+          final handsFree = controller.handsFree &&
+              controller.isHandsFreeActive &&
+              (phase == VoicePhase.idle ||
+                  (phase == VoicePhase.listening && controller.isAutoListening) ||
+                  (phase == VoicePhase.preparing && controller.isAutoListening));
           final (label, hint, kind) = switch (phase) {
+            _ when handsFree => (
+                'Listening for commands',
+                detail ?? 'Just speak - say ${examples.join(', ')}. Tap to '
+                    'listen right now.',
+                ViButtonKind.secondary,
+              ),
             VoicePhase.idle => (
                 'Tap to speak',
                 detail ?? 'Say ${examples.join(', ')}',
@@ -80,9 +118,7 @@ class VoiceMicButton extends StatelessWidget {
                     ? Icons.mic
                     : Icons.mic_none_outlined,
                 kind: kind,
-                onPressed: controller.isBusy
-                    ? controller.stop
-                    : () => controller.listen(only: only),
+                onPressed: () => tap(controller, only: only),
               ),
               if (phase == VoicePhase.failed &&
                   controller.failureMessage != null)

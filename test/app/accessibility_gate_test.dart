@@ -1,10 +1,15 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/places/place.dart';
 import 'package:impairgency/core/places/stay.dart';
 import 'package:impairgency/core/sos/sos_receipt.dart';
 import 'package:impairgency/core/guardian/watched_user.dart';
+import 'package:impairgency/data/auth_service.dart';
+import 'package:impairgency/vi/onboarding/verify_email_screen.dart';
 import 'package:impairgency/guardian/screens/accept_invitation_screen.dart';
 import 'package:impairgency/guardian/screens/guardian_home_screen.dart';
 import 'package:impairgency/guardian/screens/guardian_register_screen.dart';
@@ -84,8 +89,8 @@ Map<String, Widget Function()> screens() => {
       'About you': () => ProfileScreen(onSave: (_) async {}),
       'Forgot password': () =>
           ForgotPasswordScreen(onSendReset: (_) async => null, onBack: () {}),
-      'Guardian registration': () =>
-          GuardianRegisterScreen(onRegister: (_) async => null, onSignIn: () {}),
+      'Guardian registration': () => GuardianRegisterScreen(
+          onRegister: (_) async => null, onRegistered: () {}, onSignIn: () {}),
       'Preferences': () =>
           PreferencesScreen(onChoose: (_) {}, onSkip: () {}),
       'Emergency contact': () =>
@@ -121,6 +126,12 @@ Map<String, Widget Function()> screens() => {
             onRename: (_, __) async {},
             onRemove: (_) async {},
             onBack: () {},
+          ),
+      'Check your email': () => VerifyEmailScreen(
+            email: 'ben@example.com',
+            onCheck: () async => VerificationCheck.notYet,
+            onResend: () async => null,
+            onUseDifferentEmail: () {},
           ),
       'Sign in': () => SignInScreen(
             onSignIn: (_, __) async => null,
@@ -222,6 +233,34 @@ void main() {
 
         expect(checked, greaterThan(0),
             reason: '$name appears to have no controls at all');
+        handle.dispose();
+      });
+
+      testWidgets('every button and switch can be pressed without touching it',
+          (tester) async {
+        // A node announced as a button with no tap action is a label to Voice
+        // Access ("tap Cancel"), Switch Access and a keyboard. TalkBack masked
+        // this - Android injects a touch at the centre of such a node - so the
+        // hand-written labels across the app shipped without their actions.
+        final handle = tester.ensureSemantics();
+        await pump(tester, build);
+
+        final dead = find.semantics
+            .byPredicate((node) {
+              final data = node.getSemanticsData();
+              final flags = data.flagsCollection;
+              final operable =
+                  flags.isButton || flags.isToggled != Tristate.none;
+              final enabled = flags.isEnabled != Tristate.isFalse;
+              return operable &&
+                  enabled &&
+                  !data.hasAction(SemanticsAction.tap);
+            })
+            .evaluate()
+            .map((node) => node.label.isEmpty ? '(unlabelled)' : node.label)
+            .toList();
+        expect(dead, isEmpty,
+            reason: '$name has buttons that only a touch can press');
         handle.dispose();
       });
 

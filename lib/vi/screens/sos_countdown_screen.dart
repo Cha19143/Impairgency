@@ -73,9 +73,10 @@ class _SosCountdownScreenState extends State<SosCountdownScreen> {
 
   @override
   void dispose() {
+    // Not the speaker: "Cancelled. Nothing was sent" is said just before this
+    // screen goes, and stopping speech here cut it off.
     _timer?.cancel();
     _voiceSub?.cancel();
-    widget.speaker.stop();
     super.dispose();
   }
 
@@ -116,6 +117,7 @@ class _SosCountdownScreenState extends State<SosCountdownScreen> {
       body: Semantics(
         label: '${armingAnnouncement(left, contactName: widget.contactName)} '
             '$kArmingHint',
+        onTap: _cancel,
         child: ExcludeSemantics(
           // The whole screen is the cancel target. Someone who has already put
           // the phone in their pocket cannot find a button, but they can slap
@@ -176,6 +178,7 @@ class _SosCountdownScreenState extends State<SosCountdownScreen> {
                     Semantics(
                       button: true,
                       label: 'Cancel. Nothing will be sent.',
+                      onTap: _cancel,
                       child: ExcludeSemantics(
                         child: Material(
                           color: AppColors.textPrimary,

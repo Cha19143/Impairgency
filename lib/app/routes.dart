@@ -24,6 +24,10 @@ abstract final class Routes {
   /// Also not a step: the reset link is used *at* sign-in, not during setup.
   static const forgotPassword = '/forgot-password';
 
+  /// "Check your email". Where a new account waits until the link in its
+  /// verification email has been opened - both apps, one screen.
+  static const verifyEmail = '/verify-email';
+
   /// Which app the new account is for. Before [createAccount], and not a
   /// step of it: a guardian who chose the other door never sees the flow.
   static const chooseRole = '/onboarding/role';
@@ -59,6 +63,9 @@ abstract final class Routes {
   static const consentCentre = '/settings/consent';
   static const learned = '/settings/learned';
   static const savedPlaces = '/settings/places';
+
+  /// Friends whose faces the scan screen knows, and forgetting them.
+  static const people = '/settings/people';
   static const signOut = '/settings/sign-out';
 
   // Guardian app (mobile)
@@ -106,7 +113,39 @@ class SessionState {
     this.consent = const {},
     this.contacts = const [],
     this.guardianCount = 0,
+    this.needsEmailVerification = false,
   });
+
+  /// This state with the named fields replaced and everything else kept.
+  ///
+  /// The session used to be rebuilt field by field wherever it changed, and
+  /// every rebuild that forgot a field dropped it - the emergency contacts,
+  /// once, on every cold start. A new field only has to be added here.
+  SessionState copyWith({
+    String? uid,
+    bool? signedIn,
+    bool? isAdmin,
+    bool? isGuardian,
+    bool? safetyAcknowledged,
+    Set<String>? completedSteps,
+    Map<String, bool>? consent,
+    List<EmergencyContact>? contacts,
+    int? guardianCount,
+    bool? needsEmailVerification,
+  }) =>
+      SessionState(
+        uid: uid ?? this.uid,
+        signedIn: signedIn ?? this.signedIn,
+        isAdmin: isAdmin ?? this.isAdmin,
+        isGuardian: isGuardian ?? this.isGuardian,
+        safetyAcknowledged: safetyAcknowledged ?? this.safetyAcknowledged,
+        completedSteps: completedSteps ?? this.completedSteps,
+        consent: consent ?? this.consent,
+        contacts: contacts ?? this.contacts,
+        guardianCount: guardianCount ?? this.guardianCount,
+        needsEmailVerification:
+            needsEmailVerification ?? this.needsEmailVerification,
+      );
 
   /// The signed-in account, or null. Present so screens that write on the
   /// user's behalf do not have to reach for FirebaseAuth themselves.
@@ -138,6 +177,10 @@ class SessionState {
   /// How many guardians are paired. Zero means the SOS receipt says so rather
   /// than reporting a failure that was never attempted.
   final int guardianCount;
+
+  /// A new account whose email address has not been confirmed. It waits at
+  /// [Routes.verifyEmail]; see `core/auth/email_verification.dart`.
+  final bool needsEmailVerification;
 
   bool get setupComplete =>
       Routes.onboardingFlow.every(completedSteps.contains);
@@ -229,6 +272,29 @@ String? resolveRedirect({
 
   if (!session.signedIn) {
     return _isSignedOutRoute(location) ? null : Routes.welcome;
+  }
+
+  // A new account whose address is unconfirmed goes no further than "Check
+  // your email" - the tester's made-up address got in because nothing asked.
+  // Two forms may finish what they started first: guardian registration, so
+  // a refused code is still said on the form that sent it, and Create
+  // account until its step is recorded, so a failed save is too.
+  if (session.needsEmailVerification) {
+    if (location == Routes.verifyEmail || location == Routes.signOut) {
+      return null;
+    }
+    if (location == Routes.guardianRegister && session.isGuardian) return null;
+    if (location == Routes.createAccount &&
+        !session.completedSteps.contains(Routes.createAccount)) {
+      return null;
+    }
+    return Routes.verifyEmail;
+  }
+  // Confirmed. Staying here would be "null means stay" again - the trap that
+  // left a correct password on the sign-in form - so say where to go.
+  if (location == Routes.verifyEmail) {
+    if (session.isGuardian) return Routes.guardianHome;
+    return session.setupComplete ? Routes.home : session.resumeAt;
   }
 
   if (session.isGuardian) {

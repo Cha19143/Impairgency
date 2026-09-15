@@ -36,13 +36,31 @@ class OnboardingController {
   ///
   /// Returns null on success, or a sentence to say and show.
   Future<String?> createAccount(String email, String password) async {
-    final failure = await auth.createAccount(email, password);
-    if (failure != null) return failure;
+    // A second press, after the account was made and its document was not:
+    // making the account again is refused with "already an account", which
+    // is the sentence the guardian tester heard. Carry on with the one made.
+    final again = auth.isSignedIn &&
+        auth.email?.trim().toLowerCase() == email.trim().toLowerCase();
+    if (!again) {
+      final failure = await auth.createAccount(email, password);
+      if (failure != null) return failure.message;
+    }
 
     final uid = auth.uid;
     if (uid == null) return 'The account was created but could not be opened.';
 
-    await _db.collection('users').doc(uid).set({
+    final doc = _db.collection('users').doc(uid);
+    try {
+      if (again && (await doc.get()).exists) {
+        await store.markStepComplete(Routes.createAccount);
+        return null;
+      }
+    } catch (_) {
+      return 'Your account is made, but it could not be opened. Check your '
+          'connection, then press Create account again.';
+    }
+
+    await doc.set({
       'uid': uid,
       'email': email.trim(),
       'role': 'vi',

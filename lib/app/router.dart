@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,15 +9,25 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/alerts/alert_presenter.dart';
+import '../core/auth/email_verification.dart';
 import '../core/contacts/emergency_contact.dart';
+import '../core/location/location_fix.dart';
 import '../core/location/location_policy.dart';
 import '../core/location/location_source.dart';
+import '../core/location/where_am_i.dart';
 import '../core/navigation/destination.dart';
+import '../core/navigation/map_services.dart';
+import '../core/navigation/place_search.dart';
+import '../core/navigation/route.dart';
+import '../core/navigation/route_follower.dart' show kPoorFixMetres;
 import '../core/places/session_event.dart';
 import '../core/places/place.dart';
 import '../core/session_store.dart';
 import '../core/speech/speaker.dart';
+import '../core/vision/faces.dart';
+import '../core/vision/friend_recognition.dart';
 import '../core/voice/speech_recognizer.dart';
+import '../core/voice/voice_commands.dart';
 import '../admin/screens/accessibility_screen.dart';
 import '../admin/screens/admin_page.dart';
 import '../admin/screens/admin_shell.dart';
@@ -24,19 +35,26 @@ import '../admin/screens/admin_sign_in_screen.dart';
 import '../admin/screens/invite_dialog.dart';
 import '../admin/screens/overview_screen.dart';
 import '../admin/screens/system_health_screen.dart';
+import '../admin/screens/user_dialogs.dart';
 import '../admin/screens/users_screen.dart';
 import '../core/places/session_summary.dart';
+import '../data/admin_account_creator.dart';
 import '../data/admin_repository.dart';
 import '../data/auth_service.dart';
 import '../data/contact_picker.dart';
+import '../data/friend_store.dart';
 import '../data/geolocator_location_source.dart';
 import '../data/guardian_onboarding.dart';
 import '../data/guardian_repository.dart';
 import '../data/local_alert_presenter.dart';
+import '../data/osm_http.dart';
+import '../data/osrm_routing_service.dart';
+import '../data/photon_place_search.dart';
 import '../data/pairing_repository.dart';
 import '../data/saved_places_repository.dart';
 import '../data/location_history_repository.dart';
 import '../data/location_sharer.dart';
+import '../data/account_status_repository.dart';
 import '../data/activity_repository.dart';
 import '../core/guardian/activity.dart';
 import '../core/guardian/watched_user.dart';
@@ -59,10 +77,12 @@ import '../vi/onboarding/invite_guardian_screen.dart';
 import '../vi/onboarding/onboarding_controller.dart';
 import '../vi/onboarding/preferences_screen.dart';
 import '../vi/onboarding/sign_in_screen.dart';
+import '../vi/onboarding/verify_email_screen.dart';
 import '../vi/onboarding/welcome_screen.dart';
 import '../vi/screens/consent_centre_screen.dart';
 import '../vi/screens/dashboard_screen.dart';
 import '../vi/screens/learned_data_screen.dart';
+import '../vi/screens/people_screen.dart';
 import '../vi/screens/scan_screen.dart';
 import '../vi/screens/settings_screen.dart';
 import '../vi/screens/sign_out_screen.dart';
@@ -75,14 +95,18 @@ import '../vi/screens/saved_places_screen.dart';
 import '../vi/screens/smart_assistance_screen.dart';
 import '../vi/voice_actions.dart';
 import '../vi/voice_controller.dart';
+import '../vi/widgets/place_search_panel.dart';
 import '../vi/widgets/vi_button.dart';
 import '../vi/widgets/vi_screen.dart';
+import '../vi/widgets/voice_scope_host.dart';
 import 'routes.dart';
 
 /// Live session, fed by FirebaseAuth once `flutterfire configure` has been run
 /// against the new project. Until then it reports signed out, which is the
 /// correct default: the guard fails closed.
 class AppSession extends ChangeNotifier {
+  /// Everything past [store] and [speaker] is for tests, which pass fakes;
+  /// the app passes nothing and gets the Firebase-backed ones on first use.
   AppSession({
     SessionStore? store,
     Speaker? speaker,
@@ -90,12 +114,34 @@ class AppSession extends ChangeNotifier {
     SpeechRecognizer? recognizer,
     LocationSharing? sharer,
     ActivityRecorder? activity,
+    AuthService? auth,
+    OnboardingController? onboarding,
+    GuardianOnboarding? guardianOnboarding,
+    GuardianRepository? guardian,
+    AdminRepository? admin,
+    AlertPresenter? alerts,
+    AccountStatusRepository? accountStatus,
+    RoutingService? routing,
+    PlaceSearchService? placeSearch,
+    LocationSource? location,
+    FriendStore? friendStore,
   })  : store = store ?? InMemorySessionStore(),
         speaker = speaker ?? const SilentSpeaker(),
         _pairing = pairing,
         _recognizer = recognizer,
         _sharer = sharer,
-        _activity = activity;
+        _activity = activity,
+        _auth = auth,
+        _onboarding = onboarding,
+        _guardianOnboarding = guardianOnboarding,
+        _guardian = guardian,
+        _admin = admin,
+        _alerts = alerts,
+        _accountStatus = accountStatus,
+        _routing = routing,
+        _placeSearch = placeSearch,
+        _location = location,
+        _friendStore = friendStore;
 
   /// Where "what the app noticed" goes for the guardian. Null in tests.
   final ActivityRecorder? _activity;
@@ -129,6 +175,28 @@ class AppSession extends ChangeNotifier {
   void setForeground(bool foreground) {
     _foreground = foreground;
     _syncSharing(_state);
+    _voice?.setForeground(foreground);
+    // Back from the mail app: if the link was opened, move on without
+    // making them find a button.
+    if (foreground && _state.needsEmailVerification) {
+      unawaited(checkEmailVerified(quietly: true));
+    }
+  }
+
+  /// Asks Firebase whether the verification link has been opened, and lets
+  /// the account through if it has. Returns what the check found.
+  ///
+  /// [quietly] is the automatic check on returning to the app: it only speaks
+  /// when there is good news.
+  Future<VerificationCheck> checkEmailVerified({bool quietly = false}) async {
+    final result = await auth.checkVerification();
+    if (result == VerificationCheck.verified && _state.needsEmailVerification) {
+      update(_state.copyWith(needsEmailVerification: false));
+      if (quietly) {
+        await speaker.speak('Your email address is confirmed.');
+      }
+    }
+    return result;
   }
 
   /// Keeps the sharer in step with the session: on while a visually impaired
@@ -183,29 +251,283 @@ class AppSession extends ChangeNotifier {
           fetchFix: _fixForVoice,
           contactName: _state.contactName,
           hasGuardian: _state.guardianCount > 0,
+          goTo: goTo,
+          rememberFriend: rememberFriend,
+          forgetFriend: forgetFriend,
         ),
         onNavigate: (route) => navigate?.call(route),
-      );
+      )
+        ..handsFree = _handsFree
+        ..setForeground(_foreground);
 
-  /// What "where am I" reads back: the SOS location policy's sentence, so the
-  /// answer carries the same honesty about age and accuracy.
+  /// Hands-free listening, as the user set it - or, until they have, on for
+  /// Android, where it has been tried, and off for iOS until it has been.
+  bool _handsFree = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  bool get handsFree => _handsFree;
+
+  Future<void> setHandsFree(bool on) async {
+    _handsFree = on;
+    _voice?.handsFree = on;
+    notifyListeners();
+    await store.setHandsFree(on);
+  }
+
+  final LocationSource? _location;
+
+  /// Where the phone is. The platform's, unless a test passed its own.
+  LocationSource get location =>
+      _location ?? const GeolocatorLocationSource();
+
+  OsmHttp? _osm;
+  RoutingService? _routing;
+  PlaceSearchService? _placeSearch;
+
+  /// Walking routes from OpenStreetMap. None on the web: the dashboard gives
+  /// no directions.
+  RoutingService? get routing {
+    if (_routing != null || kIsWeb) return _routing;
+    return _routing = OsrmRoutingService(http: _osm ??= OsmHttp());
+  }
+
+  /// Places by name, and street names for "where am I". None on the web.
+  PlaceSearchService? get placeSearch {
+    if (_placeSearch != null || kIsWeb) return _placeSearch;
+    return _placeSearch = PhotonPlaceSearch(http: _osm ??= OsmHttp());
+  }
+
+  /// "Take me to…", by voice.
+  ///
+  /// A saved place answers straight away and opens Scan with directions.
+  /// Anything else is looked up near the person, and each place found is
+  /// offered in turn - "Jollibee, Paseo del Congreso, about 600 metres away.
+  /// Say yes to go there, next for another, or no" - because the first match
+  /// for a name is often the wrong branch, and going to the wrong one is a
+  /// long walk to find out.
+  Future<VoiceOutcome> goTo(String query) async {
+    final uid = _state.uid;
+    final saved =
+        uid == null ? await store.cachedPlaces() : await places.list(uid);
+    final place = matchSavedPlace(query, saved);
+    if (place != null) {
+      await setDestination(place);
+      return VoiceOutcome(
+          spoken: 'Directions to ${place.label}.', route: Routes.scan);
+    }
+    final search = placeSearch;
+    final voice = _voice;
+    if (search == null || voice == null) {
+      return VoiceOutcome(
+        spoken: 'I could not find a saved place called $query. Opening smart '
+            'assistance, where places are chosen and saved.',
+        route: Routes.assist,
+      );
+    }
+
+    await speaker.speak('Looking for $query nearby.');
+    final result = await searchPlaces(query);
+    final problem = result.problem;
+    if (problem != null) return VoiceOutcome(spoken: problem);
+    final from = result.from;
+    final found = result.found;
+    if (found.isEmpty) {
+      return VoiceOutcome(
+          spoken: 'I could not find $query nearby. Saved places still work.');
+    }
+
+    for (var i = 0; i < found.length; i++) {
+      final candidate = found[i];
+      final answer = await voice.ask(candidateQuestion(candidate,
+          from: from, more: i < found.length - 1));
+      switch (answer?.command) {
+        case VoiceCommand.yes:
+          final destination = candidate.toDestination();
+          await setDestination(destination);
+          return VoiceOutcome(
+              spoken: 'Directions to ${destination.label}.',
+              route: Routes.scan);
+        case VoiceCommand.next:
+          continue;
+        case VoiceCommand.help:
+          return const VoiceOutcome(
+              spoken: 'Calling for help.', route: Routes.sos);
+        default:
+          return const VoiceOutcome(spoken: 'Nothing was chosen.');
+      }
+    }
+    return const VoiceOutcome(
+        spoken: 'That was the last place I found. Say take me to, and a '
+            'place, to look again.');
+  }
+
+  FriendStore? _friendStore;
+
+  /// Saved friends' faces, on this phone.
+  FriendStore get friendStore => _friendStore ??= FileFriendStore();
+
+  /// Whether the user agreed to "Recognise people I know".
+  bool get facesConsented => _state.consent['faces'] == true;
+
+  /// Whose friends: this account's, or the phone's when signed out.
+  String get faceOwner => _state.uid ?? 'local';
+
+  String? _pendingFriend;
+
+  /// Someone to meet when the scan screen opens, once.
+  String? takePendingFriend() {
+    final name = _pendingFriend;
+    _pendingFriend = null;
+    return name;
+  }
+
+  /// Recognition for one visit to the scan screen, or null without consent.
+  FriendRecognition? friendRecognition() => !facesConsented
+      ? null
+      : FriendRecognition(
+          store: friendStore,
+          owner: faceOwner,
+          say: (sentence) => prioritySpeaker.announce(sentence,
+              priority: SpeechPriority.info),
+        );
+
+  /// "Hello friend Sam", heard away from the scan screen: opens it, where
+  /// Sam will be asked and their face taken down.
+  Future<VoiceOutcome> rememberFriend(String name) async {
+    final friend = normaliseFriendName(name);
+    if (friend == null) {
+      return const VoiceOutcome(
+          spoken: 'Say hello friend, and then their name.');
+    }
+    if (!facesConsented) return const VoiceOutcome(spoken: kFacesOffPhrase);
+    _pendingFriend = friend;
+    return VoiceOutcome(
+        spoken: 'Opening scan, to meet $friend.', route: Routes.scan);
+  }
+
+  /// "Forget Sam", from anywhere: asked, then deleted.
+  Future<VoiceOutcome> forgetFriend(String name) async {
+    final voice = _voice;
+    if (voice == null) return const VoiceOutcome(spoken: 'Nothing was deleted.');
+    final recognition = FriendRecognition(
+        store: friendStore, owner: faceOwner, say: (_) {});
+    await recognition.load();
+    return VoiceOutcome(
+        spoken: await recognition.forget(name, ask: voice.ask));
+  }
+
+  /// Deletes every saved face on this phone for this account; says how many
+  /// when there were any. Failure is logged, not thrown: it runs on the way
+  /// out of consent and out of the account, which must not get stuck.
+  Future<void> _forgetFaces({bool quietly = false}) async {
+    try {
+      final deleted = await friendStore.deleteAll(faceOwner);
+      if (deleted > 0 && !quietly) {
+        await speaker.speak(deleted == 1
+            ? 'The one saved face on this phone was deleted.'
+            : 'The $deleted saved faces on this phone were deleted.');
+      }
+    } catch (e) {
+      debugPrint('Saved faces were not deleted: $e');
+    }
+  }
+
+  /// Places called [query] near the phone - or, instead, why there are none
+  /// to offer: no position, no connection, no search on this device.
+  Future<PlaceSearchResult> searchPlaces(String query) async {
+    final search = placeSearch;
+    if (search == null) {
+      return const PlaceSearchResult(
+          problem: 'Searching for places is not available here.');
+    }
+    final source = location;
+    final availability = await source.requestPermission();
+    if (availability != LocationAvailability.ready) {
+      return PlaceSearchResult(
+          problem: 'To search nearby I need your location. '
+              '${permissionGuidance(availability)}');
+    }
+    final fix = await bestEffortFix(source, timeout: const Duration(seconds: 6));
+    if (fix == null) {
+      return const PlaceSearchResult(
+          problem: 'I could not get your position, so I cannot search nearby. '
+              'Saved places still work.');
+    }
+    final here = RoutePoint(fix.latitude, fix.longitude);
+    try {
+      final found = await search.search(query, near: here);
+      return PlaceSearchResult(found: nearbyCandidates(found, here), from: here);
+    } on MapServiceException catch (e) {
+      return PlaceSearchResult(
+        problem: switch (e.failure) {
+          MapServiceFailure.offline =>
+            'Searching for places needs an internet connection. Saved places '
+                'still work.',
+          MapServiceFailure.busy || MapServiceFailure.timeout =>
+            'The place search is busy. Try again in a minute. Saved places '
+                'still work.',
+          _ => 'The place search is not working right now. Saved places still '
+              'work.',
+        },
+      );
+    }
+  }
+
+  /// What "where am I" reads back. Not the SOS receipt's sentence, which told
+  /// someone who had only asked a question that their location "was sent".
   Future<({LocationAvailability availability, String? summary})>
       _fixForVoice() async {
-    const source = GeolocatorLocationSource();
+    final source = location;
     final availability = await source.requestPermission();
     if (availability != LocationAvailability.ready) {
       return (availability: availability, summary: null);
     }
     final fix = await bestEffortFix(source);
-    final outcome = resolveLocationForSos(
-      availability: availability,
-      fix: fix,
-      now: DateTime.now(),
-    );
+    if (fix == null) {
+      return (
+        availability: availability,
+        summary: 'I could not get your position in time. Try again outside, '
+            'or away from tall buildings.',
+      );
+    }
     return (
       availability: availability,
-      summary: outcome.hasSomethingToSend ? outcome.spoken : null,
+      summary: whereAmISentence(
+        fix: fix,
+        now: DateTime.now(),
+        places: await store.cachedPlaces(),
+        nearby: await _streetAt(fix),
+      ),
     );
+  }
+
+  /// "near Rizal Street, Malolos", if the map can say quickly. A slow answer
+  /// is no answer: the person asked where they are, not to wait. Nor is a
+  /// street named from a position too rough to be sure which street it is.
+  Future<String?> _streetAt(LocationFix fix) async {
+    final search = placeSearch;
+    if (search == null || fix.accuracyMetres > kPoorFixMetres) return null;
+    try {
+      final here = await search
+          .reverse(RoutePoint(fix.latitude, fix.longitude))
+          .timeout(const Duration(seconds: 4));
+      return here == null ? null : nearbyDescription(here);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The route the app is on, as the router last reported it.
+  String? _path;
+
+  /// Called by the router when the location changes, before the next page
+  /// builds.
+  ///
+  /// Listening belongs to the screen that asked for it, so it stops here - not
+  /// in that screen's dispose(), which runs after the next screen has started
+  /// and used to cancel *its* listening: the SOS countdown's "cancel", for one.
+  void routeChanged(String path) {
+    if (path == _path) return;
+    _path = path;
+    _voice?.routeChanged(path);
   }
 
   // Constructed lazily so a widget test that never opens a Firestore-backed
@@ -218,6 +540,65 @@ class AppSession extends ChangeNotifier {
 
   AdminRepository? _admin;
   AdminRepository get admin => _admin ??= AdminRepository();
+
+  AccountStatusRepository? _accountStatus;
+  AccountStatusRepository get accountStatus =>
+      _accountStatus ??= AccountStatusRepository();
+
+  StreamSubscription<bool>? _removalWatch;
+  bool _handlingRemoval = false;
+  String? _notice;
+
+  /// Why this phone was last signed out, for the welcome screen to say once.
+  String? takeNotice() {
+    final notice = _notice;
+    _notice = null;
+    return notice;
+  }
+
+  /// Follows whether an administrator removes the signed-in account.
+  void _watchRemoval(String? uid) {
+    unawaited(_removalWatch?.cancel());
+    _removalWatch = null;
+    if (uid == null || kIsWeb) return;
+    try {
+      _removalWatch = accountStatus.watchRemoved(uid).listen((removed) {
+        if (removed) unawaited(handleRemoval(uid));
+      });
+    } catch (_) {
+      // No Firestore to ask - a test, or a platform without it. The sign-in
+      // check still refuses a removed account on the way in.
+    }
+  }
+
+  /// The account was removed from the dashboard.
+  ///
+  /// What the dashboard deliberately could not delete - saved places, which
+  /// would have meant an administrator reading someone's home address - the
+  /// phone deletes, as the owner. Then it signs out and says why.
+  Future<void> handleRemoval(String uid) async {
+    if (_handlingRemoval) return;
+    _handlingRemoval = true;
+    try {
+      try {
+        for (final place in await places.list(uid)) {
+          await places.remove(uid, place.id);
+        }
+        await history.forgetAll(uid);
+      } catch (_) {
+        // Best effort. The rules already refuse this account every write.
+      }
+      _notice = kRemovedAccountNotice;
+      await signOut();
+      await speaker.speak(kRemovedAccountNotice);
+    } finally {
+      _handlingRemoval = false;
+    }
+  }
+
+  AdminAccountCreator? _accountCreator;
+  AdminAccountCreator get accountCreator =>
+      _accountCreator ??= AdminAccountCreator();
 
   AuthService? _auth;
   AuthService get auth => _auth ??= AuthService();
@@ -297,7 +678,8 @@ class AppSession extends ChangeNotifier {
   /// Called from app.dart once Firebase is up. Left uncalled in tests, where
   /// the session stays signed out - which is the guard failing closed.
   Future<void> bindAuth() async {
-    auth.changes.listen((user) async {
+    auth.accounts.listen((user) async {
+      _watchRemoval(user?.uid);
       if (user == null) {
         // Read back off the device rather than carrying the old state
         // forward. Signing out clears what this phone held about that account,
@@ -311,21 +693,24 @@ class AppSession extends ChangeNotifier {
         _settleAuth();
         return;
       }
-      final isAdmin = await admin.isAdmin(user.uid);
+      // The roster only matters on the web dashboard. Asked on a phone, it
+      // is a permission-denied read on every launch for everyone who is not
+      // an administrator - which is everyone with a phone.
+      final isAdmin = kIsWeb ? await admin.isAdmin(user.uid) : false;
       // Which app this account is for, decided before the guard runs: a
       // guardian sent through the visually impaired flow would be asked to
       // create the account they have just created.
       final isGuardian = await _isGuardian(user.uid);
-      update(SessionState(
+      update(_state.copyWith(
         uid: user.uid,
-        consent: _state.consent,
-        contacts: _state.contacts,
-        guardianCount: _state.guardianCount,
         signedIn: true,
         isAdmin: isAdmin,
         isGuardian: isGuardian,
-        safetyAcknowledged: _state.safetyAcknowledged,
-        completedSteps: _state.completedSteps,
+        needsEmailVerification: !kIsWeb &&
+            requiresEmailVerification(
+              emailVerified: user.emailVerified,
+              createdAt: user.createdAt,
+            ),
       ));
       // Best effort, and deliberately not awaited by the guard.
       unawaited(refreshProfile());
@@ -343,10 +728,12 @@ class AppSession extends ChangeNotifier {
   /// path needs Firestore.
   Future<void> load() async {
     final profile = await store.cachedProfile();
-    update(SessionState(
-      uid: _state.uid,
-      signedIn: _state.signedIn,
-      isAdmin: _state.isAdmin,
+    final handsFree = await store.handsFree();
+    if (handsFree != null && handsFree != _handsFree) {
+      _handsFree = handsFree;
+      _voice?.handsFree = handsFree;
+    }
+    update(_state.copyWith(
       isGuardian: _state.isGuardian || profile.isGuardian,
       safetyAcknowledged: await store.safetyAcknowledged(),
       completedSteps: await store.completedSteps(),
@@ -438,9 +825,12 @@ class AppSession extends ChangeNotifier {
   /// Same shape, for consent. The consent centre used to re-read Firestore
   /// after saving, which offline meant a switch that did not move.
   Future<void> rememberConsent(Map<String, bool> consent) async {
+    final facesWereOn = facesConsented;
     final cached = await store.cachedProfile();
     await store.cacheProfile(cached.copyWith(consent: consent));
     await load();
+    // Turning recognition off is taking the faces back, not pausing.
+    if (facesWereOn && consent['faces'] != true) await _forgetFaces();
   }
 
   void update(SessionState next) {
@@ -453,6 +843,7 @@ class AppSession extends ChangeNotifier {
   @override
   void dispose() {
     _sharer?.stop();
+    unawaited(_removalWatch?.cancel());
     super.dispose();
   }
 
@@ -474,6 +865,8 @@ class AppSession extends ChangeNotifier {
   /// the user back at "Create your account" for an account they already have.
   /// That is the loop this release exists to close, reached by another road.
   Future<void> signOut() async {
+    // Before the account is gone: the faces are filed under it.
+    await _forgetFaces(quietly: true);
     await auth.signOut();
     await store.forgetAccount();
     destination = null;
@@ -488,17 +881,7 @@ class AppSession extends ChangeNotifier {
     // count and uid in memory until the next load(). Settings then said "SOS
     // has nobody to call", the contact screen opened blank, and a Save there
     // would have written that blank over the real contact.
-    update(SessionState(
-      uid: _state.uid,
-      signedIn: _state.signedIn,
-      isAdmin: _state.isAdmin,
-      isGuardian: _state.isGuardian,
-      safetyAcknowledged: true,
-      completedSteps: _state.completedSteps,
-      consent: _state.consent,
-      contacts: _state.contacts,
-      guardianCount: _state.guardianCount,
-    ));
+    update(_state.copyWith(safetyAcknowledged: true));
   }
 }
 
@@ -558,6 +941,7 @@ GoRouter createRouter(AppSession session) {
           path: Routes.welcome,
           builder: (context, _) => WelcomeScreen(
             speaker: session.speaker,
+            notice: session.takeNotice(),
             onCreateAccount: () => appNavigate(context, Routes.chooseRole),
             onSignIn: () => appNavigate(context, Routes.signIn),
           ),
@@ -590,6 +974,14 @@ GoRouter createRouter(AppSession session) {
             onSignIn: (email, password) async {
               final failure = await session.auth.signIn(email, password);
               if (failure != null) return failure;
+              // The password is right and the account was removed. Firebase
+              // still knows the sign-in; ImpairGency does not.
+              final uid = session.auth.uid;
+              if (uid != null &&
+                  await session.accountStatus.isRemoved(uid) == true) {
+                await session.signOut();
+                return kRemovedAccountNotice;
+              }
               // What the account has already finished, back onto this device
               // before the redirect reads it. Without this the router sees no
               // completed steps and sends a returning user to step one, to
@@ -606,6 +998,17 @@ GoRouter createRouter(AppSession session) {
                 queryParameters: email.isEmpty ? null : {'email': email},
               ).toString(),
             ),
+          ),
+        ),
+        GoRoute(
+          path: Routes.verifyEmail,
+          builder: (context, _) => VerifyEmailScreen(
+            speaker: session.speaker,
+            email: session.auth.email,
+            linkSent: session.auth.verificationSent ?? true,
+            onCheck: session.checkEmailVerified,
+            onResend: session.auth.sendVerification,
+            onUseDifferentEmail: () => appNavigate(context, Routes.signOut),
           ),
         ),
         GoRoute(
@@ -735,26 +1138,42 @@ GoRouter createRouter(AppSession session) {
         ),
         GoRoute(
           path: Routes.scan,
-          builder: (context, _) => ScanScreen(
-            speaker: session.prioritySpeaker,
-            voice: session.voice,
-            destination: session.destination,
-            positions: session.destination == null
-                ? null
-                : const GeolocatorLocationSource().positions(),
-            onStopGuidance: () async {
-              await session.setDestination(null);
-              if (context.mounted) appNavigate(context, Routes.scan);
-            },
-            onObstacle: (label) =>
-                session.recordActivity(ActivityKind.obstacle, label),
-            onBack: () => appNavigate(context, Routes.home),
-          ),
+          builder: (context, _) {
+            // Once per visit: the friends watched, and anyone to meet.
+            final friends = session.friendRecognition();
+            final meet = session.takePendingFriend();
+            // Rebuilt when the destination changes: "take me to" said on this
+            // screen goes to the route it is already on, which the router
+            // does not rebuild by itself.
+            return _SessionSelector<Destination?>(
+              session: session,
+              select: (session) => session.destination,
+              builder: (destination) => ScanScreen(
+                speaker: session.prioritySpeaker,
+                voice: session.voice,
+                destination: destination,
+                positions: destination == null
+                    ? null
+                    : const GeolocatorLocationSource().positions(),
+                routing: session.routing,
+                friends: friends,
+                meetFriend: meet,
+                onStopGuidance: () async {
+                  await session.setDestination(null);
+                  if (context.mounted) appNavigate(context, Routes.scan);
+                },
+                onObstacle: (label) =>
+                    session.recordActivity(ActivityKind.obstacle, label),
+                onBack: () => appNavigate(context, Routes.home),
+              ),
+            );
+          },
         ),
         GoRoute(
           path: Routes.readText,
           builder: (context, _) => ReadTextScreen(
             speaker: session.speaker,
+            voice: session.voice,
             onRead: (text) => session.recordActivity(ActivityKind.textRead, text),
             onBack: () => appNavigate(context, Routes.home),
           ),
@@ -763,35 +1182,89 @@ GoRouter createRouter(AppSession session) {
           path: Routes.assist,
           builder: (context, _) => AdminFreeFuture<List<Destination>>(
             load: () => session.places.list(session.state.uid ?? ''),
-            builder: (_, places) => SmartAssistanceScreen(
-              speaker: session.speaker,
+            builder: (_, places) => VoiceScopeHost(
               voice: session.voice,
-              places: places,
-              onGo: (place) async {
-                await session.setDestination(place);
-                if (context.mounted) appNavigate(context, Routes.scan);
-              },
-              onManagePlaces: () => appNavigate(context, Routes.savedPlaces),
-              onBack: () => appNavigate(context, Routes.home),
+              scope: VoiceScope(
+                commands: () => kAssistCommands,
+                // A saved place's name said on its own - "home", "the
+                // clinic" - is the answer to this screen's question.
+                onWords: (words) async {
+                  final place = savedPlaceNamed(words, places);
+                  if (place == null) return false;
+                  await session.speaker.speak('Directions to ${place.label}.');
+                  await session.setDestination(place);
+                  if (context.mounted) appNavigate(context, Routes.scan);
+                  return true;
+                },
+              ),
+              child: SmartAssistanceScreen(
+                speaker: session.speaker,
+                voice: session.voice,
+                search: session.placeSearch == null
+                    ? null
+                    : session.searchPlaces,
+                places: places,
+                onGo: (place) async {
+                  await session.setDestination(place);
+                  if (context.mounted) appNavigate(context, Routes.scan);
+                },
+                onManagePlaces: () => appNavigate(context, Routes.savedPlaces),
+                onBack: () => appNavigate(context, Routes.home),
+              ),
             ),
           ),
         ),
         GoRoute(
           path: Routes.savedPlaces,
-          builder: (context, _) => AdminFreeFuture<List<Destination>>(
+          // Reloaded after every change. Going to this route again, which is
+          // what it did, is a no-op for the router: the list stayed as it was
+          // until the screen was left and opened again.
+          builder: (context, _) => _Reloading<List<Destination>>(
             load: () => session.places.list(session.state.uid ?? ''),
-            builder: (_, places) => SavedPlacesScreen(
+            builder: (_, places, reload) => SavedPlacesScreen(
               speaker: session.speaker,
               places: places,
-              onSaveHere: (kind, label) => _saveHere(session, kind, label),
+              onSaveHere: (kind, label) async {
+                final failure = await _saveHere(session, kind, label);
+                if (failure == null) await reload();
+                return failure;
+              },
               onRename: (place, label) async {
                 await session.places
                     .save(session.state.uid ?? '', place.copyWith(label: label));
-                if (context.mounted) appNavigate(context, Routes.savedPlaces);
+                await reload();
               },
               onRemove: (place) async {
                 await session.places.remove(session.state.uid ?? '', place.id);
-                if (context.mounted) appNavigate(context, Routes.savedPlaces);
+                await reload();
+              },
+              search: session.placeSearch == null ? null : session.searchPlaces,
+              onSaveFound: (place) async {
+                await session.places.save(session.state.uid ?? '',
+                    place.copyWith(label: shortPlaceLabel(place.label)));
+                await reload();
+                return null;
+              },
+              onBack: () => appNavigate(context, Routes.settings),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: Routes.people,
+          builder: (context, _) => _Reloading<List<Friend>>(
+            load: () => session.friendStore.load(session.faceOwner),
+            builder: (_, friends, reload) => PeopleScreen(
+              speaker: session.speaker,
+              friends: friends,
+              consented: session.facesConsented,
+              onForget: (friend) async {
+                await session.friendStore.save(session.faceOwner,
+                    [for (final f in friends) if (f.id != friend.id) f]);
+                await reload();
+              },
+              onForgetEveryone: () async {
+                await session.friendStore.deleteAll(session.faceOwner);
+                await reload();
               },
               onBack: () => appNavigate(context, Routes.settings),
             ),
@@ -811,20 +1284,36 @@ GoRouter createRouter(AppSession session) {
         ),
         GoRoute(
           path: Routes.settings,
-          builder: (context, _) => SettingsScreen(
-            speaker: session.speaker,
-            contactCount: session.state.contacts.length,
-            hasGuardian: session.state.guardianCount > 0,
-            onConsent: () => appNavigate(context, Routes.consentCentre),
-            onLearned: () => appNavigate(context, Routes.learned),
-            onSavedPlaces: () => appNavigate(context, Routes.savedPlaces),
-            onDevice: () => appNavigate(context, Routes.device),
-            onEmergencyContact: () =>
-                appNavigate(context, Routes.emergencyContact),
-            onInviteGuardian: () => appNavigate(context, Routes.inviteGuardian),
-            onSafetyNotice: () => appNavigate(context, Routes.safety),
-            onSignOut: () => appNavigate(context, Routes.signOut),
-            onBack: () => appNavigate(context, Routes.home),
+          builder: (context, _) => _SessionSelector<bool>(
+            session: session,
+            select: (session) => session.handsFree,
+            builder: (handsFree) => SettingsScreen(
+              speaker: session.speaker,
+              handsFree: handsFree,
+              onToggleHandsFree: () async {
+                final on = !session.handsFree;
+                await session.setHandsFree(on);
+                await session.speaker.speak(on
+                    ? 'Hands-free voice is on. The app listens for commands '
+                        'on the main, scan, read and where-to screens.'
+                    : 'Hands-free voice is off. Tap to speak before each '
+                        'command.');
+              },
+              contactCount: session.state.contacts.length,
+              hasGuardian: session.state.guardianCount > 0,
+              onConsent: () => appNavigate(context, Routes.consentCentre),
+              onLearned: () => appNavigate(context, Routes.learned),
+              onSavedPlaces: () => appNavigate(context, Routes.savedPlaces),
+              onPeople: () => appNavigate(context, Routes.people),
+              onDevice: () => appNavigate(context, Routes.device),
+              onEmergencyContact: () =>
+                  appNavigate(context, Routes.emergencyContact),
+              onInviteGuardian: () =>
+                  appNavigate(context, Routes.inviteGuardian),
+              onSafetyNotice: () => appNavigate(context, Routes.safety),
+              onSignOut: () => appNavigate(context, Routes.signOut),
+              onBack: () => appNavigate(context, Routes.home),
+            ),
           ),
         ),
         GoRoute(
@@ -920,6 +1409,11 @@ GoRouter createRouter(AppSession session) {
               await session.load();
               return failure;
             },
+            // The redirect lets a signed-in guardian stay on this form, so a
+            // refused code can be corrected; leaving it on success is this
+            // callback's job. Without it the tester's registration worked and
+            // nothing on screen changed.
+            onRegistered: () => appNavigate(context, Routes.guardianHome),
             onSignIn: () => appNavigate(context, Routes.signIn),
           ),
         ),
@@ -936,15 +1430,27 @@ GoRouter createRouter(AppSession session) {
         _page(Routes.adminRoot, 'Admin', 'Phase 3', 'Overview'),
         GoRoute(
           path: Routes.adminSignIn,
-          builder: (_, __) => AdminSignInScreen(
-            onSignIn: (email, password) => session.auth.signIn(email, password),
-            // Present only when authentication worked and the roster check did
-            // not. The screen explains itself instead of silently reappearing.
-            signedInAs: session.state.signedIn && !session.state.isAdmin
-                ? (session.auth.email ?? 'this account')
-                : null,
-            signedInUid: session.state.uid,
-            onSignOut: () => session.auth.signOut(),
+          // Rebuilt from the session, not only from the route. For an account
+          // off the roster the redirect rightly says "stay", so the route never
+          // changed, nothing rebuilt the screen with who had signed in, and the
+          // form just sat there looking like a wrong password.
+          builder: (_, __) => _SessionSelector<String?>(
+            session: session,
+            // Present only when authentication worked and the roster check
+            // did not. The screen explains itself instead of silently
+            // reappearing. Rebuilt only when this changes, so typing into the
+            // form is never interrupted by a session update it does not need.
+            select: (session) =>
+                session.state.signedIn && !session.state.isAdmin
+                    ? (session.auth.email ?? 'this account')
+                    : null,
+            builder: (signedInAs) => AdminSignInScreen(
+              onSignIn: (email, password) =>
+                  session.auth.signIn(email, password),
+              signedInAs: signedInAs,
+              signedInUid: session.state.uid,
+              onSignOut: () => session.auth.signOut(),
+            ),
           ),
         ),
         GoRoute(
@@ -956,7 +1462,7 @@ GoRouter createRouter(AppSession session) {
             load: session.admin.overview,
             isEmpty: (data) => data.sessions == 0,
             emptyTitle: 'No sessions yet',
-            builder: (_, data) => OverviewScreen(overview: data),
+            builder: (_, data, __) => OverviewScreen(overview: data),
             onSelect: (s) => appNavigate(context, s.route),
             onSignOut: session.auth.signOut,
             account: session.auth.email,
@@ -979,24 +1485,56 @@ GoRouter createRouter(AppSession session) {
                 invites: results[1] as List<UserInvite>,
               );
             },
-            builder: (context, data) => UsersScreen(
+            // Each action reloads the page itself. They used to navigate to
+            // the page they were already on, which go_router ignores, so an
+            // invitation sent never appeared in the list.
+            builder: (context, data, reload) => UsersScreen(
               users: data.users,
               invites: data.invites,
-              onInvite: () async {
+              onInvite: () => _adminAction(context, reload, () async {
                 final request = await showInviteDialog(context);
-                if (request == null) return;
+                if (request == null) return null;
                 await session.admin.invite(
                   email: request.email,
                   role: request.role,
                   deviceId: request.deviceId,
                   invitedBy: session.state.uid,
                 );
-                if (context.mounted) appNavigate(context, Routes.adminUsers);
-              },
-              onWithdraw: (invite) async {
+                return 'Invitation sent to ${request.email}.';
+              }),
+              onWithdraw: (invite) => _adminAction(context, reload, () async {
                 await session.admin.withdrawInvite(invite.email);
-                if (context.mounted) appNavigate(context, Routes.adminUsers);
-              },
+                return 'Invitation to ${invite.email} withdrawn.';
+              }),
+              onAdd: () => _adminAction(context, reload, () async {
+                final account = await showAddAccountDialog(context);
+                if (account == null) return null;
+                final result = await session.accountCreator.create(account);
+                return switch (result) {
+                  AccountCreated() => 'Account added. ${account.email} has '
+                      'been sent a link to choose a password.',
+                  AccountNotCreated(:final message, :final code) =>
+                    code == 'email-already-in-use' &&
+                            await session.admin.wasRemoved(account.email)
+                        ? 'That email belongs to a removed account. Delete its '
+                            'sign-in record in the Firebase console first, or '
+                            'use a different email.'
+                        : message,
+                };
+              }),
+              onEdit: (user) => _adminAction(context, reload, () async {
+                final changes = await showEditAccountDialog(context, user);
+                if (changes == null) return null;
+                await session.admin.updateUser(user, changes,
+                    adminUid: session.state.uid ?? '');
+                return 'Saved changes to ${user.name}.';
+              }),
+              onRemove: (user) => _adminAction(context, reload, () async {
+                if (!await confirmRemoveAccount(context, user)) return null;
+                await session.admin
+                    .removeUser(user, adminUid: session.state.uid ?? '');
+                return '${user.name} was removed.';
+              }),
             ),
             onSelect: (s) => appNavigate(context, s.route),
             onSignOut: session.auth.signOut,
@@ -1020,7 +1558,7 @@ GoRouter createRouter(AppSession session) {
                 flagged: results[1] as List<SessionSummary>,
               );
             },
-            builder: (_, data) => SystemHealthScreen(
+            builder: (_, data, __) => SystemHealthScreen(
               overview: data.overview,
               sessionsNeedingAttention: data.flagged,
             ),
@@ -1047,6 +1585,8 @@ GoRouter createRouter(AppSession session) {
   // app-wide and the router is the only thing that can move the user, so it
   // is wired here rather than in a screen.
   session.navigate = router.go;
+  router.routerDelegate.addListener(() => session
+      .routeChanged(router.routerDelegate.currentConfiguration.uri.path));
   return router;
 }
 
@@ -1109,6 +1649,115 @@ Future<String?> _saveHere(
     ),
   );
   return null;
+}
+
+/// Loads once, shows what it loaded, and loads again when told to.
+class _Reloading<T> extends StatefulWidget {
+  const _Reloading({required this.load, required this.builder});
+
+  final Future<T> Function() load;
+  final Widget Function(
+      BuildContext context, T data, Future<void> Function() reload) builder;
+
+  @override
+  State<_Reloading<T>> createState() => _ReloadingState<T>();
+}
+
+class _ReloadingState<T> extends State<_Reloading<T>> {
+  T? _data;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    final data = await widget.load();
+    if (!mounted) return;
+    setState(() {
+      _data = data;
+      _loaded = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    return widget.builder(context, _data as T, _reload);
+  }
+}
+
+/// Rebuilds [builder] when [select] of the session changes - and only then.
+class _SessionSelector<T> extends StatefulWidget {
+  const _SessionSelector({
+    super.key,
+    required this.session,
+    required this.select,
+    required this.builder,
+  });
+
+  final AppSession session;
+  final T Function(AppSession session) select;
+  final Widget Function(T value) builder;
+
+  @override
+  State<_SessionSelector<T>> createState() => _SessionSelectorState<T>();
+}
+
+class _SessionSelectorState<T> extends State<_SessionSelector<T>> {
+  late T _value = widget.select(widget.session);
+
+  void _changed() {
+    final next = widget.select(widget.session);
+    if (next == _value) return;
+    setState(() {
+      _value = next;
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.session.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_value);
+}
+
+/// Runs a dashboard action: whatever it reports is shown, a failure is
+/// shown in words rather than swallowed, and the page reloads either way.
+Future<void> _adminAction(
+  BuildContext context,
+  Future<void> Function() reload,
+  Future<String?> Function() action,
+) async {
+  String? outcome;
+  try {
+    outcome = await action();
+  } catch (e) {
+    debugPrint('Dashboard action failed: $e');
+    outcome = 'That did not work: the database refused it, or the connection '
+        'dropped. Nothing is half done that trying again will not finish.';
+  }
+  if (outcome == null) return;
+  await reload();
+  if (!context.mounted) return;
+  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+    content: Text(outcome),
+    behavior: SnackBarBehavior.floating,
+    width: 460,
+  ));
 }
 
 /// Extracted so the navigation on success is one named thing rather than an

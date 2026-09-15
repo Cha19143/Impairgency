@@ -760,12 +760,21 @@ class _CodeLine extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: SelectableText(
-                text,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 13.5,
-                  color: AdminColors.ink,
+              // Selectable for the mouse, but read out as text: on the web a
+              // SelectableText reaches a screen reader as an empty, disabled
+              // text area, so the one line this screen exists to give was the
+              // one line a screen reader could not read.
+              child: Semantics(
+                label: text,
+                child: ExcludeSemantics(
+                  child: SelectableText(
+                    text,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13.5,
+                      color: AdminColors.ink,
+                    ),
+                  ),
                 ),
               ),
             ),

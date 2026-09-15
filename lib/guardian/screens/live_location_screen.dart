@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/guardian/watched_user.dart';
 import '../../core/location/location_fix.dart';
 import '../../core/location/location_policy.dart' show describeAge;
+import '../../core/navigation/map_services.dart' show kOsmCopyrightUrl;
 import '../../vi/widgets/vi_button.dart';
 
 /// Builds the map for a fix. Injected so a widget test does not fetch tiles.
@@ -181,6 +183,18 @@ Widget _defaultMap(LocationFix fix) {
             height: 44,
             child: const Icon(Icons.person_pin_circle,
                 size: 44, color: AppColors.red),
+          ),
+        ],
+      ),
+      // The tiles are OpenStreetMap's, and its licence asks for the credit
+      // on the map itself.
+      RichAttributionWidget(
+        alignment: AttributionAlignment.bottomLeft,
+        attributions: [
+          TextSourceAttribution(
+            'OpenStreetMap contributors',
+            onTap: () => launchUrl(Uri.parse(kOsmCopyrightUrl),
+                mode: LaunchMode.externalApplication),
           ),
         ],
       ),

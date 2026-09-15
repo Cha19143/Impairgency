@@ -50,6 +50,27 @@ void main() {
       expect(matchVoiceCommand('discan'), isNull);
       expect(matchVoiceCommand('my back hurts'), isNull);
     });
+
+    test('does not fire on words that merely start with one', () {
+      // "That was helpful" used to start an SOS.
+      expect(matchVoiceCommand('that was helpful'), isNull);
+      expect(matchVoiceCommand('the scanner is broken'), isNull);
+      expect(matchVoiceCommand('sosyal media'), isNull);
+      expect(matchVoiceCommand('we paired up'), isNull);
+    });
+
+    test('hears letters spelled out one at a time', () {
+      expect(matchVoiceCommand('S O S'), VoiceCommand.help);
+      expect(matchVoiceCommand('s.o.s.'), VoiceCommand.help);
+      expect(matchVoiceCommand('where am I'), VoiceCommand.whereAmI,
+          reason: 'a lone "I" is still a word');
+    });
+
+    test('the inflections worth hearing are listed', () {
+      expect(matchVoiceCommand('tulungan ako'), VoiceCommand.help);
+      expect(matchVoiceCommand('gabayan mo ako'), VoiceCommand.navigate);
+      expect(matchVoiceCommand('start scanning'), VoiceCommand.scan);
+    });
   });
 
   group('the three commands the requirements document asks for (§2.C)', () {

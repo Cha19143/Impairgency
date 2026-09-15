@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../shared/widgets/labelled_control.dart';
 
 /// How a button looks, which is also what it means.
 enum ViButtonKind {
@@ -49,6 +50,28 @@ class ViButton extends StatelessWidget {
 
   static const double minHeight = 88;
 
+  /// Padding either side of the content, the icon, and the space after it.
+  /// Public so [ViButtonGroup] measures the room a label really gets.
+  static const double horizontalPadding = 20;
+  static const double iconSize = 30;
+  static const double iconGap = 14;
+
+  /// How wide the label may be in a button [width] wide.
+  double labelWidthIn(double width) =>
+      width - 2 * horizontalPadding - (icon == null ? 0 : iconSize + iconGap);
+
+  static TextStyle labelStyle(ViButtonKind kind) => TextStyle(
+        fontSize: kind == ViButtonKind.quiet ? 17 : 21,
+        height: 1.15,
+        fontWeight: FontWeight.bold,
+      );
+
+  static const TextStyle detailStyle = TextStyle(
+    fontSize: 14,
+    height: 1.3,
+    fontWeight: FontWeight.w500,
+  );
+
   @override
   Widget build(BuildContext context) {
     final (background, foreground) = switch (kind) {
@@ -63,8 +86,8 @@ class ViButton extends StatelessWidget {
           kind == ViButtonKind.quiet ? MainAxisAlignment.center : MainAxisAlignment.start,
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 30, color: foreground),
-          const SizedBox(width: 14),
+          Icon(icon, size: iconSize, color: foreground),
+          const SizedBox(width: iconGap),
         ],
         Expanded(
           child: Column(
@@ -75,10 +98,7 @@ class ViButton extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: kind == ViButtonKind.quiet ? 17 : 21,
-                  height: 1.15,
-                  fontWeight: FontWeight.bold,
+                style: labelStyle(kind).copyWith(
                   color: foreground,
                   decoration:
                       kind == ViButtonKind.quiet ? TextDecoration.underline : null,
@@ -90,10 +110,7 @@ class ViButton extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 3),
                   child: Text(
                     detail!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.3,
-                      fontWeight: FontWeight.w500,
+                    style: detailStyle.copyWith(
                       color: foreground.withValues(alpha: 0.88),
                     ),
                   ),
@@ -104,29 +121,27 @@ class ViButton extends StatelessWidget {
       ],
     );
 
-    return Semantics(
-      button: true,
-      enabled: onPressed != null,
+    return LabelledControl(
       label: semanticLabel ?? [label, if (detail != null) detail!].join('. '),
-      child: ExcludeSemantics(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Material(
-            color: background,
+      onTap: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Material(
+          color: background,
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            onTap: onPressed,
             borderRadius: BorderRadius.circular(20),
-            child: InkWell(
-              onTap: onPressed,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                constraints: BoxConstraints(
-                  minHeight: kind == ViButtonKind.quiet ? 56 : minHeight,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                decoration: kind == ViButtonKind.quiet
-                    ? null
-                    : BoxDecoration(borderRadius: BorderRadius.circular(20)),
-                child: content,
+            child: Container(
+              constraints: BoxConstraints(
+                minHeight: kind == ViButtonKind.quiet ? 56 : minHeight,
               ),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: horizontalPadding, vertical: 14),
+              decoration: kind == ViButtonKind.quiet
+                  ? null
+                  : BoxDecoration(borderRadius: BorderRadius.circular(20)),
+              child: content,
             ),
           ),
         ),

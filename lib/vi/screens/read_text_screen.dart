@@ -6,8 +6,12 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/reading/reading_session.dart';
 import '../../core/speech/speaker.dart';
+import '../../core/voice/voice_commands.dart';
 import '../../data/text_reader.dart';
+import '../voice_controller.dart';
 import '../widgets/vi_button.dart';
+import '../widgets/vi_button_group.dart';
+import '../widgets/voice_mic_button.dart';
 
 /// Reading text: books, documents, labels, small print.
 ///
@@ -27,6 +31,7 @@ class ReadTextScreen extends StatefulWidget {
     this.reader,
     this.gap = kReadingGap,
     this.onRead,
+    this.voice,
   });
 
   final VoidCallback onBack;
@@ -41,6 +46,9 @@ class ReadTextScreen extends StatefulWidget {
 
   /// Silence between pieces. Zero in tests.
   final Duration gap;
+
+  /// "Read", "basahin", "pause", "next", "again". Null means buttons only.
+  final VoiceController? voice;
 
   @override
   State<ReadTextScreen> createState() => _ReadTextScreenState();
@@ -57,10 +65,73 @@ class _ReadTextScreenState extends State<ReadTextScreen> {
 
   String _status = 'Starting…';
 
+  VoiceScopeHandle? _voiceScope;
+
   @override
   void initState() {
     super.initState();
+    _voiceScope = widget.voice?.attach(VoiceScope(
+      commands: _vocabulary,
+      onCommand: _onVoice,
+      // A page read aloud comes back through the microphone as a stream of
+      // words, some of them "read" and "next". A command is a few words said
+      // on their own; anything longer while reading is the page.
+      maxWords: () => _session?.state == ReadingState.reading ? 4 : 12,
+    ));
     _begin();
+  }
+
+  /// While a page is being read, only what controls the reading.
+  Set<VoiceCommand> _vocabulary() => _session?.state == ReadingState.reading
+      ? const {
+          VoiceCommand.help,
+          VoiceCommand.pause,
+          VoiceCommand.next,
+          VoiceCommand.repeat,
+        }
+      : kReadingCommands;
+
+  /// The tester asked to say "read" - or "basahin" - instead of pressing Read.
+  ///
+  /// Reading is not awaited: it runs to the end of the page, and the
+  /// microphone has to be free meanwhile to hear "pause".
+  Future<bool> _onVoice(ParsedCommand heard) async {
+    final session = _session;
+    switch (heard.command) {
+      case VoiceCommand.read:
+        unawaited(_read());
+        return true;
+      case VoiceCommand.pause:
+        if (session?.state == ReadingState.reading) {
+          await _pause();
+        } else {
+          await widget.speaker.speak('Nothing is being read right now.');
+        }
+        return true;
+      case VoiceCommand.resume:
+        if (session?.state == ReadingState.paused) {
+          unawaited(_resume());
+        } else {
+          await widget.speaker.speak(
+              'Nothing is paused. Say read to read what is in front of the camera.');
+        }
+        return true;
+      case VoiceCommand.next:
+        if (session == null || session.isEmpty) {
+          await widget.speaker.speak('Say read first.');
+        } else {
+          unawaited(_next());
+        }
+        return true;
+      case VoiceCommand.repeat:
+        unawaited(_repeat());
+        return true;
+      case VoiceCommand.back:
+        widget.onBack();
+        return true;
+      default:
+        return false;
+    }
   }
 
   Future<void> _begin() async {
@@ -80,9 +151,11 @@ class _ReadTextScreenState extends State<ReadTextScreen> {
       _ready = true;
       _status = 'Point the camera at the text and press Read.';
     });
-    await widget.speaker.speak(
-        'Reading text. Hold the phone about thirty centimetres above the '
-        'page, then press Read, or tap anywhere on the picture.');
+    await widget.speaker.speak(widget.voice == null
+        ? 'Reading text. Hold the phone about thirty centimetres above the '
+            'page, then press Read, or tap anywhere on the picture.'
+        : 'Reading text. Hold the phone about thirty centimetres above the '
+            'page, then say read, or press Read.');
   }
 
   Future<void> _read() async {
@@ -182,9 +255,12 @@ class _ReadTextScreenState extends State<ReadTextScreen> {
 
   @override
   void dispose() {
+    // Stops the reading loop; the next screen's own speech replaces the line
+    // in progress. Stopping the shared queue here ran after that screen had
+    // started, and silenced it.
+    _voiceScope?.detach();
     _run++;
     _reader.dispose();
-    widget.speaker.stop();
     super.dispose();
   }
 
@@ -206,6 +282,7 @@ class _ReadTextScreenState extends State<ReadTextScreen> {
                 label: _status,
                 button: true,
                 hint: 'Reads the text in front of the camera',
+                onTap: _read,
                 child: ExcludeSemantics(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -246,22 +323,33 @@ class _ReadTextScreenState extends State<ReadTextScreen> {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ViButton(
-                    label: _capturing ? 'Reading…' : 'Read',
-                    detail: 'Photographs the page and reads it aloud',
-                    icon: Icons.menu_book_outlined,
-                    onPressed: _ready && !_capturing ? _read : null,
-                  ),
-                  if (session != null && !session.isEmpty)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ViButton(
+            // On a phone the reading controls stack, so they are capped and
+            // scroll past the cap: the picture keeps room to aim at a page
+            // even at twice the text size.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.6),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ViButton(
+                      label: _capturing ? 'Reading…' : 'Read',
+                      detail: 'Photographs the page and reads it aloud',
+                      icon: Icons.menu_book_outlined,
+                      onPressed: _ready && !_capturing ? _read : null,
+                    ),
+                    if (widget.voice != null)
+                      VoiceMicButton(
+                        controller: widget.voice!,
+                        only: kReadingCommands,
+                        detail: 'Say read or basahin, pause, next, again',
+                      ),
+                    if (session != null && !session.isEmpty)
+                      ViButtonGroup(
+                        buttons: [
+                          ViButton(
                             label: paused ? 'Continue' : 'Pause',
                             icon: paused ? Icons.play_arrow : Icons.pause,
                             kind: ViButtonKind.secondary,
@@ -271,45 +359,39 @@ class _ReadTextScreenState extends State<ReadTextScreen> {
                                     ? _resume
                                     : null,
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ViButton(
+                          ViButton(
                             label: 'Say that again',
                             icon: Icons.replay,
                             kind: ViButtonKind.secondary,
                             onPressed: _repeat,
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ViButton(
+                          ViButton(
                             label: 'Next line',
                             icon: Icons.skip_next,
                             kind: ViButtonKind.secondary,
                             onPressed: session.current == null ? null : _next,
                           ),
-                        ),
-                      ],
-                    ),
-                  if (_refused)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        'Turn the camera on for ImpairGency in Settings to '
-                        'read text. Everything else still works.',
-                        style: TextStyle(
-                            fontSize: 16,
-                            height: 1.35,
-                            color: AppColors.amber),
+                        ],
                       ),
+                    if (_refused)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          'Turn the camera on for ImpairGency in Settings to '
+                          'read text. Everything else still works.',
+                          style: TextStyle(
+                              fontSize: 16,
+                              height: 1.35,
+                              color: AppColors.amber),
+                        ),
+                      ),
+                    ViButton(
+                      label: 'Back',
+                      kind: ViButtonKind.quiet,
+                      onPressed: widget.onBack,
                     ),
-                  ViButton(
-                    label: 'Back',
-                    kind: ViButtonKind.quiet,
-                    onPressed: widget.onBack,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

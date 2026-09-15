@@ -68,6 +68,14 @@ void main() {
       final outcome = await actions().handle(VoiceCommand.help);
       expect(outcome.route, Routes.sos);
     });
+
+    test('scan and navigate open their screens, not the dashboard', () async {
+      // The tester's "Tap to speak does nothing": both went to /home, where
+      // the user already was, so "Opening scan." was said and nothing opened.
+      expect((await actions().handle(VoiceCommand.scan)).route, Routes.scan);
+      expect((await actions().handle(VoiceCommand.navigate)).route,
+          Routes.assist);
+    });
   });
 
   group('where am I (#46)', () {
@@ -99,10 +107,16 @@ void main() {
   });
 
   group('call my guardian (#47)', () {
-    test('calls the guardian when there is one', () async {
-      final outcome =
-          await actions(hasGuardian: true).handle(VoiceCommand.callGuardian);
-      expect(outcome.spoken, contains('Calling your guardian'));
+    test('with a guardian, starts the emergency alert and says what it does',
+        () async {
+      // It used to say "Calling your guardian." and then ring the emergency
+      // contact, which is not the guardian and was never said.
+      final outcome = await actions(hasGuardian: true, contactName: 'Mum')
+          .handle(VoiceCommand.callGuardian);
+      expect(outcome.spoken, isNot(contains('Calling your guardian')));
+      expect(outcome.spoken, contains('cannot phone your guardian'));
+      expect(outcome.spoken, contains('calls Mum'));
+      expect(outcome.spoken, contains('Say cancel'));
       expect(outcome.route, Routes.sos);
     });
 

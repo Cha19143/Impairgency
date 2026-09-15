@@ -22,9 +22,12 @@ class SettingsScreen extends StatelessWidget {
     required this.onSignOut,
     required this.onBack,
     this.onSavedPlaces,
+    this.onPeople,
     this.contactCount = 0,
     this.hasGuardian = false,
     this.speaker = const SilentSpeaker(),
+    this.handsFree = false,
+    this.onToggleHandsFree,
   });
 
   final VoidCallback onConsent;
@@ -39,6 +42,15 @@ class SettingsScreen extends StatelessWidget {
 
   /// Home, work, school and the rest. Null hides the entry.
   final VoidCallback? onSavedPlaces;
+
+  /// The friends whose faces this phone knows. Null hides the entry.
+  final VoidCallback? onPeople;
+
+  /// Whether voice commands are listened for without a tap.
+  final bool handsFree;
+
+  /// Null hides the entry.
+  final VoidCallback? onToggleHandsFree;
 
   final VoidCallback onBack;
 
@@ -80,6 +92,28 @@ class SettingsScreen extends StatelessWidget {
               icon: Icons.edit_location_alt_outlined,
               kind: ViButtonKind.secondary,
               onPressed: onSavedPlaces,
+            ),
+          if (onPeople != null)
+            ViButton(
+              label: 'People I know',
+              detail: 'Friends the scan screen names. Kept on this phone only.',
+              icon: Icons.face_outlined,
+              kind: ViButtonKind.secondary,
+              onPressed: onPeople,
+            ),
+          if (onToggleHandsFree != null)
+            ViButton(
+              label: handsFree
+                  ? 'Hands-free voice: on'
+                  : 'Hands-free voice: off',
+              detail: handsFree
+                  ? 'Listens for commands without a tap on the main, scan, '
+                      'read and where-to screens. Tap to turn it off.'
+                  : 'Tap to speak before each command. Tap to turn '
+                      'hands-free on.',
+              icon: handsFree ? Icons.mic : Icons.mic_off_outlined,
+              kind: ViButtonKind.secondary,
+              onPressed: onToggleHandsFree,
             ),
           ViButton(
             label: 'What the app is using',

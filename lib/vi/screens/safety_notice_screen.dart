@@ -41,10 +41,9 @@ class _SafetyNoticeScreenState extends State<SafetyNoticeScreen> {
     });
   }
 
-  @override
-  void dispose() {
+  void _acknowledge() {
     widget.speaker.stop();
-    super.dispose();
+    widget.onAcknowledge();
   }
 
   @override
@@ -98,12 +97,10 @@ class _SafetyNoticeScreenState extends State<SafetyNoticeScreen> {
               child: Semantics(
                 button: true,
                 label: label,
+                onTap: _acknowledge,
                 child: ExcludeSemantics(
                   child: FilledButton(
-                    onPressed: () {
-                      widget.speaker.stop();
-                      widget.onAcknowledge();
-                    },
+                    onPressed: _acknowledge,
                     child: Text(label.toUpperCase()),
                   ),
                 ),

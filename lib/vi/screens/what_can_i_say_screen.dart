@@ -32,7 +32,9 @@ class WhatCanISayScreen extends StatelessWidget {
     for (final command in _order) {
       final words = kVoiceKeywords[command] ?? const [];
       if (words.isEmpty) continue;
-      lines.add('${words.first}, to ${kCommandDescriptions[command]!.toLowerCase()}.');
+      final hint = kArgumentHints[command];
+      final example = hint == null ? words.first : '${words.first} $hint';
+      lines.add('$example, to ${kCommandDescriptions[command]!.toLowerCase()}.');
     }
     return lines.join(' ');
   }
@@ -68,6 +70,7 @@ class WhatCanISayScreen extends StatelessWidget {
                       _CommandRow(
                         words: kVoiceKeywords[command]!,
                         description: kCommandDescriptions[command]!,
+                        after: kArgumentHints[command],
                       ),
                 ],
               ),
@@ -99,16 +102,25 @@ class WhatCanISayScreen extends StatelessWidget {
 }
 
 class _CommandRow extends StatelessWidget {
-  const _CommandRow({required this.words, required this.description});
+  const _CommandRow({
+    required this.words,
+    required this.description,
+    this.after,
+  });
 
   final List<String> words;
   final String description;
+
+  /// What goes after the words - "a place", "their name".
+  final String? after;
 
   @override
   Widget build(BuildContext context) {
     // Every accepted word, not just the English one. The Filipino variants are
     // the ones a user is most likely not to know are there.
-    final spoken = words.map((w) => '"$w"').join(', ');
+    final spoken = words
+        .map((w) => after == null ? '"$w"' : '"$w" $after')
+        .join(', ');
 
     return Semantics(
       label: '$description. Say $spoken.',

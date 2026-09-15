@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/contacts/emergency_contact.dart';
+import '../../core/sos/sos_countdown.dart';
 import '../../core/sos/sos_receipt.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/voice/voice_commands.dart';
@@ -149,8 +150,10 @@ class _SosFlowState extends State<SosFlow> {
     }
 
     final controller = widget.voiceController;
+    final contactName =
+        widget.contacts.isEmpty ? null : widget.contacts.first.name;
     return SosCountdownScreen(
-      contactName: widget.contacts.isEmpty ? null : widget.contacts.first.name,
+      contactName: contactName,
       speaker: widget.speaker,
       voice: widget.voice ?? controller?.commands,
       startListening: controller == null
@@ -160,6 +163,17 @@ class _SosFlowState extends State<SosFlow> {
                 dispatch: false,
                 auto: true,
                 silenceSpeaker: false,
+                // Whatever else was listening, this outranks it: a countdown
+                // nobody can cancel by voice is not cancellable by a user who
+                // has already put the phone away.
+                preempt: true,
+                // It listens while it talks, and what it says contains the
+                // word "cancel". Heard back, that sentence is not the user.
+                echoOf: () => [
+                  for (var s = kArmingDuration.inSeconds; s >= 0; s--)
+                    armingAnnouncement(s, contactName: contactName),
+                  kArmingHint,
+                ],
               ),
       onFire: _fire,
       onCancel: _cancel,

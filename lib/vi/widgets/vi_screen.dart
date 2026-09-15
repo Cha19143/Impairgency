@@ -77,12 +77,6 @@ class _ViScreenState extends State<ViScreen> {
     });
   }
 
-  @override
-  void dispose() {
-    widget.speaker.stop();
-    super.dispose();
-  }
-
   /// How tall the title is, here, at this width and this text scale.
   double _titleExtent(BuildContext context, double maxWidth) {
     final painter = TextPainter(

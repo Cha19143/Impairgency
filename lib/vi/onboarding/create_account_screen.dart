@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/auth/email_address.dart';
 import '../../core/speech/speaker.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
@@ -54,8 +55,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     final email = _email.text.trim();
     final password = _password.text;
 
-    if (!email.contains('@') || email.length < 5) {
-      await _fail('That does not look like an email address.');
+    final problem = emailAddressProblem(email);
+    if (problem != null) {
+      await _fail(problem);
       return;
     }
     if (password.length < 8) {

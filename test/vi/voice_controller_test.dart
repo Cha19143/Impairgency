@@ -78,6 +78,37 @@ class FakeRecognizer implements SpeechRecognizer {
   }
 }
 
+/// Opens a fresh session for every listen, so a test can see how many were
+/// opened and finish each one itself.
+class SessionRecognizer implements SpeechRecognizer {
+  final sessions = <Completer<VoiceHearing>>[];
+  int cancels = 0;
+
+  @override
+  Future<RecognizerReadiness> prepare() async => RecognizerReadiness.ready;
+
+  @override
+  Future<VoiceHearing> listen({
+    Duration listenFor = kListenWindow,
+    Duration pauseFor = kPauseEndsPhrase,
+    void Function(String partial)? onPartial,
+  }) {
+    final session = Completer<VoiceHearing>();
+    sessions.add(session);
+    return session.future;
+  }
+
+  @override
+  Future<void> cancel() async {
+    cancels++;
+    for (final s in sessions) {
+      if (!s.isCompleted) s.complete(const NotHeard(VoiceInputFailure.failed));
+    }
+  }
+
+  bool get open => sessions.isNotEmpty && !sessions.last.isCompleted;
+}
+
 class _NoLocation implements LocationSource {
   const _NoLocation();
   @override
@@ -94,7 +125,7 @@ class _NoLocation implements LocationSource {
 }
 
 VoiceController controller(
-  FakeRecognizer recognizer,
+  SpeechRecognizer recognizer,
   RecordingSpeaker speaker, {
   List<String>? routes,
 }) =>
@@ -113,6 +144,100 @@ Future<({LocationAvailability availability, String? summary})> _noFix() async =>
     (availability: LocationAvailability.denied, summary: null);
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('who gets the microphone', () {
+    test('a tap takes over listening the app started by itself', () async {
+      // The dashboard opens the microphone after its prompt. A tap in that
+      // window used to close it without a word - "Tap to speak does nothing".
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final routes = <String>[];
+      final c = controller(r, speaker, routes: routes);
+
+      unawaited(c.listen(auto: true, silenceSpeaker: false));
+      await pumpEventQueue();
+      expect(c.isAutoListening, isTrue);
+
+      final tap = VoiceMicButton.tap(c);
+      await pumpEventQueue();
+      expect(speaker.said, contains('Listening.'));
+      expect(r.sessions, hasLength(2));
+      expect(c.isBusy, isTrue);
+      expect(c.isAutoListening, isFalse);
+
+      r.sessions.last.complete(const Heard('scan'));
+      await tap;
+      expect(routes, [Routes.scan]);
+    });
+
+    test('a tap while the user is listening stops it, and says so', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+      unawaited(c.listen());
+      await pumpEventQueue();
+
+      await VoiceMicButton.tap(c);
+      expect(c.phase, VoicePhase.idle);
+      expect(speaker.said.last, 'Stopped listening.');
+    });
+
+    test("the app's own listening never takes over from a tap", () async {
+      final r = SessionRecognizer();
+      final c = controller(r, RecordingSpeaker());
+      unawaited(c.listen());
+      await pumpEventQueue();
+
+      await c.listen(auto: true);
+      expect(r.sessions, hasLength(1));
+      expect(r.open, isTrue);
+    });
+
+    test('the SOS countdown outranks whatever is listening', () async {
+      final r = SessionRecognizer();
+      final c = controller(r, RecordingSpeaker());
+      unawaited(c.listen());
+      await pumpEventQueue();
+
+      unawaited(c.listen(
+        only: kCancellationCommands,
+        dispatch: false,
+        auto: true,
+        silenceSpeaker: false,
+        preempt: true,
+      ));
+      await pumpEventQueue();
+      expect(r.sessions, hasLength(2));
+      expect(r.open, isTrue);
+    });
+
+    test('the countdown does not hear itself say "cancel"', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+      final heard = <VoiceCommand>[];
+      c.commands.listen(heard.add);
+
+      final listening = c.listen(
+        only: kCancellationCommands,
+        dispatch: false,
+        auto: true,
+        silenceSpeaker: false,
+        echoOf: () => ['Say cancel, or touch the screen anywhere, to stop this.'],
+      );
+      await pumpEventQueue();
+      r.sessions.last
+          .complete(const Heard('say cancel or touch the screen anywhere'));
+      await listening;
+      await pumpEventQueue();
+
+      expect(heard, isEmpty);
+      expect(speaker.said, isEmpty,
+          reason: 'nothing is said over the top of the countdown');
+    });
+  });
+
   group('the path from microphone to action', () {
     test('a spoken command is acted on and goes somewhere', () async {
       final speaker = RecordingSpeaker();
@@ -343,6 +468,49 @@ void main() {
 
       expect(r.listens, 1);
       expect(find.byType(VoiceMicButton), findsOneWidget);
+    });
+
+    testWidgets(
+        "leaving the dashboard does not cancel the next screen's listening",
+        (tester) async {
+      // The dashboard's dispose() stopped the app-wide microphone - about half
+      // a second after the SOS countdown had opened it for "cancel".
+      final r = SessionRecognizer();
+      final c = controller(r, RecordingSpeaker());
+      await tester.pumpWidget(MaterialApp(
+        theme: buildAppTheme(),
+        home: DashboardScreen(
+          onScan: () {},
+          onAssist: () {},
+          onSos: () {},
+          onWhatCanISay: () {},
+          onSettings: () {},
+          voice: c,
+        ),
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      await tester.pumpWidget(MaterialApp(
+        theme: buildAppTheme(),
+        home: SosCountdownScreen(
+          onFire: () {},
+          onCancel: () {},
+          startListening: () => c.listen(
+            only: kCancellationCommands,
+            dispatch: false,
+            auto: true,
+            silenceSpeaker: false,
+            preempt: true,
+          ),
+        ),
+      ));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(r.open, isTrue, reason: 'still listening for cancel');
+      expect(c.isBusy, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      await c.stop();
     });
 
     testWidgets('the SOS countdown opens the microphone for "cancel"',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/admin/admin_theme.dart';
 import 'package:impairgency/admin/screens/users_screen.dart';
+import 'package:impairgency/core/profile/impairment.dart';
 import 'package:impairgency/data/admin_repository.dart';
 
 Future<void> pump(
@@ -10,6 +11,9 @@ Future<void> pump(
   List<UserInvite> invites = const [],
   void Function()? onInvite,
   void Function(UserInvite)? onWithdraw,
+  void Function()? onAdd,
+  void Function(AdminUserRow)? onEdit,
+  void Function(AdminUserRow)? onRemove,
 }) async {
   tester.view.physicalSize = const Size(1280, 1000);
   tester.view.devicePixelRatio = 1.0;
@@ -23,6 +27,9 @@ Future<void> pump(
           invites: invites,
           onInvite: onInvite,
           onWithdraw: onWithdraw,
+          onAdd: onAdd,
+          onEdit: onEdit,
+          onRemove: onRemove,
         ),
       ),
     ),
@@ -129,6 +136,110 @@ void main() {
       await tester.tap(find.text('Invite someone'));
       await tester.pumpAndSettle();
       expect(tapped, isTrue);
+    });
+  });
+
+  group('filters (asked for by the testers)', () {
+    const people = [
+      AdminUserRow(
+          uid: 'u1',
+          role: 'vi',
+          displayName: 'Bob Doe',
+          impairment: ImpairmentType.blind),
+      AdminUserRow(
+          uid: 'u2',
+          role: 'vi',
+          displayName: 'Cora Lim',
+          impairment: ImpairmentType.colourBlind),
+      AdminUserRow(uid: 'g1', role: 'guardian', displayName: 'Ana Reyes'),
+      AdminUserRow(uid: 'a1', role: 'admin', email: 'admin@example.com'),
+    ];
+
+    testWidgets('every chip says how many it holds', (tester) async {
+      await pump(tester, users: people);
+      expect(find.text('All · 4'), findsOneWidget);
+      expect(find.text('Blind · 1'), findsOneWidget);
+      expect(find.text('Colour blind · 1'), findsOneWidget);
+      expect(find.text('Guardians · 1'), findsOneWidget);
+      expect(find.text('Low vision · 0'), findsOneWidget,
+          reason: 'none is an answer too');
+    });
+
+    testWidgets('choosing Blind shows only the blind users', (tester) async {
+      await pump(tester, users: people);
+      await tester.tap(find.text('Blind · 1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bob Doe'), findsOneWidget);
+      expect(find.text('Cora Lim'), findsNothing);
+      expect(find.text('Ana Reyes'), findsNothing);
+      expect(find.text('Showing 1 of 4 accounts'), findsOneWidget);
+    });
+
+    testWidgets('choosing Guardians shows only guardians', (tester) async {
+      await pump(tester, users: people);
+      await tester.tap(find.text('Guardians · 1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ana Reyes'), findsOneWidget);
+      expect(find.text('Bob Doe'), findsNothing);
+    });
+
+    testWidgets('search narrows by name, and nothing found can be cleared',
+        (tester) async {
+      await pump(tester, users: people);
+      await tester.enterText(find.byType(TextField), 'cora');
+      await tester.pumpAndSettle();
+      expect(find.text('Cora Lim'), findsOneWidget);
+      expect(find.text('Bob Doe'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), 'nobody');
+      await tester.pumpAndSettle();
+      expect(find.text('No accounts match.'), findsOneWidget);
+      await tester.tap(find.text('Clear filters'));
+      await tester.pumpAndSettle();
+      expect(find.text('4 accounts'), findsOneWidget);
+    });
+
+    testWidgets('shows each visually impaired user\'s impairment',
+        (tester) async {
+      await pump(tester, users: people);
+      expect(find.text('Blind'), findsOneWidget);
+      expect(find.text('Colour blindness'), findsOneWidget);
+    });
+  });
+
+  group('managing accounts', () {
+    testWidgets('an account can be added', (tester) async {
+      var added = 0;
+      await pump(tester, users: roster, onAdd: () => added++);
+      await tester.tap(find.text('Add account'));
+      expect(added, 1);
+    });
+
+    testWidgets('a row can be edited or removed from its menu', (tester) async {
+      AdminUserRow? edited;
+      AdminUserRow? removed;
+      await pump(tester,
+          users: roster,
+          onEdit: (u) => edited = u,
+          onRemove: (u) => removed = u);
+
+      await tester.tap(find.byTooltip('Actions for Bob Doe'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+      expect(edited?.uid, 'u1');
+
+      await tester.tap(find.byTooltip('Actions for Ana Reyes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+      expect(removed?.uid, 'g1');
+    });
+
+    testWidgets('administrators are not edited or removed from here',
+        (tester) async {
+      await pump(tester, users: roster, onEdit: (_) {}, onRemove: (_) {});
+      expect(find.byTooltip('Actions for admin@example.com'), findsNothing);
     });
   });
 }

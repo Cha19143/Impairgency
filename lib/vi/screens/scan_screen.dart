@@ -3,13 +3,18 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/location/location_fix.dart';
 import '../../core/navigation/destination.dart';
-import '../../core/navigation/guidance.dart';
+import '../../core/navigation/journey_guide.dart';
+import '../../core/navigation/map_services.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/vision/detection.dart';
+import '../../core/vision/faces.dart';
+import '../../core/vision/friend_recognition.dart';
+import '../../core/voice/voice_commands.dart';
 import '../../data/scan_service.dart';
 import '../voice_controller.dart';
 import '../widgets/vi_button.dart';
@@ -31,8 +36,11 @@ class ScanScreen extends StatefulWidget {
     this.voice,
     this.destination,
     this.positions,
+    this.routing,
     this.onStopGuidance,
     this.onObstacle,
+    this.friends,
+    this.meetFriend,
   });
 
   final VoidCallback onBack;
@@ -44,6 +52,10 @@ class ScanScreen extends StatefulWidget {
   /// Position readings while walking. Null means no directions, whatever
   /// [destination] says - a test, or a refused location permission.
   final Stream<LocationFix>? positions;
+
+  /// Walking routes, turn by turn. Null means the straight-line direction
+  /// only, as before routes existed.
+  final RoutingService? routing;
 
   /// Clears the destination and keeps scanning.
   final VoidCallback? onStopGuidance;
@@ -59,8 +71,17 @@ class ScanScreen extends StatefulWidget {
   /// Injected in tests so the screen can be exercised without a camera.
   final ScanService? service;
 
-  /// "Repeat" and "help" by voice, mid-walk. Null hides the button.
+  /// Voice commands mid-walk: repeat, stop directions, where am I, back, help.
+  /// Null hides the button.
   final VoiceController? voice;
+
+  /// Saved friends, recognised and named - when the user has agreed to it.
+  /// Null: nobody is recognised, and asking says how to turn it on.
+  final FriendRecognition? friends;
+
+  /// Someone to meet as soon as the camera is ready: "hello friend Sam", said
+  /// on another screen.
+  final String? meetFriend;
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -75,8 +96,15 @@ class _ScanScreenState extends State<ScanScreen> {
   bool _ready = false;
   bool _refused = false;
 
-  NavigationSession? _nav;
+  /// Kept from the first build: the router may build this screen again with
+  /// a new one, and the faces watched belong to this.
+  late final FriendRecognition? _friends = widget.friends;
+  FaceWatch? _faceWatch;
+  bool _facesReady = false;
+
+  JourneyGuide? _guide;
   StreamSubscription<LocationFix>? _positions;
+  Timer? _ticker;
   String? _direction;
 
   /// Set when directions are stopped from this screen. The route is not
@@ -89,7 +117,9 @@ class _ScanScreenState extends State<ScanScreen> {
   void _stopDirections() {
     _positions?.cancel();
     _positions = null;
-    _nav = null;
+    _ticker?.cancel();
+    _guide?.stop();
+    _guide = null;
     setState(() {
       _directionsStopped = true;
       _direction = null;
@@ -101,35 +131,170 @@ class _ScanScreenState extends State<ScanScreen> {
     widget.onStopGuidance?.call();
   }
 
+  VoiceScopeHandle? _voiceScope;
+
   @override
   void initState() {
     super.initState();
+    _voiceScope = widget.voice?.attach(VoiceScope(
+      commands: () => kScanCommands,
+      onCommand: _onVoice,
+    ));
     _begin();
     _beginDirections();
+  }
+
+  /// What Scan does itself when spoken to. "Only help works" was the tester's
+  /// report: the rest went to the app-wide handler, which knew nothing about
+  /// this screen.
+  Future<bool> _onVoice(ParsedCommand heard) async {
+    switch (heard.command) {
+      case VoiceCommand.repeat:
+        await _repeat();
+        return true;
+      case VoiceCommand.stopDirections:
+        if (widget.destination == null || _directionsStopped) {
+          await widget.speaker.speak('There are no directions to stop.');
+        } else {
+          _stopDirections();
+        }
+        return true;
+      case VoiceCommand.rememberFriend:
+        await _meet(heard.argument ?? '');
+        return true;
+      case VoiceCommand.whoIsHere:
+        final friends = _friends;
+        await widget.speaker.speak(friends == null
+            ? kFacesOffPhrase
+            : !_facesReady
+                ? kFacesUnavailablePhrase
+                : friends.whoIsHere());
+        return true;
+      case VoiceCommand.forgetFriend:
+        final friends = _friends;
+        final voice = widget.voice;
+        // Without recognition on, the app-wide handler still deletes a face
+        // saved earlier.
+        if (friends == null || voice == null) return false;
+        await widget.speaker
+            .speak(await friends.forget(heard.argument ?? '', ask: voice.ask));
+        return true;
+      case VoiceCommand.back:
+        // Leaving stops the obstacle warnings, so it is asked, not assumed:
+        // "go back" is easy to say by accident mid-sentence.
+        final answer = await widget.voice?.ask(
+            'Leave scan? The obstacle warnings will stop. Say yes to leave, or '
+            'no to stay.');
+        if (!mounted) return true;
+        if (answer?.command == VoiceCommand.yes) {
+          widget.onBack();
+        } else {
+          await widget.speaker.speak('Staying on scan.');
+        }
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /// A new destination while scanning - "take me to" said on this screen.
+  /// The camera and the obstacle warnings carry on; only the directions
+  /// change.
+  @override
+  void didUpdateWidget(ScanScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.destination?.id == old.destination?.id) return;
+    _positions?.cancel();
+    _positions = null;
+    _ticker?.cancel();
+    _guide?.stop();
+    _guide = null;
+    _direction = null;
+    _directionsStopped = false;
+    _beginDirections();
+  }
+
+  /// "Hello friend Sam": asks Sam, then takes Sam's face down.
+  ///
+  /// The question is for the friend, and it is asked out loud with them in
+  /// front of the phone: it is their face. No, or no answer, and nothing is
+  /// kept.
+  Future<void> _meet(String rawName) async {
+    final name = normaliseFriendName(rawName);
+    final friends = _friends;
+    final voice = widget.voice;
+    final watch = _faceWatch;
+    if (name == null) {
+      await widget.speaker.speak('Say hello friend, and then their name.');
+      return;
+    }
+    if (friends == null) {
+      await widget.speaker.speak(kFacesOffPhrase);
+      return;
+    }
+    if (!_facesReady || watch == null || voice == null) {
+      await widget.speaker.speak(kFacesUnavailablePhrase);
+      return;
+    }
+    final answer = await voice.ask(friendConsentQuestion(name));
+    if (!mounted) return;
+    if (answer?.command != VoiceCommand.yes) {
+      await widget.speaker.speak('Nothing was saved.');
+      return;
+    }
+    await widget.speaker.speak(
+        "Point the phone at $name's face, about an arm's length away, and "
+        'hold still.');
+    if (!mounted) return;
+    setState(() => watch.enrolling = true);
+    final result = await friends.enrol(name);
+    if (!mounted) return;
+    setState(() => watch.enrolling = false);
+    await widget.speaker.speak(enrollmentResultPhrase(result, name: name));
   }
 
   void _beginDirections() {
     final to = widget.destination;
     final positions = widget.positions;
     if (to == null || positions == null) return;
-    _nav = NavigationSession(destination: to);
-    _direction = 'Heading for ${to.label}. Waiting for your position…';
+    final guide = _guide = JourneyGuide(
+      destination: to,
+      routing: widget.routing,
+      // Navigation, not hazard: it waits for a warning to finish and never
+      // cuts one off. The queue holds that rule.
+      say: (sentence) => widget.speaker
+          .announce(sentence, priority: SpeechPriority.navigation),
+      onChanged: () {
+        if (mounted && _guide != null) {
+          setState(() => _direction = _guide!.status);
+        }
+      },
+    );
+    _direction = guide.status;
     _positions = positions.listen(_onFix, onError: (_) {}, onDone: () {
       if (mounted && _direction != null) {
         setState(() => _direction = 'Directions stopped: no position.');
       }
     });
+    if (widget.routing != null) {
+      _ticker = Timer.periodic(const Duration(seconds: 5), (_) => _guide?.tick());
+    }
   }
 
   void _onFix(LocationFix fix) {
-    final nav = _nav;
-    if (nav == null || !mounted) return;
-    setState(() => _direction = nav.statusFor(fix));
-    final prompt = nav.update(fix);
-    if (prompt == null) return;
-    // Navigation, not hazard: it waits for a warning to finish and never
-    // cuts one off. The queue holds that rule.
-    widget.speaker.announce(prompt.phrase, priority: SpeechPriority.navigation);
+    final guide = _guide;
+    if (guide == null || !mounted) return;
+    guide.update(fix);
+    setState(() => _direction = guide.status);
+  }
+
+  Future<void> _reportMapProblem() async {
+    try {
+      await launchUrl(Uri.parse(kOsmFixTheMapUrl),
+          mode: LaunchMode.externalApplication);
+    } catch (_) {
+      await widget.speaker.speak('The map page could not be opened.');
+    }
   }
 
   Future<void> _begin() async {
@@ -159,18 +324,36 @@ class _ScanScreenState extends State<ScanScreen> {
       _ready = true;
       _guidance = kPathClear;
     });
+
+    final friends = _friends;
+    if (friends != null) {
+      await friends.load();
+      if (!mounted) return;
+      final watch = _faceWatch = FaceWatch(onFaces: friends.onFaces);
+      _facesReady = await _service.watchFaces(watch);
+      if (!mounted) return;
+    }
     final to = widget.destination;
     await widget.speaker.speak(to == null
         ? 'Guidance ready. Hold the phone up and walk slowly.'
-        : 'Guidance ready. Heading for ${to.label}. Directions follow the '
-            'straight line to it, so listen for obstacles first. Hold the '
-            'phone up and walk slowly.');
+        : widget.routing == null
+            ? 'Guidance ready. Heading for ${to.label}. Directions follow the '
+                'straight line to it, so listen for obstacles first. Hold the '
+                'phone up and walk slowly.'
+            : 'Guidance ready. Heading for ${to.label}. Finding a walking '
+                'route; obstacle warnings come first. Hold the phone up and '
+                'walk slowly.');
+    final meet = widget.meetFriend;
+    if (meet != null && mounted) unawaited(_meet(meet));
   }
 
   void _onDetections(List<Detection> detections) {
     final guidance = guidanceFor(detections);
     if (!mounted) return;
     setState(() => _guidance = guidance.phrase);
+    // While a friend's face is being taken down, "person ahead" is the friend.
+    // Only a hazard interrupts.
+    if ((_faceWatch?.enrolling ?? false) && !guidance.urgent) return;
 
     final now = DateTime.now();
     if (!shouldSpeak(
@@ -204,10 +387,15 @@ class _ScanScreenState extends State<ScanScreen> {
 
   @override
   void dispose() {
+    // Not the microphone or the speech queue. Both are app-wide, and this runs
+    // after the next screen has started: stopping them here cut off its first
+    // sentence, cancelled its listening, and dropped any hazard still being
+    // said. The router stops listening when the route changes instead.
+    _voiceScope?.detach();
     _positions?.cancel();
-    widget.voice?.stop();
+    _ticker?.cancel();
+    _guide?.stop();
     _service.dispose();
-    widget.speaker.stop();
     super.dispose();
   }
 
@@ -225,6 +413,7 @@ class _ScanScreenState extends State<ScanScreen> {
               child: Semantics(
                 label: _direction == null ? _guidance : '$_guidance. $_direction',
                 button: true,
+                onTap: _repeat,
                 child: ExcludeSemantics(
                   // The whole view repeats. A user walking has one hand on a
                   // cane and cannot hunt for a button.
@@ -306,7 +495,10 @@ class _ScanScreenState extends State<ScanScreen> {
                   if (widget.voice != null)
                     VoiceMicButton(
                       controller: widget.voice!,
-                      detail: 'Say repeat, or help',
+                      only: kScanCommands,
+                      detail: widget.destination == null
+                          ? 'Say repeat, where am I, go back, or help'
+                          : 'Say repeat, stop directions, where am I, or help',
                     ),
                   if (widget.destination != null &&
                       !_directionsStopped &&
@@ -316,6 +508,18 @@ class _ScanScreenState extends State<ScanScreen> {
                       detail: 'Keeps warning you about obstacles',
                       kind: ViButtonKind.quiet,
                       onPressed: _stopDirections,
+                    ),
+                  // OpenStreetMap's licence asks for the credit wherever its
+                  // routes are used - and a wrong path is worth reporting.
+                  if (_guide?.route != null)
+                    TextButton(
+                      onPressed: _reportMapProblem,
+                      child: const Text(
+                        'Walking route $kOsmAttribution. Report a map problem',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 14, color: AppColors.textSecondary),
+                      ),
                     ),
                   if (_refused)
                     const Padding(

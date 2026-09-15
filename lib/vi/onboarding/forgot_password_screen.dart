@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/auth/email_address.dart';
 import '../../core/speech/speaker.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
@@ -59,8 +60,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _submit() async {
     if (_busy) return;
     final email = _email.text.trim();
-    if (!email.contains('@') || email.length < 5) {
-      await _fail('That does not look like an email address.');
+    final problem = emailAddressProblem(email);
+    if (problem != null) {
+      await _fail(problem);
       return;
     }
     setState(() {

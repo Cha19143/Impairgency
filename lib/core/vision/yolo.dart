@@ -62,7 +62,7 @@ const int kMaxBoxes = 20;
 
 /// Reads `[1, 4 + classes, anchors]` into boxes worth keeping.
 ///
-/// The tensor is laid out by *row*: all 2100 centre-x values, then all 2100
+/// The tensor is laid out by *row*: all 8400 centre-x values, then all 8400
 /// centre-y, and so on. Element `(row, anchor)` is therefore at
 /// `row * anchors + anchor`, and reading it the other way round — the mistake
 /// that shape invites — produces boxes that are individually plausible and
@@ -90,8 +90,8 @@ List<RawBox> decodeYolo(
   final kept = <RawBox>[];
   for (var anchor = 0; anchor < anchors; anchor++) {
     // The best class for this anchor, found without materialising the other
-    // 79. At 2100 anchors this loop runs 168,000 times per frame, on the same
-    // thread that draws the screen.
+    // 79. At 8400 anchors this loop runs 672,000 times per frame - on a
+    // background isolate now, but still every frame.
     var bestClass = 0;
     var bestScore = output[kBoxRows * anchors + anchor];
     for (var c = 1; c < classes; c++) {

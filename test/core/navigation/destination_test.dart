@@ -37,4 +37,15 @@ void main() {
     expect(validateDestinationLabel('Clinic', kind: DestinationKind.other),
         isNull);
   });
+
+  test('a found place with a long name is cut at a word to fit', () {
+    expect(shortPlaceLabel('Jollibee'), 'Jollibee');
+    expect(
+        shortPlaceLabel(
+            'Bulacan Medical Center Emergency Room Entrance and Parking'),
+        'Bulacan Medical Center Emergency Room');
+    expect(validateDestinationLabel(
+            shortPlaceLabel('x' * 60), kind: DestinationKind.other),
+        isNull);
+  });
 }

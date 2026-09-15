@@ -105,6 +105,36 @@ void main() {
     });
   });
 
+  group('clearing narration', () {
+    test('drops information and navigation, never a hazard', () async {
+      // What leaving a screen and opening the microphone both do. stop() used
+      // to be called instead, and it dropped the hazard too.
+      unawaited(queue.announce('Stop. car on your left',
+          priority: SpeechPriority.hazard));
+      await settle();
+      unawaited(queue.announce('In fifty metres, turn right.',
+          priority: SpeechPriority.navigation));
+      unawaited(queue.announce('Path looks clear',
+          priority: SpeechPriority.info));
+      await settle();
+
+      queue.clearNarration();
+      await settle();
+
+      expect(engine.cutOff, isEmpty, reason: 'the hazard being said goes on');
+      expect(engine.speaking, 'Stop. car on your left');
+      expect(queue.pending, isEmpty);
+    });
+
+    test('cuts off narration in progress', () async {
+      unawaited(queue.speak('Reading text. Hold the phone above the page.'));
+      await settle();
+      queue.clearNarration();
+      await settle();
+      expect(engine.cutOff, ['Reading text. Hold the phone above the page.']);
+    });
+  });
+
   group('what may interrupt what', () {
     test('a hazard cuts off information', () async {
       unawaited(queue.speak('Path looks clear'));

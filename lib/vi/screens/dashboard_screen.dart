@@ -6,6 +6,10 @@ import '../voice_controller.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/voice_mic_button.dart';
 
+/// What the dashboard says on arrival.
+const String kDashboardPrompt =
+    'Say scan, read, take me to a place, or help.';
+
 /// The three buttons `ui.pdf` drew, plus one.
 ///
 /// This screen is the best thing in the submitted design and it is mostly
@@ -54,27 +58,34 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  VoiceScopeHandle? _voiceScope;
+
   @override
   void initState() {
     super.initState();
+    // The everyday vocabulary, listened for without a tap when hands-free
+    // is on.
+    _voiceScope = widget.voice?.attach(const VoiceScope());
     WidgetsBinding.instance.addPostFrameCallback((_) => _promptThenListen());
-  }
-
-  /// Says the prompt, then opens the microphone for the answer. The prompt
-  /// is a question; a question nobody is listening to the answer to is the
-  /// bug the tester reported.
-  Future<void> _promptThenListen() async {
-    if (!mounted) return;
-    await widget.speaker.speak('Say scan, navigate, or help.');
-    if (!mounted) return;
-    await widget.voice?.listen(auto: true, silenceSpeaker: false);
   }
 
   @override
   void dispose() {
-    widget.voice?.stop();
-    widget.speaker.stop();
+    _voiceScope?.detach();
     super.dispose();
+  }
+
+  /// Says the prompt, then opens the microphone for the answer. The prompt
+  /// is a question; a question nobody is listening to the answer to is the
+  /// bug the tester reported. With hands-free on the microphone is already
+  /// open, and the prompt is all that is needed.
+  Future<void> _promptThenListen() async {
+    if (!mounted) return;
+    await widget.speaker.speak(kDashboardPrompt);
+    if (!mounted) return;
+    final voice = widget.voice;
+    if (voice == null || voice.handsFree) return;
+    await voice.listen(auto: true, silenceSpeaker: false);
   }
 
   @override
@@ -104,6 +115,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Semantics(
                     button: true,
                     label: 'Settings',
+                    onTap: widget.onSettings,
                     child: ExcludeSemantics(
                       child: IconButton(
                         iconSize: 34,
@@ -161,6 +173,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ? 'Nothing is being shared. Open settings to change it.'
                     : 'Currently sharing: ${on.join(', ')}. Open settings to '
                         'change it.',
+                onTap: widget.onSettings,
                 child: ExcludeSemantics(
                   child: InkWell(
                     onTap: widget.onSettings,

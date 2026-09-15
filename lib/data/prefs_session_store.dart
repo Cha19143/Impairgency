@@ -16,6 +16,7 @@ class PrefsSessionStore implements SessionStore {
   static const _stepsKey = 'onboarding_completed_steps';
   static const _profileKey = 'cached_profile';
   static const _placesKey = 'saved_places';
+  static const _handsFreeKey = 'hands_free_voice';
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
@@ -101,6 +102,13 @@ class PrefsSessionStore implements SessionStore {
       ..add(route);
     await prefs.setStringList(_stepsKey, steps.toList());
   }
+
+  @override
+  Future<bool?> handsFree() async => (await _prefs).getBool(_handsFreeKey);
+
+  @override
+  Future<void> setHandsFree(bool on) async =>
+      (await _prefs).setBool(_handsFreeKey, on);
 
   /// Removes its own keys rather than calling `clear()`, which would also
   /// take anything another part of the app has stored under its own name.
