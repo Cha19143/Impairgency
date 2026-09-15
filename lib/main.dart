@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import 'app/app.dart';
 import 'app/emulator.dart';
+import 'data/crash_reporting.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -20,6 +23,21 @@ Future<void> main() async {
           )
         : DefaultFirebaseOptions.currentPlatform,
   );
+
+  // §1.4, switched on. Not on the web, which has no Crashlytics and builds
+  // only the dashboard; not under the emulator flag, whose project does not
+  // exist. Collection is off in debug builds, so a developer's mistakes are
+  // printed rather than counted among the users'.
+  if (!kIsWeb && !kUseEmulator) {
+    try {
+      await FirebaseCrashlytics.instance
+          .setCrashlyticsCollectionEnabled(!kDebugMode);
+      installCrashReporting(const CrashlyticsRecorder());
+    } catch (e) {
+      // Reporting that cannot start must not stop the app, SOS and all.
+      debugPrint('Crash reporting is off: $e');
+    }
+  }
 
   if (kUseEmulator) {
     await FirebaseAuth.instance

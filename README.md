@@ -106,7 +106,7 @@ shipped, turned into a failing test.
 | `test/e2e/overview.spec.js` | Numbers that survive an empty database. The predecessor hardcoded 15.4K and 99.2% and looked entirely convincing; these read §1.3's figures out of Firestore and assert the empty state stays empty. |
 
 ```bash
-flutter test                 # 1136 unit and widget tests
+flutter test                 # 1142 unit and widget tests
 tool/test_rules.sh           # 90 security rules tests, on the emulator
 tool/test_e2e.sh             # 12 browser tests against the dashboard
 tool/eval_detector.py --fetch  # what the detector finds, on 846 annotated photos

@@ -31,8 +31,8 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
-| Tester feedback round 2 — September 15 | `███████████░` | 33 / 36 |
-| **Overall** | | **136 / 140  (97%)** |
+| Tester feedback round 2 — September 15 | `███████████░` | 35 / 38 |
+| **Overall** | | **138 / 142  (97%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -510,6 +510,11 @@ the scope table now states.
 - [x] Saved places did not refresh after a save
 - [x] Consent screen said four switches; there are five
 - [x] Android backups: rules added, leaving out saved faces
+- [x] Crash reporting switched on — §1.4. `firebase_crashlytics` was a
+      dependency that nothing initialised, so errors in the app's own code
+      went unreported while System health said otherwise (from #77)
+- [x] A phone with no speech engine stays open and silent, and reports it
+      once, instead of throwing from the first screen (from #77)
 
 ---
 
