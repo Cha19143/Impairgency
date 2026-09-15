@@ -101,6 +101,16 @@ List<Destination> orderForButtons(List<Destination> places) {
   return [...fixed, ...others];
 }
 
+/// A found place's name, cut to what a saved place may be called: at a word,
+/// within 40 characters.
+String shortPlaceLabel(String label) {
+  final trimmed = label.trim();
+  if (trimmed.length <= 40) return trimmed;
+  final cut = trimmed.substring(0, 40);
+  final space = cut.lastIndexOf(' ');
+  return (space > 10 ? cut.substring(0, space) : cut).trim();
+}
+
 /// Why a place cannot be saved, or null if it can.
 String? validateDestinationLabel(String label, {required DestinationKind kind}) {
   if (kind != DestinationKind.other) return null;

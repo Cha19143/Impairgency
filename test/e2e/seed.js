@@ -85,6 +85,28 @@ async function createUser({ uid, email, password }) {
   );
 }
 
+/// Whether the auth emulator holds an account for [email].
+export async function authAccountExists(email) {
+  const response = await ok(
+    await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:query`, {
+      method: 'POST',
+      headers: owner,
+      body: JSON.stringify({}),
+    }),
+    'list accounts',
+  );
+  const { userInfo = [] } = await response.json();
+  return userInfo.some((user) => user.email === email);
+}
+
+/// A Firestore document, read past the rules, or null.
+export async function readDoc(path) {
+  const response = await fetch(`${DB}/${path}`, { headers: owner });
+  if (response.status === 404) return null;
+  await ok(response, `read ${path}`);
+  return response.json();
+}
+
 /// Wipes both emulators so a run never inherits the last one's state.
 async function reset() {
   await ok(
@@ -178,15 +200,31 @@ export async function seed() {
     role: str('vi'),
   });
   await put('users/vi-anna', {
+    uid: str('vi-anna'),
     displayName: str('Anna'),
     email: str('anna@impairgency.test'),
     role: str('vi'),
     deviceId: str('device-anna'),
+    impairment: str('blind'),
   });
   await put('users/vi-ben', {
+    uid: str('vi-ben'),
     displayName: str('Ben'),
     email: str('ben@impairgency.test'),
     role: str('vi'),
+    impairment: str('colourBlind'),
+  });
+  // A guardian watching Anna, so the Guardians filter has someone to find and
+  // the Linked column has something to count.
+  await put('users/guardian-gina', {
+    uid: str('guardian-gina'),
+    displayName: str('Gina'),
+    email: str('gina@impairgency.test'),
+    role: str('guardian'),
+  });
+  await put('pairings/guardian-gina_vi-anna', {
+    guardianId: str('guardian-gina'),
+    viUserId: str('vi-anna'),
   });
 
   await seedSessions();

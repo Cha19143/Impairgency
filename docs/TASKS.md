@@ -31,7 +31,8 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
-| **Overall** | | **103 / 104  (99%)** |
+| Tester feedback round 2 — September 15 | `███████████░` | 33 / 36 |
+| **Overall** | | **136 / 140  (97%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -398,10 +399,117 @@ to notice because nobody on the team had been the person the app is for.
   as the user-side SOS" would otherwise mean a guardian ringing themselves
 - Directions are straight-line. If turn-by-turn on roads is what was meant,
   that needs a routing service and a billing account, and belongs on the
-  scope table with a reason
+  scope table with a reason. *(Round 2: it was meant. Built on OpenStreetMap's
+  free router, with the straight line as the fallback.)*
 - The phone number on About you is not in the tester's list. It is there
   because the guardian's Call button needs a target; it is optional and
   says why it is asked
+
+---
+
+## Tester feedback round 2 — September 15
+
+The testers' second list, in Filipino, covering the dashboard, the user app and
+the guardian app. Two items reversed decisions in [`SCOPE.md`](SCOPE.md):
+recognising friends, and turn-by-turn directions. Both are built on the terms
+the scope table now states.
+
+**Guardian**
+
+- [x] Create account then lands on the guardian dashboard. Registration and
+      the code both succeeded; nothing navigated, and a second press said
+      the email was taken. A second press now carries on with the account
+      already made, and each error sits under its own field
+- [x] Guardian registration that fails partway says which part, and keeps
+      what was done: the account is made, only the code is left
+
+**Sign-in**
+
+- [x] New accounts confirm their email before reaching the app — §7. A
+      made-up address got straight in. Accounts made before the cutoff are
+      not held. Addresses are checked for shape everywhere one is typed
+- [x] Rules: claiming an invitation needs a confirmed email
+
+**Admin**
+
+- [x] Filters: all, visually impaired, blind, low vision, colour blind,
+      other, guardians, admins — with counts, and a search — §1.2
+- [x] Add an account without choosing its password: the person gets an
+      email to set their own
+- [x] Edit name, age, impairment, phone and role; a role change removes the
+      account's links, and says it will
+- [x] Remove an account: tombstone first, then links, codes and history; the
+      phone signs itself out and says why once. Rules lock the account out
+- [x] Browser tests for all of it — `test/e2e/users.spec.js`
+
+**Read Text**
+
+- [x] The buttons broke their labels a letter or two per line. They stack on
+      a phone and keep a row on a tablet, measured at the current text size
+- [x] Say "read" or "basahin" instead of pressing Read; pause, continue,
+      next and again by voice; a page read aloud is not heard as commands
+
+**Voice**
+
+- [x] "Tap to speak" did nothing: scan and navigate opened the screen the
+      user was already on, and a tap during automatic listening closed the
+      microphone without a word
+- [x] Hands-free: the microphone reopens by itself on the main, scan, read
+      and where-to screens; a switch in Settings; backs off and says so when
+      the microphone keeps failing — §2.C
+- [x] The app's own speech is not heard as a command; hazard warnings close
+      the microphone until they have been said
+- [x] More commands: take me to a place, stop directions, go back (asked
+      first on Scan), who is here, hello friend, forget, what can I say
+- [x] "Where am I" stopped reading the SOS receipt's "your location was
+      sent"; "call my guardian" stopped claiming to call
+- [x] Buttons Voice Access and Switch Access can press: every button's
+      semantics carries its tap
+
+**Directions**
+
+- [x] Walking routes from OpenStreetMap (routing.openstreetmap.de), turn by
+      turn: ahead of each turn and at it, a second turn close behind riding
+      along, the wrong way said, off the route rerouted within limits
+- [x] Every failure named, and the straight line as the fallback, said to be
+      one
+- [x] "Take me to Jollibee": places searched near the user (Photon), each
+      offered in turn, yes, next or no. Typed search in Smart assistance and
+      Saved places
+- [x] "Where am I" names the street when the map can say quickly
+- [x] OpenStreetMap credited on the scan screen and on the guardian's map
+- [x] Real OSRM and Photon answers recorded between two Malolos landmarks
+      (`test/core/navigation/recorded/`). A walk along the real route is
+      guided turn by turn in a test; the real search found two Jollibees on
+      one highway being merged, now fixed
+- [ ] Walk a route on a real phone in Malolos: prompt timing at walking
+      pace, off-route false alarms at 10–20 m GPS error
+
+**Friends**
+
+- [x] "Hello friend Sam": Sam is asked out loud, and only a yes saves
+      anything. Five clear views of one face; refusals said with their
+      reason — §2.A.6
+- [x] "Your friend Sam is approaching", seen twice before it is said, once a
+      minute per friend, never over a hazard — §2.B.3
+- [x] Faces kept on the phone as numbers, excluded from Android and iOS
+      backups, deleted when the consent is turned off and at sign-out
+- [x] People I know, under Settings: forget one, or everyone
+- [x] BlazeFace downloaded from Google's MediaPipe assets; hash and tensor
+      shapes checked (`tool/tflite_shapes.py`)
+- [ ] MobileFaceNet: agree the exact file and its weights' licence, then add
+      it — see [`VISION.md`](VISION.md)
+- [ ] Calibrate the match threshold with volunteers, at 0.5–3 m, in daylight
+      and indoors
+
+**Found on the way**
+
+- [x] Leaving a screen stopped the next screen's speech and the SOS
+      countdown's listening, and dropped queued hazard warnings
+- [x] The SOS countdown could hear itself say "cancel"
+- [x] Saved places did not refresh after a save
+- [x] Consent screen said four switches; there are five
+- [x] Android backups: rules added, leaving out saved faces
 
 ---
 
@@ -410,8 +518,9 @@ to notice because nobody on the team had been the person the app is for.
 Declared in the documentation with reasons. If one of these gets built anyway,
 the reason it was scoped out was wrong — argue that first, in writing.
 
-- [ ] ~~Familiar person recognition~~ — §2.A.6, §2.B.3 — third-party biometrics
-      with no consent mechanism
+- [ ] ~~Recognising anyone who has not agreed~~ — §2.A.6, §2.B.3 — friend
+      recognition is built for people who said yes when saved; contacts,
+      photos and strangers stay out
 - [ ] ~~Bluetooth / IoT hardware~~ — §5 — no device exists to pair with
 - [ ] ~~Fire and emergency exit guidance~~ — §2.A.2 — needs indoor floor plans
 - [ ] ~~Video session recording~~ — §1.1 — substituted by the Phase 2 timeline

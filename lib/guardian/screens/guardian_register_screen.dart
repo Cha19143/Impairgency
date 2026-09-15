@@ -9,8 +9,8 @@ import '../../vi/widgets/vi_screen.dart';
 import '../guardian_registration.dart';
 import 'accept_invitation_screen.dart' show UpperCaseFormatter;
 
-/// Returns null on success, or a sentence to say and show.
-typedef GuardianRegisterHandler = Future<String?> Function(
+/// Returns null once the account exists and is linked, or why not.
+typedef GuardianRegisterHandler = Future<RegisterFailure?> Function(
     GuardianRegistration registration);
 
 /// The guardian's own registration: name, email, password, phone, and the
@@ -21,8 +21,13 @@ typedef GuardianRegisterHandler = Future<String?> Function(
 /// Whether it exists, has been used, or has expired can only be known once
 /// there is an account to ask with - the rules require a signed-in reader -
 /// so that answer comes back from [onRegister], in the pairing code's own
-/// words, and the account that was just made stays signed in with the code
-/// field ready for another try.
+/// words. The account that was just made stays signed in, the fields that
+/// made it are locked, and the button asks only for the code again.
+///
+/// Success leaves the screen through [onRegistered]. The redirect cannot do
+/// it: a signed-in guardian is allowed to stay on this page, so the one that
+/// fixes a refused code is not thrown out mid-form - and that same rule is
+/// why the tester's successful registration "did nothing".
 ///
 /// Its user is usually sighted, so it is denser than the visually impaired
 /// app's screens - but it is still built on the same parts and still speaks
@@ -31,11 +36,15 @@ class GuardianRegisterScreen extends StatefulWidget {
   const GuardianRegisterScreen({
     super.key,
     required this.onRegister,
+    required this.onRegistered,
     required this.onSignIn,
     this.speaker = const SilentSpeaker(),
   });
 
   final GuardianRegisterHandler onRegister;
+
+  /// The account exists and is linked: open the guardian's dashboard.
+  final VoidCallback onRegistered;
 
   /// For a guardian who already has an account.
   final VoidCallback onSignIn;
@@ -56,6 +65,9 @@ class _GuardianRegisterScreenState extends State<GuardianRegisterScreen> {
   String? _error;
   _Field? _errorField;
   bool _busy = false;
+
+  /// Signed in, account written, only the code left.
+  bool _accountReady = false;
 
   @override
   void dispose() {
@@ -86,17 +98,42 @@ class _GuardianRegisterScreenState extends State<GuardianRegisterScreen> {
       _error = null;
       _errorField = null;
     });
-    final result = await widget.onRegister(GuardianRegistration(
-      name: _name.text.trim(),
-      email: _email.text.trim(),
-      password: _password.text,
-      phone: normalisePhone(_phone.text),
-      pairingCode: normalisePairingCode(_code.text),
-    ));
+    RegisterFailure? result;
+    try {
+      result = await widget.onRegister(GuardianRegistration(
+        name: _name.text.trim(),
+        email: _email.text.trim(),
+        password: _password.text,
+        phone: normalisePhone(_phone.text),
+        pairingCode: normalisePairingCode(_code.text),
+      ));
+    } catch (_) {
+      result = const RegisterFailure(
+          'Something went wrong. Check your connection and try again.');
+    } finally {
+      // Whatever happened, the button comes back. A button stuck on
+      // "Creating your account…" is a screen that has stopped answering.
+      if (mounted) setState(() => _busy = false);
+    }
     if (!mounted) return;
-    setState(() => _busy = false);
-    if (result != null) await _fail(result, _Field.code);
+    if (result == null) {
+      widget.onRegistered();
+      return;
+    }
+    if (result.accountReady && !_accountReady) {
+      setState(() => _accountReady = true);
+    }
+    await _fail(result.message, _fieldForRefusal(result.field));
   }
+
+  _Field _fieldForRefusal(RegisterField field) => switch (field) {
+        RegisterField.name => _Field.name,
+        RegisterField.email => _Field.email,
+        RegisterField.password => _Field.password,
+        RegisterField.phone => _Field.phone,
+        // A general failure is shown by the button, where the eye already is.
+        RegisterField.code || RegisterField.general => _Field.code,
+      };
 
   /// Which field a validation sentence is about, so the error sits under it.
   _Field _fieldFor(String failure) {
@@ -139,7 +176,8 @@ class _GuardianRegisterScreenState extends State<GuardianRegisterScreen> {
           child: TextField(
             controller: controller,
             focusNode: _focus[field],
-            enabled: !_busy,
+            // Once the account exists, only the code can still be changed.
+            enabled: !_busy && (!_accountReady || field == _Field.code),
             keyboardType: keyboardType,
             obscureText: obscure,
             autocorrect: !obscure && keyboardType != TextInputType.emailAddress,
@@ -221,8 +259,10 @@ class _GuardianRegisterScreenState extends State<GuardianRegisterScreen> {
               _Field.code,
               controller: _code,
               label: 'Their invitation code',
-              helper: 'Eight characters, read aloud from their phone. It has '
-                  'no letter O and no zero.',
+              helper: _accountReady
+                  ? 'Your account is made. Only the code is left.'
+                  : 'Eight characters, read aloud from their phone. It has '
+                      'no letter O and no zero.',
               capitalization: TextCapitalization.characters,
               maxLength: kPairingCodeLength + 1,
               last: true,
@@ -245,15 +285,18 @@ class _GuardianRegisterScreenState extends State<GuardianRegisterScreen> {
       ),
       actions: [
         ViButton(
-          label: _busy ? 'Creating your account…' : 'Create account',
+          label: _busy
+              ? (_accountReady ? 'Linking…' : 'Creating your account…')
+              : (_accountReady ? 'Link with this code' : 'Create account'),
           icon: Icons.arrow_forward,
           onPressed: _busy ? null : _submit,
         ),
-        ViButton(
-          label: 'I already have an account',
-          kind: ViButtonKind.quiet,
-          onPressed: _busy ? null : widget.onSignIn,
-        ),
+        if (!_accountReady)
+          ViButton(
+            label: 'I already have an account',
+            kind: ViButtonKind.quiet,
+            onPressed: _busy ? null : widget.onSignIn,
+          ),
       ],
     );
   }

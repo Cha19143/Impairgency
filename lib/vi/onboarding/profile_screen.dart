@@ -251,6 +251,7 @@ class _ChoiceRow extends StatelessWidget {
         selected: selected,
         enabled: enabled,
         label: '$label. $detail',
+        onTap: enabled ? onTap : null,
         child: ExcludeSemantics(
           child: Padding(
             padding: const EdgeInsets.only(bottom: 10),

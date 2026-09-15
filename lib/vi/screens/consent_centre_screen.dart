@@ -83,6 +83,7 @@ class _ConsentCentreScreenState extends State<ConsentCentreScreen> {
             Semantics(
               toggled: _values[choice.key] ?? false,
               label: '${choice.title}. ${choice.detail}',
+              onTap: () => _set(choice.key, !(_values[choice.key] ?? false)),
               child: ExcludeSemantics(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 10),

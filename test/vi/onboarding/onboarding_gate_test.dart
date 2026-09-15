@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:impairgency/data/auth_service.dart';
+import 'package:impairgency/vi/onboarding/verify_email_screen.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/speech/speaker.dart';
 import 'package:impairgency/guardian/screens/guardian_register_screen.dart';
@@ -65,7 +67,15 @@ List<(String, Widget Function(Speaker))> screens() => [
       ('Guardian registration', (s) => GuardianRegisterScreen(
             speaker: s,
             onRegister: (_) async => null,
+            onRegistered: () {},
             onSignIn: () {},
+          )),
+      ('Check your email', (s) => VerifyEmailScreen(
+            speaker: s,
+            email: 'ben@example.com',
+            onCheck: () async => VerificationCheck.notYet,
+            onResend: () async => null,
+            onUseDifferentEmail: () {},
           )),
       ('Sign in', (s) => SignInScreen(
             speaker: s,

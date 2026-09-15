@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/vision/detection.dart';
+import '../core/vision/faces.dart';
 
 /// Stand-in for platforms with no TFLite.
 ///
@@ -21,6 +22,9 @@ class ScanService {
   }
 
   Future<bool> start(void Function(List<Detection>) onFrame) async => false;
+
+  /// Recognises nobody here.
+  Future<bool> watchFaces(FaceWatch? watch) async => false;
 
   Future<void> dispose() async {}
 }

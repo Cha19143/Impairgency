@@ -7,7 +7,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 import '../core/vision/detection.dart';
+import '../core/vision/faces.dart';
 import '../core/vision/yolo.dart';
+import '../core/vision/yuv_frame.dart';
+import 'face_recognizer.dart';
 
 /// Camera frames in, detections out.
 ///
@@ -68,6 +71,20 @@ class ScanService {
   Float32List? _output;
 
   Letterbox? _letterbox;
+
+  /// The face models, loaded the first time friends are to be recognised and
+  /// closed with everything else.
+  FaceRecognizer? _faces;
+  FaceWatch? _watch;
+  DateTime _lastFaces = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Faces are looked for no more often than this, and only in frames with a
+  /// person near enough to recognise - or while a friend is being taken
+  /// down. Two more models on every frame would cook the phone.
+  static const Duration _faceGap = Duration(milliseconds: 400);
+
+  /// A person smaller than this in the frame is too far to recognise.
+  static const double _minPersonExtent = 0.2;
 
   CameraController? get controller => _controller;
   bool get isReady => _controller?.value.isInitialized == true;
@@ -139,6 +156,22 @@ class ScanService {
       debugPrint('Model load failed: $e');
       return false;
     }
+  }
+
+  /// Starts looking for faces for [watch] - loading the face models the first
+  /// time - or, with null, stops. False when the models could not be loaded:
+  /// this build does not have them, or this phone cannot run them.
+  Future<bool> watchFaces(FaceWatch? watch) async {
+    _watch = watch;
+    if (watch == null || _disposed) return false;
+    if (_faces != null) return true;
+    final loaded = await FaceRecognizer.load();
+    if (_disposed) {
+      await loaded?.close();
+      return false;
+    }
+    _faces = loaded;
+    return loaded != null;
   }
 
   /// Asks for the camera and starts streaming. Returns false if refused.
@@ -246,11 +279,49 @@ class ScanService {
         ));
       }
       onFrame(detections);
+      // Inside the same busy window as the objects, so dispose() waits for
+      // the face models too before closing anything.
+      await _lookForFaces(image, detections);
     } catch (e) {
       debugPrint('Detection failed: $e');
     } finally {
       _busy = false;
     }
+  }
+
+  Future<void> _lookForFaces(
+      CameraImage image, List<Detection> detections) async {
+    final watch = _watch;
+    final faces = _faces;
+    if (watch == null || faces == null || _disposed) return;
+    final now = DateTime.now();
+    if (now.difference(_lastFaces) < _faceGap) return;
+    final people = [
+      for (final d in detections)
+        if (d.label == 'person' && d.extent >= _minPersonExtent && d.box != null)
+          PersonBox(d.box!.left, d.box!.top, d.box!.right, d.box!.bottom),
+    ];
+    if (people.isEmpty && !watch.enrolling) return;
+    _lastFaces = now;
+
+    final planes = image.planes;
+    final biPlanar = planes.length < 3;
+    final frame = YuvFrame(
+      width: image.width,
+      height: image.height,
+      y: planes[0].bytes,
+      u: planes[1].bytes,
+      v: biPlanar ? planes[1].bytes : planes[2].bytes,
+      yRowStride: planes[0].bytesPerRow,
+      uvRowStride: planes[1].bytesPerRow,
+      uvPixelStride: planes[1].bytesPerPixel ?? (biPlanar ? 2 : 1),
+      biPlanar: biPlanar,
+      sensorOrientation: _sensorOrientation,
+    );
+    final seen = await faces.analyse(frame,
+        people: people, centre: watch.enrolling, at: now);
+    if (_disposed || !identical(watch, _watch)) return;
+    watch.onFaces(seen);
   }
 
   /// Samples the frame into the model's input, rotating on the way so that x
@@ -381,6 +452,9 @@ class ScanService {
     _worker = null;
     _interpreter?.close();
     _interpreter = null;
+    _watch = null;
+    await _faces?.close();
+    _faces = null;
   }
 
   /// Exposed so a test can check the maths without a camera.

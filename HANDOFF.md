@@ -1,3 +1,62 @@
+# Where we left off — 2026-09-15
+
+## Tester feedback round 2
+
+The testers' list of September 15, all of it, on branch
+`claude/tester-feedback-sept-15`. Nothing committed or deployed yet.
+`flutter analyze` is clean; **1136** Flutter tests, **90** rules tests and
+**12** browser tests pass. A release APK and the web app build. The checklist
+is in [`docs/TASKS.md`](docs/TASKS.md), "Tester feedback round 2".
+
+1. **Guardian Create account lands on the dashboard.** It had worked and not
+   navigated; a second press now carries on with the account already made.
+2. **Email verification for new accounts** (`/verify-email`). Cutoff in
+   `lib/core/auth/email_verification.dart`; older accounts are not held.
+3. **Admin Users:** filters with counts, search, add (secondary Firebase app,
+   the person sets their own password by email), edit, remove (tombstone in
+   `removed_accounts`, enforced by the rules; the phone signs out).
+4. **Read Text:** buttons stack on phones; "read" / "basahin", pause, next,
+   again by voice.
+5. **Voice:** Tap to speak fixed; hands-free listening (Settings switch, on by
+   default on Android, off on iOS until tried); the app's own speech filtered
+   out; many more commands, "take me home" included.
+6. **Directions:** OSRM walking routes (routing.openstreetmap.de) followed turn
+   by turn, rerouting within limits, straight line as the named fallback;
+   Photon place search by voice and typed; street names in "where am I".
+7. **Friends:** "hello friend Sam" asks Sam and saves five views of the face on
+   the phone; "Your friend Sam is approaching"; People I know in Settings;
+   deleted with the consent and at sign-out. **Needs the two face models,
+   which are not downloaded** — see `docs/VISION.md`, "Faces".
+
+Since then (2026-09-16): **Firestore rules and hosting deployed**; PR
+calmadex/impairgency#83 open; real OSRM and Photon answers recorded as
+fixtures, which caught place search merging two branches of one shop; the
+BlazeFace model added and checked; the test APKs on release `apk-2026-09-10`
+updated.
+
+## Waiting on someone
+
+- **MobileFaceNet** — agree the exact file and the weights' licence (see
+  `docs/VISION.md`, "Faces"). Until then recognition says it is unavailable.
+- **Two superseded APKs** are still attached to the release, marked as such;
+  delete them when the new ones are confirmed to install.
+- **iOS build** — the build Mac's Xcode licence has not been accepted
+  (`sudo xcodebuild -license`), so git and `flutter build ios` fail with exit
+  69 in a normal shell. The session worked around it with
+  `DEVELOPER_DIR=/Library/Developer/CommandLineTools`.
+
+## Check on a real phone
+
+- Hands-free on Android: whether the recogniser beeps on every restart, and
+  whether starting it ducks the speech. Tried only against fakes.
+- A route walked outdoors: prompt timing, false off-route alarms at 10–20 m
+  GPS error, how FOSSGIS and Photon answer from the Philippines.
+- Face recognition, once the models are in: threshold, distance, light, heat
+  and battery with YOLO and both face models running.
+- The verification email: delivery, spam folder.
+
+---
+
 # Where we left off — 2026-09-13
 
 ## Guardian side, this round

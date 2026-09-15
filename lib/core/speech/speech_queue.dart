@@ -33,13 +33,64 @@ class _Request {
   }
 }
 
+/// Stops what the app is narrating without touching what it is warning about.
+///
+/// Separate from [Speaker] on purpose: thirteen test fakes implement that, and
+/// only the real queue knows which sentence is which.
+abstract interface class NarrationControl {
+  /// Drops pending information and navigation speech and cuts off the one in
+  /// progress. A hazard, said or waiting, is left alone.
+  void clearNarration();
+}
+
+/// What the app has been saying, for the microphone that is listening to the
+/// same room.
+///
+/// A phone's speaker is a few centimetres from its microphone. With the
+/// microphone left open, the recogniser transcribes the app as readily as the
+/// person holding it; knowing what was said, and when, is how the app tells
+/// the two apart.
+abstract interface class SpeechActivity {
+  /// Every sentence in progress, or finished at or after [since].
+  List<String> spokenSince(DateTime since);
+
+  /// True when a hazard warning starts being said, false when it ends.
+  Stream<bool> get hazardSpeaking;
+}
+
+class _Said {
+  _Said(this.text, this.start);
+  final String text;
+  final DateTime start;
+  DateTime? end;
+}
+
 /// A [PrioritySpeaker] that serialises speech and enforces the preemption
 /// rule documented on [PrioritySpeaker].
-class SpeechQueue implements PrioritySpeaker {
+class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
   SpeechQueue({
     required SpeechEngine engine,
     this.lineGap = const Duration(milliseconds: 350),
-  }) : _engine = engine;
+    DateTime Function()? now,
+  })  : _engine = engine,
+        _now = now ?? DateTime.now;
+
+  final DateTime Function() _now;
+
+  /// The last few sentences, with when they started and finished.
+  final List<_Said> _history = [];
+  static const int _historyLimit = 30;
+
+  final StreamController<bool> _hazards = StreamController<bool>.broadcast();
+
+  @override
+  Stream<bool> get hazardSpeaking => _hazards.stream;
+
+  @override
+  List<String> spokenSince(DateTime since) => [
+        for (final said in _history)
+          if (said.end == null || !said.end!.isBefore(since)) said.text,
+      ];
 
   final SpeechEngine _engine;
 
@@ -137,6 +188,9 @@ class SpeechQueue implements PrioritySpeaker {
     if (_current != null) await _engine.stop();
   }
 
+  @override
+  void clearNarration() => _replaceInformational();
+
   /// The user did something, so whatever the app was telling them about
   /// before is stale. Drops pending narration and cuts it off if it is in
   /// progress — but never a hazard, which is about the street rather than
@@ -176,12 +230,19 @@ class SpeechQueue implements PrioritySpeaker {
         final request = _pending.removeAt(0);
         _current = request;
         _last = request.text;
+        final said = _Said(request.text, _now());
+        _history.add(said);
+        if (_history.length > _historyLimit) _history.removeAt(0);
+        final hazard = request.priority == SpeechPriority.hazard;
+        if (hazard) _hazards.add(true);
         try {
           await _engine.say(request.text);
         } catch (_) {
           // An engine that throws must not take the queue down with it: the
           // next sentence may be the one that matters.
         }
+        said.end = _now();
+        if (hazard) _hazards.add(false);
         _current = null;
         request.finish();
 

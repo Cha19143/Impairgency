@@ -85,6 +85,9 @@ void main() {
       await tester.enterText(fields.at(4), code);
     }
 
+    TextField field(WidgetTester tester, int index) =>
+        tester.widget<TextField>(find.byType(TextField).at(index));
+
     testWidgets('hands over every field, normalised', (tester) async {
       GuardianRegistration? sent;
       await tester.pumpWidget(host(GuardianRegisterScreen(
@@ -92,6 +95,7 @@ void main() {
           sent = r;
           return null;
         },
+        onRegistered: () {},
         onSignIn: () {},
       )));
       await fill(tester, code: 'fh29 mr47');
@@ -104,24 +108,92 @@ void main() {
       expect(sent!.name, 'Ben');
     });
 
-    testWidgets('a code the server refuses is said, and shown under the code',
+    testWidgets('a linked account leaves the form for the dashboard',
         (tester) async {
-      // The account exists by then; the screen has to make that obvious
-      // rather than send the guardian round to create it again.
-      final speaker = RecordingSpeaker();
-      final refusal =
-          pairingRejectionMessage(PairingCodeRejection.alreadyUsed);
+      // The tester's report: the code was right, the account was made, the
+      // link was written - and the screen stayed exactly as it was, so they
+      // pressed Create account again and were told the account existed.
+      var opened = 0;
       await tester.pumpWidget(host(GuardianRegisterScreen(
-        speaker: speaker,
-        onRegister: (_) async => refusal,
+        onRegister: (_) async => null,
+        onRegistered: () => opened++,
         onSignIn: () {},
       )));
       await fill(tester);
       await tester.tap(find.text('Create account'));
       await tester.pumpAndSettle();
 
-      expect(find.text(refusal), findsOneWidget);
+      expect(opened, 1);
+    });
+
+    testWidgets(
+        'a code the server refuses is said, shown under the code, and only '
+        'the code is asked for again', (tester) async {
+      final speaker = RecordingSpeaker();
+      final refusal =
+          pairingRejectionMessage(PairingCodeRejection.alreadyUsed);
+      var opened = 0;
+      await tester.pumpWidget(host(GuardianRegisterScreen(
+        speaker: speaker,
+        onRegister: (_) async => RegisterFailure(refusal,
+            field: RegisterField.code, accountReady: true),
+        onRegistered: () => opened++,
+        onSignIn: () {},
+      )));
+      await fill(tester);
+      await tester.tap(find.text('Create account'));
+      await tester.pumpAndSettle();
+
+      expect(field(tester, 4).decoration!.errorText, refusal);
       expect(speaker.said, contains(refusal));
+      expect(opened, 0);
+      // The account exists now. Name, email, password and phone made it, so
+      // they are locked, and the button no longer offers to create anything.
+      for (final i in [0, 1, 2, 3]) {
+        expect(field(tester, i).enabled, isFalse, reason: 'field $i');
+      }
+      expect(field(tester, 4).enabled, isTrue);
+      expect(find.text('Create account'), findsNothing);
+      expect(find.text('Link with this code'), findsOneWidget);
+      expect(find.text('I already have an account'), findsNothing);
+    });
+
+    testWidgets('an email refusal sits under the email, not the code',
+        (tester) async {
+      const refusal = 'There is already an account with that email. Press "I '
+          'already have an account" to sign in, then enter the code.';
+      await tester.pumpWidget(host(GuardianRegisterScreen(
+        onRegister: (_) async =>
+            const RegisterFailure(refusal, field: RegisterField.email),
+        onRegistered: () {},
+        onSignIn: () {},
+      )));
+      await fill(tester);
+      await tester.tap(find.text('Create account'));
+      await tester.pumpAndSettle();
+
+      expect(field(tester, 1).decoration!.errorText, refusal);
+      expect(field(tester, 4).decoration!.errorText, isNull);
+      expect(field(tester, 1).enabled, isTrue,
+          reason: 'no account was made, so the email can still be changed');
+    });
+
+    testWidgets('a failure that throws is said, and the button comes back',
+        (tester) async {
+      final speaker = RecordingSpeaker();
+      await tester.pumpWidget(host(GuardianRegisterScreen(
+        speaker: speaker,
+        onRegister: (_) async => throw StateError('offline'),
+        onRegistered: () {},
+        onSignIn: () {},
+      )));
+      await fill(tester);
+      await tester.tap(find.text('Create account'));
+      await tester.pumpAndSettle();
+
+      expect(speaker.said.last, contains('Check your connection'));
+      expect(find.text('Creating your account…'), findsNothing);
+      expect(find.text('Create account'), findsOneWidget);
     });
 
     testWidgets('a malformed code never reaches the server', (tester) async {
@@ -131,6 +203,7 @@ void main() {
           calls++;
           return null;
         },
+        onRegistered: () {},
         onSignIn: () {},
       )));
       await fill(tester, code: 'FH29');
@@ -145,6 +218,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(host(GuardianRegisterScreen(
         onRegister: (_) async => null,
+        onRegistered: () {},
         onSignIn: () {},
       )));
       await tester.enterText(find.byType(TextField).at(4), 'fh0o29');

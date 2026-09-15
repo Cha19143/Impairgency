@@ -392,6 +392,7 @@ class _ContactRow extends StatelessWidget {
               button: true,
               enabled: onMoveUp != null,
               label: 'Move ${contact.name} up, so they are called sooner',
+              onTap: onMoveUp,
               child: ExcludeSemantics(
                 child: IconButton(
                   iconSize: 32,
@@ -408,6 +409,7 @@ class _ContactRow extends StatelessWidget {
             Semantics(
               button: true,
               label: 'Remove ${contact.name}',
+              onTap: onRemove,
               child: ExcludeSemantics(
                 child: IconButton(
                   iconSize: 32,

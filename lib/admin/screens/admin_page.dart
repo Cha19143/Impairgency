@@ -32,7 +32,11 @@ class AdminPage<T> extends StatefulWidget {
   final String title;
   final String? subtitle;
   final Future<T> Function() load;
-  final Widget Function(BuildContext, T) builder;
+
+  /// Builds the page from what [load] returned. The third argument loads it
+  /// again - for a page whose actions change what it shows.
+  final Widget Function(BuildContext, T, Future<void> Function() reload)
+      builder;
   final bool Function(T)? isEmpty;
   final String emptyTitle;
   final String emptyDetail;
@@ -47,9 +51,32 @@ class AdminPage<T> extends StatefulWidget {
 }
 
 class _AdminPageState<T> extends State<AdminPage<T>> {
-  late Future<T> _future = widget.load();
+  late Future<T> _future = _load();
 
-  void _reload() => setState(() => _future = widget.load());
+  /// The last page that loaded, kept on screen while the next one loads.
+  /// Otherwise every edit would blank the table to a spinner and back, and
+  /// lose the admin's place in it.
+  T? _last;
+  bool _hasLast = false;
+
+  Future<T> _load() async {
+    final data = await widget.load();
+    _last = data;
+    _hasLast = true;
+    return data;
+  }
+
+  Future<void> _reload() async {
+    final next = _load();
+    setState(() {
+      _future = next;
+    });
+    try {
+      await next;
+    } catch (_) {
+      // Shown by the builder below.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +91,15 @@ class _AdminPageState<T> extends State<AdminPage<T>> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
+            if (_hasLast) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const LinearProgressIndicator(minHeight: 2),
+                  widget.builder(context, _last as T, _reload),
+                ],
+              );
+            }
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 60),
               child: Center(child: CircularProgressIndicator()),
@@ -87,7 +123,7 @@ class _AdminPageState<T> extends State<AdminPage<T>> {
               onRetry: _reload,
             );
           }
-          return widget.builder(context, data);
+          return widget.builder(context, data, _reload);
         },
       ),
     );

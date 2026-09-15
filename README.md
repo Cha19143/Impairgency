@@ -23,11 +23,15 @@ lib/
   app/        router, redirect rule, theme
   core/       platform-agnostic and Flutter-free — unit tested without a binding
     a11y/     WCAG contrast maths
+    admin/    account filters and the shape of a new account
+    auth/     email address checks, and who must confirm theirs
     contacts/ the emergency contacts, and what their order means
-    navigation/ destinations and straight-line directions
+    navigation/ destinations, walking routes followed turn by turn, place
+              search, and the straight line when there is no route
     reading/  a page in pieces, at the listener's pace
     speech/   the one speech queue: hazard > navigation > information
-    voice/    command vocabulary, matching, and hearing a command
+    vision/   object and face decoding, alignment, friends and when to name them
+    voice/    command vocabulary, hearing a command, hands-free listening
   data/       Firestore repositories, device services
   vi/         visually impaired user app
   guardian/   guardian app
@@ -94,12 +98,17 @@ shipped, turned into a failing test.
 | `test/core/safety_notice_test.dart` | Copy that hedges instead of naming what the app misses, or claims the environment is safe. |
 | `test/rules/firestore.test.js` | A guardian reading a user they were never paired with. Location leaking after consent is revoked. A client making itself an admin. A pairing code redeemed twice. |
 | `test/e2e/auth-gate.spec.js` | A correct password that redisplays the login form. An admin route reachable without an admin. The dashboard is driven in a real browser, so these are caught in the build that ships rather than in a test harness. |
+| `test/vi/hands_free_test.dart` | A microphone that listens without a tap and hears the app instead of the person: the dashboard's own prompt contains "scan", "read" and "help". A hazard warning spoken into an open microphone. A failing microphone retried forever. |
+| `test/core/navigation/route_follower_test.dart` | A turn said late, twice, or not at all; one wild GPS reading setting off a new route; "turn left" given from a compass the phone does not have. |
+| `test/core/vision/faces_test.dart` | A stranger named as a friend; a face saved from five views of two people; a friend's name repeated every frame. |
+| `test/data/friend_store_test.dart` | Saved faces written outside the app's folder, or into a backup. A corrupt file that stops the scan screen. |
+| `test/e2e/users.spec.js` | Admin filters, add, edit and remove, driven in a browser against the emulators. A removed account that can still write. |
 | `test/e2e/overview.spec.js` | Numbers that survive an empty database. The predecessor hardcoded 15.4K and 99.2% and looked entirely convincing; these read §1.3's figures out of Firestore and assert the empty state stays empty. |
 
 ```bash
-flutter test                 # 774 unit and widget tests
-tool/test_rules.sh           # 77 security rules tests, on the emulator
-tool/test_e2e.sh             # 8 browser tests against the dashboard
+flutter test                 # 1136 unit and widget tests
+tool/test_rules.sh           # 90 security rules tests, on the emulator
+tool/test_e2e.sh             # 12 browser tests against the dashboard
 tool/eval_detector.py --fetch  # what the detector finds, on 846 annotated photos
 flutter build apk && flutter build ios && flutter build web
 ```

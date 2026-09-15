@@ -67,6 +67,36 @@ void main() {
       expect(tapped, isTrue);
     });
 
+    testWidgets('hands-free voice can be turned off, and says which it is',
+        (tester) async {
+      // The testers asked for a microphone that listens without a tap. Not
+      // everyone wants one: a noisy house, a phone in a shared room.
+      var toggles = 0;
+      await pump(
+        tester,
+        SettingsScreen(
+          handsFree: true,
+          onToggleHandsFree: () => toggles++,
+          onConsent: () {}, onLearned: () {}, onDevice: () {},
+          onEmergencyContact: () {}, onInviteGuardian: () {},
+          onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
+        ),
+      );
+      await tapAction(tester, find.text('Hands-free voice: on'));
+      expect(toggles, 1);
+
+      await pump(
+        tester,
+        SettingsScreen(
+          onConsent: () {}, onLearned: () {}, onDevice: () {},
+          onEmergencyContact: () {}, onInviteGuardian: () {},
+          onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
+        ),
+      );
+      expect(find.textContaining('Hands-free voice'), findsNothing,
+          reason: 'no switch where there is no microphone to switch');
+    });
+
     testWidgets('a missing emergency contact is flagged, not hidden',
         (tester) async {
       await pump(

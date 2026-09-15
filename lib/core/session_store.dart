@@ -75,6 +75,12 @@ abstract interface class SessionStore {
   Future<Set<String>> completedSteps();
   Future<void> markStepComplete(String route);
 
+  /// Whether voice commands are listened for without a tap, or null if the
+  /// user has never chosen. A setting of the phone and of how its owner uses
+  /// it, not of an account, so [forgetAccount] leaves it alone.
+  Future<bool?> handsFree();
+  Future<void> setHandsFree(bool on);
+
   /// Returns the device to how it was before anyone signed in.
   ///
   /// Everything this store holds is about a person, and none of it is scoped to
@@ -102,6 +108,13 @@ class InMemorySessionStore implements SessionStore {
   final Set<String> _steps;
   CachedProfile _profile;
   List<Destination> _places = const [];
+  bool? _handsFree;
+
+  @override
+  Future<bool?> handsFree() async => _handsFree;
+
+  @override
+  Future<void> setHandsFree(bool on) async => _handsFree = on;
 
   @override
   Future<CachedProfile> cachedProfile() async => _profile;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/navigation/destination.dart';
 import '../../core/speech/speaker.dart';
+import '../widgets/place_search_panel.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
 
@@ -12,10 +13,9 @@ typedef SaveHereHandler = Future<String?> Function(
 
 /// Add, rename and remove saved places.
 ///
-/// A place is saved by standing in it. Typing coordinates is not a thing a
-/// blind user does, and searching an address needs a geocoder the free tier
-/// does not have; "save where I am now as Home" needs neither and is what
-/// people actually do the first time they open the app at home.
+/// A place is saved by standing in it - "save where I am now as Home" is what
+/// people actually do the first time they open the app at home - or by
+/// finding it by name on OpenStreetMap, for somewhere not yet been.
 class SavedPlacesScreen extends StatefulWidget {
   const SavedPlacesScreen({
     super.key,
@@ -25,6 +25,8 @@ class SavedPlacesScreen extends StatefulWidget {
     required this.onRemove,
     required this.onBack,
     this.speaker = const SilentSpeaker(),
+    this.search,
+    this.onSaveFound,
   });
 
   final List<Destination> places;
@@ -33,6 +35,12 @@ class SavedPlacesScreen extends StatefulWidget {
   final Future<void> Function(Destination place) onRemove;
   final VoidCallback onBack;
   final Speaker speaker;
+
+  /// Finds places by name. Null, or no [onSaveFound], hides the search.
+  final Future<PlaceSearchResult> Function(String query)? search;
+
+  /// Saves a place that was found. Null when saved, or a sentence to say.
+  final Future<String?> Function(Destination place)? onSaveFound;
 
   @override
   State<SavedPlacesScreen> createState() => _SavedPlacesScreenState();
@@ -70,6 +78,18 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
     }
     _label.clear();
     await _tell('Saved where you are now as $label.');
+  }
+
+  Future<void> _saveFound(Destination place) async {
+    final save = widget.onSaveFound;
+    if (save == null) return;
+    final result = await save(place);
+    if (!mounted) return;
+    if (result != null) {
+      await _tell(result, error: true);
+      return;
+    }
+    await _tell('Saved ${place.label}.');
   }
 
   Future<void> _tell(String text, {bool error = false}) async {
@@ -202,6 +222,27 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
             onPressed:
                 _saving == null ? () => _saveHere(DestinationKind.other) : null,
           ),
+          if (widget.search != null && widget.onSaveFound != null) ...[
+            const SizedBox(height: 22),
+            Semantics(
+              header: true,
+              child: const Text(
+                'Or find a place by name',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            PlaceSearchPanel(
+              search: widget.search!,
+              onChoose: _saveFound,
+              chooseDetail: 'Save it',
+              onResult: widget.speaker.speak,
+            ),
+          ],
           if (_notice != null)
             Semantics(
               liveRegion: true,
@@ -270,6 +311,7 @@ class _PlaceRow extends StatelessWidget {
               Semantics(
                 button: true,
                 label: 'Rename ${place.label}',
+                onTap: onRename,
                 child: ExcludeSemantics(
                   child: IconButton(
                     iconSize: 30,
@@ -283,6 +325,7 @@ class _PlaceRow extends StatelessWidget {
             Semantics(
               button: true,
               label: 'Remove ${place.label}',
+              onTap: onRemove,
               child: ExcludeSemantics(
                 child: IconButton(
                   iconSize: 30,

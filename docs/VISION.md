@@ -1,6 +1,6 @@
 # The detector
 
-The scan screen runs **YOLO11n**, COCO's eighty classes, at 320×320, on the
+The scan screen runs **YOLO11n**, COCO's eighty classes, at 640×640, on the
 CPU through `tflite_flutter`. It replaces the SSD MobileNet ported from
 `cprwire`.
 
@@ -113,12 +113,12 @@ published weights:
 
 ```bash
 pip install ultralytics
-yolo export model=yolo11n.pt format=tflite imgsz=320
+yolo export model=yolo11n.pt format=tflite imgsz=640
 ```
 
 `yolo11n.pt` comes from `github.com/ultralytics/assets`. The export runs
 through Ultralytics' LiteRT path, which keeps PyTorch's channel-first layout —
-hence the planar `[1, 3, 320, 320]` input, which is *not* what the older
+hence the planar `[1, 3, 640, 640]` input, which is *not* what the older
 `onnx2tf` route produces and not what most Flutter examples of this assume.
 
 `assets/models/labels.txt` is written out of the same weights' `names` map, in
@@ -171,3 +171,88 @@ different detector rather than a different file name — an Apache-2.0 or
 BSD-licensed model (the previous SSD MobileNet, or NanoDet-Plus) behind the
 same `ScanService`. The decode in `core/vision/yolo.dart` is specific to
 YOLO's output shape; everything else in the scan path is not.
+
+---
+
+# Faces
+
+Recognising friends (§2.A.6, §2.B.3) runs two more small models through the
+same `tflite_flutter`, on their own background isolates, and only when asked:
+a person near enough to recognise in the frame (YOLO's box, a fifth of the
+frame or more), or a friend being saved. Never more often than every 400 ms.
+
+| | Detector | Recogniser |
+|---|---|---|
+| Model | MediaPipe BlazeFace, short range | MobileFaceNet |
+| Asset | `assets/models/face_detection_short_range.tflite`, about 230 KB | `assets/models/mobilefacenet.tflite`, a few MB |
+| Input | `[1, 128, 128, 3]` float32, −1 to 1 | `[1, 112, 112, 3]` float32, `(x − 127.5) / 128` |
+| Output | `[1, 896, 16]` boxes and six landmarks, `[1, 896, 1]` scores | `[1, N]`, one face as N numbers |
+| Decoded in | `core/vision/blazeface.dart` — anchors, sigmoid, weighted merge at IoU 0.3, MediaPipe's own settings | `core/vision/faces.dart` — unit length, cosine similarity |
+
+Both are **checked at load**, by shape, as the detector is. The recogniser's
+output length is read off the model, so a 128- or 192-number variant both work.
+
+**The detector is in; the recogniser is not yet.** Each file is added only with
+the team's agreement on that file, its source and its licence. A build without
+both runs normally: the scan screen says *"Recognising people is not available
+on this phone yet"* when asked, and nothing else changes.
+
+| File | Source | Size | Checked |
+|---|---|---|---|
+| `face_detection_short_range.tflite` | Google, `https://storage.googleapis.com/mediapipe-assets/face_detection_short_range.tflite` | 229,032 bytes, SHA-256 `3bc182eb9f33925d9e58b5c8d59308a760f4adea8f282370e428c51212c26633` | MD5 matches Google's; `input [1,128,128,3]`, `regressors [1,896,16]`, `classificators [1,896,1]`, all float32 |
+| `mobilefacenet.tflite` | Proposed: `MCarlomagno/FaceRecognitionAuth`, `assets/mobilefacenet.tflite` (repository BSD-3-Clause, archived) | 5,233,552 bytes | Not downloaded. Check `input [1,112,112,3]` and `[1,N]` output with `tool/tflite_shapes.py` before adding |
+
+`tool/tflite_shapes.py` reads a model's tensors without TensorFlow; it reports
+YOLO11n as `[1,3,640,640]` in and `[1,84,8400]` out, as `ScanService` expects.
+
+## How a face is read
+
+1. The top 45% of a person's box is squared up and sampled into 128×128
+   (`core/vision/yuv_frame.dart`, straight from the camera's YUV planes, turned
+   upright as the YOLO path does).
+2. BlazeFace finds the face and its eyes, nose and mouth.
+3. The face is **aligned**: one rotation, one scale and one shift that put
+   those four points on ArcFace's 112×112 template, fitted by least squares
+   (`core/vision/face_align.dart`). A tilted or off-centre crop changes the
+   numbers more than a different person does, so this step is not optional.
+4. MobileFaceNet turns the aligned face into numbers, made unit length.
+5. The numbers are compared with each saved friend's five views
+   (`bestMatch`). Nothing is kept for a face that matches nobody.
+
+## The thresholds, and why they are not finished
+
+- **Match at cosine 0.62, and 0.08 clear of the next friend.** A starting point
+  from MobileFaceNet's published results, not a measurement on this camera.
+- **Calibrate before relying on it.** With 3–5 people who agree to take part:
+  save each, then log (debug builds only) the similarity of every face seen to
+  every friend, at 0.5, 1, 2 and 3 metres, in daylight and indoors. Pick the
+  threshold that gives **no match between different people**; missing a
+  friend is a sentence not said, and naming the wrong person is worse.
+- **Saving** takes five views within six seconds: one face only, at least 12%
+  of the frame wide, tilted no more than 25°, all five agreeing at 0.55 or
+  better, and not already saved as someone else.
+- **Announcing** needs two matches within 1.5 s; once a minute per friend; 8 s
+  between any two names; information priority, so a hazard always comes first.
+  "Approaching" is the face growing 20% within 2.5 s.
+
+## What is kept
+
+Five lists of numbers per friend, their name, and when they were saved, in one
+file per account: `<app support>/faces/<account>.json`. Never a picture.
+Excluded from Android backup and device transfer
+(`android/app/src/main/res/xml/data_extraction_rules.xml`, `backup_rules.xml`)
+and from iOS backup (`BackupChannel` in `AppDelegate.swift` marks the folder).
+Deleted when *Recognise people I know* is turned off, at sign-out, and one at a
+time from People I know. Nothing about who was seen goes to the guardian, the
+activity feed or the history.
+
+## Licences
+
+- **BlazeFace** is published by Google under **Apache-2.0** (MediaPipe).
+- **MobileFaceNet**: the architecture and most published code are Apache-2.0 or
+  MIT, but the widely shared weights were trained on **MS-Celeb-1M**-derived
+  data (MS1M / MS1MV2), released for **non-commercial research use**. That is
+  compatible with a capstone demonstration and not with a product. Record the
+  exact file's source and terms here when it is chosen, next to YOLO11's AGPL
+  note above.
+

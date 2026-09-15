@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/navigation/destination.dart';
 import '../../core/speech/speaker.dart';
 import '../voice_controller.dart';
+import '../widgets/place_search_panel.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
 import '../widgets/voice_mic_button.dart';
@@ -17,8 +18,12 @@ import '../widgets/voice_mic_button.dart';
 /// at where to save it rather than sitting there as a button that does
 /// nothing.
 ///
-/// The second half, the directions, is `core/navigation/guidance.dart`, and
-/// the honesty about what it is - straight-line, not routed - lives there.
+/// The second half, the directions, is `core/navigation/journey_guide.dart`:
+/// a walking route from OpenStreetMap when there is one, the straight line
+/// when there is not, and the difference always said.
+///
+/// A place that is not saved can be searched for by name, typed here or said
+/// anywhere: "take me to Jollibee".
 class SmartAssistanceScreen extends StatelessWidget {
   const SmartAssistanceScreen({
     super.key,
@@ -28,6 +33,7 @@ class SmartAssistanceScreen extends StatelessWidget {
     required this.onBack,
     this.voice,
     this.speaker = const SilentSpeaker(),
+    this.search,
   });
 
   final List<Destination> places;
@@ -36,6 +42,9 @@ class SmartAssistanceScreen extends StatelessWidget {
   final VoidCallback onBack;
   final VoiceController? voice;
   final Speaker speaker;
+
+  /// Looks up places that are not saved. Null hides the search.
+  final Future<PlaceSearchResult> Function(String query)? search;
 
   @override
   Widget build(BuildContext context) {
@@ -58,9 +67,24 @@ class SmartAssistanceScreen extends StatelessWidget {
           ? 'One choice: save a place.'
           : '${ordered.length} saved ${ordered.length == 1 ? 'place' : 'places'}: '
               '${ordered.map((p) => p.label).join(', ')}.',
-      extra: voice == null
+      extra: voice == null && search == null
           ? null
-          : VoiceMicButton(controller: voice!, detail: 'Say help, or repeat'),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (voice != null)
+                  VoiceMicButton(
+                    controller: voice!,
+                    detail: 'Say a saved place, or take me to, and a place',
+                  ),
+                if (search != null)
+                  PlaceSearchPanel(
+                    search: search!,
+                    onChoose: onGo,
+                    onResult: speaker.speak,
+                  ),
+              ],
+            ),
       actions: [
         for (final place in ordered)
           ViButton(

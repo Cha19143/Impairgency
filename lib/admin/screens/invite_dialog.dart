@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/auth/email_address.dart';
 import '../admin_theme.dart';
 
 class InviteRequest {
@@ -43,7 +44,7 @@ class _InviteDialogState extends State<_InviteDialog> {
 
   void _submit() {
     final email = _email.text.trim();
-    if (!email.contains('@') || email.length < 5) {
+    if (emailAddressProblem(email) != null) {
       setState(() => _error = 'Enter the email address they will register with.');
       return;
     }

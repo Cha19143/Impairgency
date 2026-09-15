@@ -9,13 +9,27 @@ import 'dart:math' as math;
 
 enum Proximity { veryClose, close, far }
 
+/// Where a detection is, as fractions of the upright frame.
+class DetectionBox {
+  const DetectionBox(this.left, this.top, this.right, this.bottom);
+  final double left;
+  final double top;
+  final double right;
+  final double bottom;
+}
+
 class Detection {
   const Detection({
     required this.label,
     required this.score,
     required this.centerX,
     required this.extent,
+    this.box,
   });
+
+  /// The whole box, when the model gave one. Where a person's head is, for
+  /// recognising a friend; nothing about what is said depends on it.
+  final DetectionBox? box;
 
   final String label;
 
@@ -180,4 +194,5 @@ Detection detectionFrom({
       score: score,
       centerX: (xMin + xMax) / 2,
       extent: math.max(xMax - xMin, yMax - yMin),
+      box: DetectionBox(xMin, yMin, xMax, yMax),
     );

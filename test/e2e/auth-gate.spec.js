@@ -37,28 +37,11 @@ test('a wrong password says so, and does not pretend to sign in', async ({ page 
   await expect(page).toHaveURL(/#\/admin\/sign-in$/);
 });
 
-// KNOWN DEFECT, and the reason this test is written rather than deleted.
-//
-// Authentication succeeds - the emulator answers 200 with a valid token for
-// `nobody@impairgency.test` - and then nothing happens. The sign-in form sits
-// there unchanged for as long as you care to watch it. The screen that exists
-// for precisely this case, "Signed in, but not an administrator", is never
-// shown, so someone whose account is simply off the roster is told nothing at
-// all and will assume their password is wrong.
-//
-// The cause is the shape routes.dart already warns about. For an admin the
-// redirect returns a new location, the route changes, and the page is rebuilt
-// with fresh state. For a non-admin it correctly returns null - "stay" - so the
-// route does not change, go_router does not rebuild, and the `signedInAs`
-// argument that would switch the screen over is still the null it was built
-// with. The guard is right about permission and silent about saying so: the
-// same bug that once made a correct password redisplay the login form, still
-// alive on the path next door.
-//
-// `test.fail()` keeps the suite honest in both directions - it records the bug
-// without a red build, and it starts failing the moment the bug is fixed, which
-// is the prompt to delete this comment and the marker with it.
-test.fail(
+// Once a known defect, marked test.fail: authentication succeeded and the
+// sign-in form sat there unchanged, because for a non-admin the redirect
+// rightly says "stay", the route never changed, and nothing rebuilt the screen
+// with who had signed in. The route now rebuilds from the session itself.
+test(
   'an account that is not on the roster is told why, and not shown the form again',
   async ({ page }) => {
     await open(page, '/admin');

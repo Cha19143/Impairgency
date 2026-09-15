@@ -15,17 +15,23 @@ class WelcomeScreen extends StatelessWidget {
     required this.onCreateAccount,
     required this.onSignIn,
     this.speaker = const SilentSpeaker(),
+    this.notice,
   });
 
   final VoidCallback onCreateAccount;
   final VoidCallback onSignIn;
   final Speaker speaker;
 
+  /// Why the phone is back here, when there is a reason worth saying - an
+  /// account removed by an administrator. Said first.
+  final String? notice;
+
   @override
   Widget build(BuildContext context) => ViScreen(
         speaker: speaker,
         title: 'Welcome to ImpairGency',
-        body: const [
+        body: [
+          if (notice != null) notice!,
           'Sighted help, spoken aloud.',
           'Setting up takes about two minutes, and most of it can be skipped.',
         ],

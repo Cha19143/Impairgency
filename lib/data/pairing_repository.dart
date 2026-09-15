@@ -96,7 +96,17 @@ class PairingRepository {
     }
 
     final data = snapshot.data()!;
-    if (data['usedBy'] != null) {
+    final viUserId = data['ownerId'] as String;
+    final usedBy = data['usedBy'];
+    if (usedBy == guardianId) {
+      // This guardian claimed it already: a second press after a success
+      // nobody saw, or a retry after the pairing write below failed. Telling
+      // them their own code "has already been used" would be true and
+      // useless. Finish the link instead.
+      await _createPairing(guardianId, viUserId, code, mayExist: true);
+      return RedeemSucceeded(viUserId: viUserId, code: code);
+    }
+    if (usedBy != null) {
       return const RedeemFailed(PairingCodeRejection.alreadyUsed);
     }
 
@@ -105,20 +115,34 @@ class PairingRepository {
       return const RedeemFailed(PairingCodeRejection.expired);
     }
 
-    final viUserId = data['ownerId'] as String;
-
     // The client checks above are for a clear spoken message. These two writes
     // are what actually decides it - the rules re-check used and expired
     // server-side, so a stale read cannot be used to slip a spent code through.
     await ref.update({'usedBy': guardianId});
-    await _pairings.doc(pairingId(guardianId, viUserId)).set({
-      'guardianId': guardianId,
-      'viUserId': viUserId,
-      'code': code,
-      'acceptedAt': FieldValue.serverTimestamp(),
-    });
+    await _createPairing(guardianId, viUserId, code);
 
     return RedeemSucceeded(viUserId: viUserId, code: code);
+  }
+
+  Future<void> _createPairing(
+    String guardianId,
+    String viUserId,
+    String code, {
+    bool mayExist = false,
+  }) async {
+    try {
+      await _pairings.doc(pairingId(guardianId, viUserId)).set({
+        'guardianId': guardianId,
+        'viUserId': viUserId,
+        'code': code,
+        'acceptedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      // Pairings can be created and never rewritten, so writing one that
+      // already exists is refused. On a retry that refusal means the link is
+      // there, which is the outcome being asked for.
+      if (!mayExist || e.code != 'permission-denied') rethrow;
+    }
   }
 
   /// The users this guardian watches over.

@@ -586,10 +586,25 @@ describe('invitations — managing accounts without knowing passwords', () => {
     await setDoc(doc(asAdmin(), 'user_invites', INVITE), { role: 'guardian' });
 
     const invitee = env
-      .authenticatedContext('newbie', { email: 'NewUser@Example.com' })
+      .authenticatedContext('newbie', {
+        email: 'NewUser@Example.com',
+        email_verified: true,
+      })
       .firestore();
     // Their token's email is mixed case; the document id is lowercased.
     await assertSucceeds(getDoc(doc(invitee, 'user_invites', INVITE)));
+  });
+
+  it('an account that only claims the address cannot read it', async () => {
+    // Making an account with someone else's email is free; confirming it is
+    // not. The tester's made-up address would otherwise have been enough.
+    await makeAdmin();
+    await setDoc(doc(asAdmin(), 'user_invites', INVITE), { role: 'guardian' });
+
+    const claimant = env
+      .authenticatedContext('claimant', { email: INVITE, email_verified: false })
+      .firestore();
+    await assertFails(getDoc(doc(claimant, 'user_invites', INVITE)));
   });
 
   it('nobody can read an invitation meant for someone else', async () => {
@@ -781,5 +796,163 @@ describe('saved places — home, work, school', () => {
         kind: 'home',
       }),
     );
+  });
+});
+
+describe('account management from the dashboard', () => {
+  const REMOVED = 'removed-1';
+
+  it('an admin can change the details the dashboard edits', async () => {
+    await makeAdmin();
+    await assertSucceeds(
+      updateDoc(doc(asAdmin(), 'users', VI), {
+        name: 'Bob Reyes',
+        displayName: 'Bob Reyes',
+        impairment: 'colourBlind',
+        age: 41,
+        updatedAt: serverTimestamp(),
+        updatedBy: ADMIN,
+      }),
+    );
+  });
+
+  it("an admin cannot switch on someone's consent", async () => {
+    // Whether someone's location is shared is theirs to decide.
+    await makeAdmin();
+    await assertFails(
+      updateDoc(doc(asAdmin(), 'users', VI), { 'consent.location': true }),
+    );
+    await assertFails(
+      updateDoc(doc(asAdmin(), 'users', VI), { email: 'other@example.com' }),
+    );
+    await assertFails(
+      updateDoc(doc(asAdmin(), 'users', VI), { onboardingSteps: [] }),
+    );
+  });
+
+  it('an admin can change a role, but never to admin', async () => {
+    await makeAdmin();
+    await assertSucceeds(
+      updateDoc(doc(asAdmin(), 'users', VI), { role: 'guardian' }),
+    );
+    await assertFails(
+      updateDoc(doc(asAdmin(), 'users', VI), { role: 'admin' }),
+    );
+  });
+
+  it('owners still edit their own details, and still not their role', async () => {
+    await assertSucceeds(
+      updateDoc(doc(as(VI), 'users', VI), { displayName: 'Bob' }),
+    );
+    await assertFails(updateDoc(doc(as(VI), 'users', VI), { role: 'guardian' }));
+  });
+
+  describe('removing an account', () => {
+    const markRemoved = () =>
+      setDoc(doc(asAdmin(), 'removed_accounts', VI), {
+        email: 'vi@example.com',
+        role: 'vi',
+        removedAt: serverTimestamp(),
+        removedBy: ADMIN,
+      });
+
+    it('only an admin can mark an account removed, as themselves', async () => {
+      await assertFails(
+        setDoc(doc(as(STRANGER), 'removed_accounts', VI), {
+          removedBy: STRANGER,
+        }),
+      );
+      await makeAdmin();
+      await assertFails(
+        setDoc(doc(asAdmin(), 'removed_accounts', VI), { removedBy: STRANGER }),
+      );
+      await assertSucceeds(markRemoved());
+    });
+
+    it('an administrator cannot be removed from the dashboard', async () => {
+      await makeAdmin();
+      await assertFails(
+        setDoc(doc(asAdmin(), 'removed_accounts', ADMIN), { removedBy: ADMIN }),
+      );
+    });
+
+    it('the removed account can see that it was removed; nobody else can', async () => {
+      await makeAdmin();
+      await markRemoved();
+      await assertSucceeds(getDoc(doc(as(VI), 'removed_accounts', VI)));
+      await assertFails(getDoc(doc(as(STRANGER), 'removed_accounts', VI)));
+      await assertFails(
+        updateDoc(doc(asAdmin(), 'removed_accounts', VI), { role: 'guardian' }),
+      );
+    });
+
+    it('a removed account cannot write its profile or make a new one', async () => {
+      await makeAdmin();
+      await markRemoved();
+      await assertFails(
+        updateDoc(doc(as(VI), 'users', VI), { displayName: 'Still here' }),
+      );
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await deleteDoc(doc(ctx.firestore(), 'users', VI));
+      });
+      await assertFails(
+        setDoc(doc(as(VI), 'users', VI), { uid: VI, role: 'vi' }),
+      );
+    });
+
+    it('a removed account cannot hand out codes or link a guardian', async () => {
+      await makeAdmin();
+      await markRemoved();
+      await assertFails(
+        setDoc(doc(as(VI), 'pairing_codes', 'FH29MR47'), {
+          ownerId: VI,
+          usedBy: null,
+          expiresAt: hoursFromNow(1),
+        }),
+      );
+    });
+
+    it('a removed account can still delete its saved places, not add them', async () => {
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'users', VI, 'saved_places', 'home'), {
+          label: 'Home',
+          lat: 14.79,
+          lng: 120.92,
+          kind: 'home',
+        });
+      });
+      await makeAdmin();
+      await markRemoved();
+      await assertFails(
+        setDoc(doc(as(VI), 'users', VI, 'saved_places', 'work'), {
+          label: 'Work',
+        }),
+      );
+      await assertSucceeds(
+        deleteDoc(doc(as(VI), 'users', VI, 'saved_places', 'home')),
+      );
+    });
+
+    it("an admin can delete the account's codes and links", async () => {
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'pairing_codes', 'FH29MR47'), {
+          ownerId: VI,
+          usedBy: null,
+          expiresAt: hoursFromNow(1),
+        });
+      });
+      await makeAdmin();
+      await assertSucceeds(deleteDoc(doc(asAdmin(), 'pairing_codes', 'FH29MR47')));
+      await assertSucceeds(
+        deleteDoc(doc(asAdmin(), 'pairings', pairingId(GUARDIAN, VI))),
+      );
+      await assertSucceeds(deleteDoc(doc(asAdmin(), 'users', VI)));
+    });
+
+    it('an account that was never removed is unaffected', async () => {
+      await assertSucceeds(
+        setDoc(doc(as(REMOVED), 'users', REMOVED), { uid: REMOVED, role: 'vi' }),
+      );
+    });
   });
 });

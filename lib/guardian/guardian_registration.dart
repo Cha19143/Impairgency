@@ -4,6 +4,7 @@
 /// is tested once here rather than once per screen.
 library;
 
+import '../core/auth/email_address.dart';
 import '../core/pairing/pairing_code.dart';
 
 class GuardianRegistration {
@@ -33,6 +34,30 @@ class GuardianRegistration {
       };
 }
 
+/// The fields of the form, so a refusal can be put under the one it is about.
+enum RegisterField { name, email, password, phone, code, general }
+
+/// Why registering did not finish.
+class RegisterFailure {
+  const RegisterFailure(
+    this.message, {
+    this.field = RegisterField.general,
+    this.accountReady = false,
+  });
+
+  /// Said and shown.
+  final String message;
+
+  final RegisterField field;
+
+  /// The guardian is signed in and their account document is written: only
+  /// the code is left to get right. The screen locks the other fields so a
+  /// second press links the account that exists instead of trying to make
+  /// it again - which is exactly what "There is already an account with that
+  /// email" was the tester hearing.
+  final bool accountReady;
+}
+
 /// Digits and a leading plus, as the SOS engine dials it.
 String normalisePhone(String raw) => raw.replaceAll(RegExp(r'[^0-9+]'), '');
 
@@ -48,10 +73,8 @@ String? validateGuardianRegistration({
   required String pairingCode,
 }) {
   if (name.trim().isEmpty) return 'Enter your name.';
-  final address = email.trim();
-  if (!address.contains('@') || address.length < 5) {
-    return 'That does not look like an email address.';
-  }
+  final emailProblem = emailAddressProblem(email);
+  if (emailProblem != null) return emailProblem;
   if (password.length < 8) {
     return 'Your password needs at least eight characters.';
   }
