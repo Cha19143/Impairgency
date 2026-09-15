@@ -12,6 +12,7 @@ import 'package:impairgency/core/navigation/route.dart';
 import 'package:impairgency/core/navigation/route_phrases.dart';
 import 'package:impairgency/core/speech/speaker.dart';
 import 'package:impairgency/core/vision/detection.dart';
+import 'package:impairgency/core/vision/stairs.dart';
 import 'package:impairgency/core/voice/speech_recognizer.dart';
 import 'package:impairgency/data/scan_service.dart';
 import 'package:impairgency/vi/screens/saved_places_screen.dart';
@@ -42,12 +43,17 @@ class RecordingSpeaker implements PrioritySpeaker {
 
 /// A scan service with no camera and no model: the test drives detections.
 class FakeScan extends ScanService {
-  void Function(List<Detection>)? onFrame;
+  void Function(ScanFrame)? onFrame;
+
+  /// One frame from the camera: these objects, and this floor.
+  void see(List<Detection> detections,
+          {StairsReading stairs = StairsReading.none}) =>
+      onFrame!(ScanFrame(detections: detections, stairs: stairs));
   int starts = 0;
   @override
   Future<bool> loadModel() async => true;
   @override
-  Future<bool> start(void Function(List<Detection>) onFrame) async {
+  Future<bool> start(void Function(ScanFrame) onFrame) async {
     starts++;
     this.onFrame = onFrame;
     return true;
@@ -318,7 +324,7 @@ void main() {
       expect(find.textContaining('Turn left.'), findsOneWidget);
 
       // A hazard from the camera outranks it.
-      scan.onFrame!([
+      scan.see([
         const Detection(label: 'car', score: 0.9, centerX: 0.5, extent: 0.7),
       ]);
       await tester.pump();
@@ -377,14 +383,14 @@ void main() {
         onBack: () {},
       )));
       await tester.pump();
-      scan.onFrame!([
+      scan.see([
         const Detection(label: 'car', score: 0.9, centerX: 0.5, extent: 0.7),
       ]);
       await tester.pump();
       expect(named, ['car']);
 
       // Far away is guidance, not an obstacle warning.
-      scan.onFrame!([
+      scan.see([
         const Detection(label: 'bench', score: 0.9, centerX: 0.5, extent: 0.1),
       ]);
       await tester.pump();
@@ -450,7 +456,7 @@ void main() {
       expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget,
           reason: 'the credit the map data asks for');
 
-      scan.onFrame!([
+      scan.see([
         const Detection(label: 'car', score: 0.9, centerX: 0.5, extent: 0.7),
       ]);
       await tester.pump();
@@ -525,6 +531,55 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.textContaining('Clinic is about'), findsOneWidget);
+    });
+  });
+
+  group('stairs on the scan screen', () {
+    const sure =
+        StairsReading(confidence: 0.9, treads: 6, spacingRegularity: 0.95);
+    const unsure =
+        StairsReading(confidence: 0.5, treads: 4, spacingRegularity: 0.8);
+
+    testWidgets('a confident reading is a hazard, shown, and named to the guardian',
+        (tester) async {
+      final speaker = RecordingSpeaker();
+      final scan = FakeScan();
+      final named = <String>[];
+      await tester.pumpWidget(host(ScanScreen(
+        speaker: speaker,
+        service: scan,
+        onObstacle: named.add,
+        onBack: () {},
+      )));
+      await tester.pump();
+
+      scan.see(const [], stairs: sure);
+      await tester.pump();
+      expect(speaker.said.last, (kStairsAhead, SpeechPriority.hazard));
+      expect(find.text(kStairsAhead), findsOneWidget);
+      expect(named, ['stairs']);
+
+      // The next frame, still stairs: not said again straight away.
+      scan.see(const [], stairs: sure);
+      await tester.pump();
+      expect(speaker.said.where((s) => s.$1 == kStairsAhead), hasLength(1));
+    });
+
+    testWidgets('below the threshold, nothing about stairs is said',
+        (tester) async {
+      final speaker = RecordingSpeaker();
+      final scan = FakeScan();
+      await tester.pumpWidget(host(ScanScreen(
+        speaker: speaker,
+        service: scan,
+        onBack: () {},
+      )));
+      await tester.pump();
+
+      scan.see(const [], stairs: unsure);
+      await tester.pump();
+      expect(speaker.said.map((s) => s.$1), isNot(contains(kStairsAhead)));
+      expect(find.text(kPathClear), findsOneWidget);
     });
   });
 

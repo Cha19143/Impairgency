@@ -7,6 +7,8 @@ library;
 
 import 'dart:math' as math;
 
+import 'stairs.dart';
+
 enum Proximity { veryClose, close, far }
 
 /// Where a detection is, as fractions of the upright frame.
@@ -71,6 +73,21 @@ class Detection {
       };
 }
 
+/// One analysed camera frame: the objects in it, and the floor under them.
+///
+/// One value rather than two arguments, because it is one observation: a
+/// caller should not be able to pair up an earlier frame's stairs with this
+/// frame's chair.
+class ScanFrame {
+  const ScanFrame({
+    required this.detections,
+    this.stairs = StairsReading.none,
+  });
+
+  final List<Detection> detections;
+  final StairsReading stairs;
+}
+
 /// What to say about a frame, or null to stay silent.
 class Guidance {
   const Guidance({required this.phrase, required this.urgent, this.label});
@@ -85,6 +102,14 @@ class Guidance {
 }
 
 const String kPathClear = 'Path looks clear';
+
+/// Said for stairs, and nothing else is said with it.
+///
+/// No direction beyond "ahead", because the heuristic only looks at the lower
+/// centre of the frame; and no "up" or "down", because ascending and
+/// descending treads look identical to one camera and guessing would be worse
+/// than the person finding out with their cane.
+const String kStairsAhead = 'Stop. Stairs ahead.';
 
 /// Confidence below which a detection is noise rather than an object.
 ///
@@ -111,7 +136,22 @@ const double kUrgentScore = 0.5;
 /// Mentions a second object only when it is near enough to matter. Listing
 /// everything in view is what makes these apps unusable — a user walking gets
 /// one useful sentence per few seconds, not an inventory.
-Guidance guidanceFor(List<Detection> detections) {
+///
+/// Stairs, when [stairs] is sure of them, are said alone and before any
+/// object: walking into a chair is a bruise and a missed step is a fall. The
+/// one exception is an object urgent in its own right. A zebra crossing reads
+/// as stairs to the banding heuristic, and a car right in front of someone
+/// standing on one has to be named as a car.
+Guidance guidanceFor(List<Detection> detections,
+    {StairsReading stairs = StairsReading.none}) {
+  final objects = _objectGuidance(detections);
+  if (stairs.isStairs && !objects.urgent) {
+    return const Guidance(phrase: kStairsAhead, urgent: true, label: 'stairs');
+  }
+  return objects;
+}
+
+Guidance _objectGuidance(List<Detection> detections) {
   final real = detections.where((d) => d.score >= kMinScore).toList()
     ..sort((a, b) => b.risk.compareTo(a.risk));
 

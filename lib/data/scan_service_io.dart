@@ -8,6 +8,7 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 
 import '../core/vision/detection.dart';
 import '../core/vision/faces.dart';
+import '../core/vision/stairs.dart';
 import '../core/vision/yolo.dart';
 import '../core/vision/yuv_frame.dart';
 import 'face_recognizer.dart';
@@ -85,6 +86,23 @@ class ScanService {
 
   /// A person smaller than this in the frame is too far to recognise.
   static const double _minPersonExtent = 0.2;
+
+  /// The stairs search runs no more often than this - every other frame at
+  /// the model's pace. It runs on the isolate that draws the screen, where
+  /// YOLO does not, so its cost is the one felt there.
+  static const Duration _stairsGap = Duration(milliseconds: 500);
+
+  /// A frame between two searches carries the last reading, this long at most:
+  /// otherwise the status would flip between "stairs" and "clear" frame by
+  /// frame, and so would what is said.
+  static const Duration _stairsFresh = Duration(seconds: 1);
+
+  /// Brightness for the stairs search, reused between frames. Made only when
+  /// [kStairsWarnings] is on.
+  late final List<List<int>> _luma = List.generate(
+      kStairsGridSide, (_) => List<int>.filled(kStairsGridSide, 0));
+  StairsReading _stairs = StairsReading.none;
+  DateTime _stairsAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   CameraController? get controller => _controller;
   bool get isReady => _controller?.value.isInitialized == true;
@@ -175,7 +193,7 @@ class ScanService {
   }
 
   /// Asks for the camera and starts streaming. Returns false if refused.
-  Future<bool> start(void Function(List<Detection>) onFrame) async {
+  Future<bool> start(void Function(ScanFrame) onFrame) async {
     final status = await Permission.camera.request();
     if (!status.isGranted) return false;
 
@@ -208,7 +226,7 @@ class ScanService {
   }
 
   Future<void> _process(
-      CameraImage image, void Function(List<Detection>) onFrame) async {
+      CameraImage image, void Function(ScanFrame) onFrame) async {
     final interpreter = _interpreter;
     final inputBytes = _inputBytes;
     final outputBytes = _outputBytes;
@@ -278,10 +296,11 @@ class ScanService {
           yMax: yMax,
         ));
       }
-      onFrame(detections);
+      final frame = _uprightFrame(image);
+      onFrame(ScanFrame(detections: detections, stairs: _stairsIn(frame)));
       // Inside the same busy window as the objects, so dispose() waits for
       // the face models too before closing anything.
-      await _lookForFaces(image, detections);
+      await _lookForFaces(frame, detections);
     } catch (e) {
       debugPrint('Detection failed: $e');
     } finally {
@@ -289,8 +308,41 @@ class ScanService {
     }
   }
 
+  /// The camera's planes, readable a pixel at a time the right way up.
+  YuvFrame _uprightFrame(CameraImage image) {
+    final planes = image.planes;
+    final biPlanar = planes.length < 3;
+    return YuvFrame(
+      width: image.width,
+      height: image.height,
+      y: planes[0].bytes,
+      u: planes[1].bytes,
+      v: biPlanar ? planes[1].bytes : planes[2].bytes,
+      yRowStride: planes[0].bytesPerRow,
+      uvRowStride: planes[1].bytesPerRow,
+      uvPixelStride: planes[1].bytesPerPixel ?? (biPlanar ? 2 : 1),
+      biPlanar: biPlanar,
+      sensorOrientation: _sensorOrientation,
+    );
+  }
+
+  /// Stairs in [frame], or the last reading while it is fresh - and never
+  /// anything unless a build switched stairs warnings on.
+  StairsReading _stairsIn(YuvFrame frame) {
+    if (!kStairsWarnings) return StairsReading.none;
+    final now = DateTime.now();
+    if (now.difference(_stairsAt) >= _stairsGap) {
+      fillStairsGrid(frame, _luma);
+      _stairs = stairsFrom(_luma);
+      _stairsAt = now;
+    }
+    return now.difference(_stairsAt) <= _stairsFresh
+        ? _stairs
+        : StairsReading.none;
+  }
+
   Future<void> _lookForFaces(
-      CameraImage image, List<Detection> detections) async {
+      YuvFrame frame, List<Detection> detections) async {
     final watch = _watch;
     final faces = _faces;
     if (watch == null || faces == null || _disposed) return;
@@ -304,20 +356,6 @@ class ScanService {
     if (people.isEmpty && !watch.enrolling) return;
     _lastFaces = now;
 
-    final planes = image.planes;
-    final biPlanar = planes.length < 3;
-    final frame = YuvFrame(
-      width: image.width,
-      height: image.height,
-      y: planes[0].bytes,
-      u: planes[1].bytes,
-      v: biPlanar ? planes[1].bytes : planes[2].bytes,
-      yRowStride: planes[0].bytesPerRow,
-      uvRowStride: planes[1].bytesPerRow,
-      uvPixelStride: planes[1].bytesPerPixel ?? (biPlanar ? 2 : 1),
-      biPlanar: biPlanar,
-      sensorOrientation: _sensorOrientation,
-    );
     final seen = await faces.analyse(frame,
         people: people, centre: watch.enrolling, at: now);
     if (_disposed || !identical(watch, _watch)) return;

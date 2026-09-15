@@ -21,7 +21,7 @@ class ScanService {
     return false;
   }
 
-  Future<bool> start(void Function(List<Detection>) onFrame) async => false;
+  Future<bool> start(void Function(ScanFrame) onFrame) async => false;
 
   /// Recognises nobody here.
   Future<bool> watchFaces(FaceWatch? watch) async => false;

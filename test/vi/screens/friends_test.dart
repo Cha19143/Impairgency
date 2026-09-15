@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/speech/speaker.dart';
 import 'package:impairgency/core/vision/detection.dart';
+import 'package:impairgency/core/vision/stairs.dart';
 import 'package:impairgency/core/vision/faces.dart';
 import 'package:impairgency/core/vision/friend_recognition.dart';
 import 'package:impairgency/core/voice/speech_recognizer.dart';
@@ -38,13 +39,18 @@ class Said implements PrioritySpeaker {
 class FaceScan extends ScanService {
   FaceScan({this.modelsLoad = true});
   final bool modelsLoad;
-  void Function(List<Detection>)? onFrame;
+  void Function(ScanFrame)? onFrame;
+
+  /// One frame from the camera: these objects, and this floor.
+  void see(List<Detection> detections,
+          {StairsReading stairs = StairsReading.none}) =>
+      onFrame!(ScanFrame(detections: detections, stairs: stairs));
   FaceWatch? watch;
 
   @override
   Future<bool> loadModel() async => true;
   @override
-  Future<bool> start(void Function(List<Detection>) onFrame) async {
+  Future<bool> start(void Function(ScanFrame) onFrame) async {
     this.onFrame = onFrame;
     return true;
   }
@@ -143,7 +149,7 @@ void main() {
     expect(scan.watch!.enrolling, isTrue);
 
     // Only hazards talk over it.
-    scan.onFrame!([const Detection(label: 'person', score: 0.9, centerX: 0.5, extent: 0.4)]);
+    scan.see([const Detection(label: 'person', score: 0.9, centerX: 0.5, extent: 0.4)]);
     await settle(tester);
     expect(speaker.words.last, startsWith("Point the phone at Sam's face"));
 

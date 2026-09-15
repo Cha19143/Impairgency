@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/core/vision/detection.dart';
+import 'package:impairgency/core/vision/stairs.dart';
 
 Detection at({
   String label = 'chair',
@@ -113,6 +114,58 @@ void main() {
     test('urgency is set by the primary object', () {
       expect(guidanceFor([at(extent: 0.7)]).urgent, isTrue);
       expect(guidanceFor([at(extent: 0.2)]).urgent, isFalse);
+    });
+  });
+
+  group('stairs', () {
+    const sure =
+        StairsReading(confidence: 0.9, treads: 6, spacingRegularity: 0.95);
+    const unsure =
+        StairsReading(confidence: 0.4, treads: 4, spacingRegularity: 0.5);
+
+    test('a confident reading is said alone, as a hazard', () {
+      // Walking into a chair is a bruise; a missed step is a fall. A second
+      // object in the same sentence dilutes the one that matters.
+      final guidance = guidanceFor(
+          [at(label: 'chair', centerX: 0.5, extent: 0.4)],
+          stairs: sure);
+      expect(guidance.phrase, kStairsAhead);
+      expect(guidance.urgent, isTrue);
+      expect(guidance.label, 'stairs');
+    });
+
+    test('an object urgent in its own right is still named first', () {
+      // A zebra crossing reads as stairs to the banding heuristic. A car right
+      // in front of someone standing on one is a car.
+      final guidance = guidanceFor(
+          [at(label: 'car', centerX: 0.5, extent: 0.7)],
+          stairs: sure);
+      expect(guidance.phrase, 'Stop. car right in front of you');
+    });
+
+    test('an unsure reading says nothing about stairs', () {
+      expect(guidanceFor(const [], stairs: unsure).phrase, kPathClear);
+      expect(
+          guidanceFor([at(label: 'chair', extent: 0.4)], stairs: unsure).phrase,
+          isNot(contains('Stairs')));
+    });
+
+    test('never up or down: one camera cannot tell', () {
+      expect(kStairsAhead.toLowerCase(), isNot(contains('down')));
+      expect(kStairsAhead.toLowerCase(), isNot(contains(' up')));
+    });
+
+    test('repeated as a hazard is: not until it has had time to be heard', () {
+      final now = DateTime.utc(2026, 9, 16, 9);
+      bool again(Duration after) => shouldSpeak(
+            phrase: kStairsAhead,
+            urgent: true,
+            lastPhrase: kStairsAhead,
+            lastSpokenAt: now,
+            now: now.add(after),
+          );
+      expect(again(const Duration(seconds: 1)), isFalse);
+      expect(again(kHazardRepeat), isTrue);
     });
   });
 

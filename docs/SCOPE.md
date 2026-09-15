@@ -47,7 +47,7 @@ the point.
 
 | | |
 |---|---|
-| **Stairs detection** §2.A.3 | Generic object detection covers some of it. Stairs specifically is a fall risk and deserves a dedicated class or a floor-plane heuristic, with a confidence threshold that stays silent rather than guessing. |
+| **Stairs detection** §2.A.3 | A floor-banding heuristic (from PR #74) is built and wired into Scan. Above a 0.6 confidence it says "Stop. Stairs ahead." at hazard priority, never up or down; below it, nothing. **Off by default** (`--dart-define=STAIRS_WARNINGS=true` turns it on): banding cannot tell stairs from a tiled floor (0.86 in its tests) or a zebra crossing (0.75), and it has not been checked on a real staircase. See [`VISION.md`](VISION.md), "Stairs". |
 | **Detection performance** §1.3 | Counts and positioning quality, not accuracy. Accuracy needs labelled ground truth and nobody has labelled it. The dashboard says so on screen. |
 | **Crash and response-time monitoring** §1.4 | Reported to Firebase; the dashboard links to the console rather than mirroring it, because reading it back needs a service account and therefore a paid plan. |
 | **Friend recognition accuracy** §2.A.6 | The match threshold is MobileFaceNet's published starting point, not a measurement on this app's camera. It needs calibrating with people who agree to take part, at walking distances and in daylight and indoors, before anyone relies on it. The two face models are downloaded separately; a build without them says recognition is not available. See [`VISION.md`](VISION.md). |
