@@ -107,8 +107,8 @@ class SettingsScreen extends StatelessWidget {
                   ? 'Hands-free voice: on'
                   : 'Hands-free voice: off',
               detail: handsFree
-                  ? 'Listens for commands without a tap on the main, scan, '
-                      'read and where-to screens. Tap to turn it off.'
+                  ? 'Listens without a tap on every screen, for commands '
+                      "and buttons' names. Tap to turn it off."
                   : 'Tap to speak before each command. Tap to turn '
                       'hands-free on.',
               icon: handsFree ? Icons.mic : Icons.mic_off_outlined,

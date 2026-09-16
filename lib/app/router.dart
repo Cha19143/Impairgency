@@ -1411,8 +1411,8 @@ GoRouter createRouter(AppSession session) {
                 final on = !session.handsFree;
                 await session.setHandsFree(on);
                 await session.speaker.speak(on
-                    ? 'Hands-free voice is on. The app listens for commands '
-                        'on the main, scan, read and where-to screens.'
+                    ? 'Hands-free voice is on. The app listens on every '
+                        "screen, for commands and buttons' names."
                     : 'Hands-free voice is off. Tap to speak before each '
                         'command.');
               },
