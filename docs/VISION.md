@@ -283,11 +283,11 @@ adds the model file first.
 | | |
 |---|---|
 | Model | MiDaS v2.1 small, Intel ISL — **MIT** |
-| File | `model_opt.tflite`, from `https://github.com/isl-org/MiDaS/releases/download/v2_1/model_opt.tflite`, **66,338,288 bytes** |
+| File | `model_opt.tflite`, from `https://github.com/isl-org/MiDaS/releases/download/v2_1/model_opt.tflite`, **66,338,288 bytes**, SHA-256 `93d871071edff1218973ce25ee27ce95ccd20450c70a55e1b89efa3f5a772cdd` (downloaded 2026-09-16) |
 | Put at | `assets/models/model_opt.tflite` — in `.gitignore`; 66 MB is too much for the repository and for every build |
 | Input | `[1, 256, 256, 3]` float32: RGB divided by 255, then ImageNet's mean `[0.485, 0.456, 0.406]` and deviation `[0.229, 0.224, 0.225]` |
-| Output | `[1, 256, 256]` float32, **relative inverse depth**: larger is nearer, with a scale and offset that change from frame to frame |
-| Checked | At load, by shape, in `data/depth_estimator_io.dart`; before adding, with `python3 tool/tflite_shapes.py assets/models/model_opt.tflite` |
+| Output | `[1, 256, 256, 1]` float32 (`[1, 256, 256]` is accepted too), **relative inverse depth**: larger is nearer, with a scale and offset that change from frame to frame |
+| Checked | At load, by shape, in `data/depth_estimator_io.dart`; `tool/tflite_shapes.py` reads the downloaded file as input `Const [1,256,256,3]` and output `midas_net_custom/…/Relu [1,256,256,1]`, both float32 |
 
 If it earns its place, an fp16 conversion is about 33 MB; that needs TensorFlow
 (a python3.13 virtual environment) and a decision about where to host it.
@@ -372,7 +372,7 @@ frame or more), or a friend being saved. Never more often than every 400 ms.
 | | Detector | Recogniser |
 |---|---|---|
 | Model | MediaPipe BlazeFace, short range | MobileFaceNet |
-| Asset | `assets/models/face_detection_short_range.tflite`, about 230 KB | `assets/models/mobilefacenet.tflite`, a few MB |
+| Asset | `assets/models/face_detection_short_range.tflite`, about 230 KB | `assets/models/mobilefacenet.tflite`, 5.2 MB |
 | Input | `[1, 128, 128, 3]` float32, −1 to 1 | `[1, 112, 112, 3]` float32, `(x − 127.5) / 128` |
 | Output | `[1, 896, 16]` boxes and six landmarks, `[1, 896, 1]` scores | `[1, N]`, one face as N numbers |
 | Decoded in | `core/vision/blazeface.dart` — anchors, sigmoid, weighted merge at IoU 0.3, MediaPipe's own settings | `core/vision/faces.dart` — unit length, cosine similarity |
@@ -380,7 +380,7 @@ frame or more), or a friend being saved. Never more often than every 400 ms.
 Both are **checked at load**, by shape, as the detector is. The recogniser's
 output length is read off the model, so a 128- or 192-number variant both work.
 
-**The detector is in; the recogniser is not yet.** Each file is added only with
+**Both are in** (the recogniser since 2026-09-16). Each file was added only with
 the team's agreement on that file, its source and its licence. A build without
 both runs normally: the scan screen says *"Recognising people is not available
 on this phone yet"* when asked, and nothing else changes.
@@ -388,7 +388,7 @@ on this phone yet"* when asked, and nothing else changes.
 | File | Source | Size | Checked |
 |---|---|---|---|
 | `face_detection_short_range.tflite` | Google, `https://storage.googleapis.com/mediapipe-assets/face_detection_short_range.tflite` | 229,032 bytes, SHA-256 `3bc182eb9f33925d9e58b5c8d59308a760f4adea8f282370e428c51212c26633` | MD5 matches Google's; `input [1,128,128,3]`, `regressors [1,896,16]`, `classificators [1,896,1]`, all float32 |
-| `mobilefacenet.tflite` | Agreed on 2026-09-16: `MCarlomagno/FaceRecognitionAuth`, `assets/mobilefacenet.tflite` (repository BSD-3-Clause, archived; weights MS1M-derived, research use) | 5,233,552 bytes | Not downloaded yet: it waits for a yes at the moment of download. Then check `input [1,112,112,3]` and `[1,N]` output with `tool/tflite_shapes.py`, and record the SHA-256 here |
+| `mobilefacenet.tflite` | `MCarlomagno/FaceRecognitionAuth`, branch `master`, `assets/mobilefacenet.tflite` (repository BSD-3-Clause, archived; weights MS1M-derived, research use). Downloaded 2026-09-16 | 5,233,552 bytes, SHA-256 `be4bc7cfc53f7bc336d0f28b1ab92535f618c913a422b683210750f6b5354854` | Git blob `057b98506a7f…` matches GitHub's; `input [1,112,112,3]`, `embeddings [1,192]`, both float32 - so N is 192 |
 
 `tool/tflite_shapes.py` reads a model's tensors without TensorFlow; it reports
 YOLO11n as `[1,3,640,640]` in and `[1,84,8400]` out, as `ScanService` expects.
@@ -440,7 +440,10 @@ activity feed or the history.
 - **MobileFaceNet**: the architecture and most published code are Apache-2.0 or
   MIT, but the widely shared weights were trained on **MS-Celeb-1M**-derived
   data (MS1M / MS1MV2), released for **non-commercial research use**. That is
-  compatible with a capstone demonstration and not with a product. Record the
-  exact file's source and terms here when it is chosen, next to YOLO11's AGPL
-  note above.
+  compatible with a capstone demonstration and not with a product. The file in
+  use is `MCarlomagno/FaceRecognitionAuth`'s (table above): its repository is
+  BSD-3-Clause, and the weights inside it carry the MS1M research-use terms
+  whatever the repository says. It is committed to this private repository and
+  shipped in test builds only; a public or commercial release needs weights
+  trained on data that allows it.
 

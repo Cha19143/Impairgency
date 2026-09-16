@@ -31,9 +31,9 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
-| Tester feedback round 2 — September 15 | `███████████░` | 35 / 38 |
-| Tester feedback round 3 — September 16 | `██████████░░` | 24 / 30 |
-| **Overall** | | **164 / 173  (95%)** |
+| Tester feedback round 2 — September 15 | `███████████░` | 36 / 38 |
+| Tester feedback round 3 — September 16 | `██████████░░` | 25 / 30 |
+| **Overall** | | **166 / 173  (96%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -497,8 +497,8 @@ the scope table now states.
 - [x] People I know, under Settings: forget one, or everyone
 - [x] BlazeFace downloaded from Google's MediaPipe assets; hash and tensor
       shapes checked (`tool/tflite_shapes.py`)
-- [ ] MobileFaceNet: agree the exact file and its weights' licence, then add
-      it — see [`VISION.md`](VISION.md)
+- [x] MobileFaceNet: agree the exact file and its weights' licence, then add
+      it — see [`VISION.md`](VISION.md) (added in round 3)
 - [ ] Calibrate the match threshold with volunteers, at 0.5–3 m, in daylight
       and indoors
 
@@ -596,8 +596,9 @@ can see them.
 
 - [x] Built in round 2; the file for the recogniser is agreed (see
       [`VISION.md`](VISION.md), "Faces")
-- [ ] Download MobileFaceNet (5.2 MB; weights for research use), check its
-      shapes, record its hash
+- [x] Download MobileFaceNet (5.2 MB; weights for research use), check its
+      shapes, record its hash: `[1,112,112,3]` to `[1,192]`, hash in
+      [`VISION.md`](VISION.md)
 
 **SOS** — §2.A.5
 
