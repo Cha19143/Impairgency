@@ -155,6 +155,8 @@ not run.
 - **Kerbs, glass doors, potholes and overhanging branches** are not among the
   classes and are not detected. The safety notice says so, and must keep
   saying so.
+- **Stairs** are not a COCO class either. A separate heuristic looks for them,
+  and is off by default: see "Stairs" below.
 - **One camera has no depth.** Nearness is inferred from box size. A poster of
   a person is a person.
 
@@ -171,6 +173,77 @@ different detector rather than a different file name — an Apache-2.0 or
 BSD-licensed model (the previous SSD MobileNet, or NanoDet-Plus) behind the
 same `ScanService`. The decode in `core/vision/yolo.dart` is specific to
 YOLO's output shape; everything else in the scan path is not.
+
+---
+
+# Stairs
+
+A missed step is a fall, and YOLO11n has no class for stairs. So Scan can run a
+second, much simpler look at the floor: `core/vision/stairs.dart`, ported from
+PR #74, where it was written against the old SSD pipeline and never tried on a
+phone.
+
+**It is off by default.** Builds switch it on with
+`--dart-define=STAIRS_WARNINGS=true`. The reason is measured, below.
+
+## What it looks for
+
+Regular horizontal banding in the lower part of the frame. That is what the
+nosings of a flight look like to one camera. Four or more edges must be found.
+They must be spaced regularly *in ratio*, so a flight is still regular after
+perspective shrinks the far treads, and they must cross most of the width. The
+result is a confidence from 0 to 1. It is not a probability: nothing here was
+calibrated against labelled photographs.
+
+## How it runs
+
+- **The grid.** The brightness grid is 300 by 300: the grid its thresholds and
+  tests were tuned at, since tread spacing is measured in grid rows.
+  `fillStairsGrid` fills it from the camera's brightness plane through
+  `YuvFrame.lumaAt`, turned upright. Only the part the search reads is sampled:
+  the lower 55% of the frame, 15% in from each side.
+- **When.** In `ScanService`, inside the same busy window as YOLO and the face
+  pass, so closing the screen waits for it. At most every 500 ms, on the
+  isolate that draws the screen.
+- **Between searches.** A frame carries the last reading for up to a second,
+  so the status and the speech do not flip between "stairs" and "clear".
+- **With the objects.** The reading travels with that frame's objects as one
+  `ScanFrame`.
+
+## What it says
+
+*"Stop. Stairs ahead."*: never up or down, which one camera cannot tell apart.
+It goes through `guidanceFor` and `shouldSpeak`:
+- It is urgent, so it comes at hazard priority with a buzz, and repeats only
+  after `kHazardRepeat`.
+- It is said alone, ahead of any object, except an object urgent in its own
+  right: a car right in front is named as a car.
+- Below 0.6 it says nothing.
+- The guardian's feed shows "Obstacle: stairs", as for any urgent warning, and
+  only with activity consent.
+
+## Why it is off: what it cannot tell apart
+
+Seen from above, a flight is a row of evenly receding edges, and so is a tiled
+floor. In its own tests (`test/core/vision/stairs_test.dart`, "what banding
+cannot tell apart, measured"), a floor of 30 cm tiles scores **0.86** and a
+zebra crossing **0.75**. Both are over the threshold, so both would be
+announced as stairs. Escalators and striped rugs are the same kind of case.
+
+A warning that says "Stop" on every tiled floor in a mall or a hospital teaches
+someone to ignore "Stop". That is exactly what `kUrgentScore` exists to
+prevent for objects, and the next "Stop" may be a car.
+
+## Before turning it on
+
+Build with the flag and hold the phone as users do. Go:
+- down and up real flights, indoors and out, in daylight and under lights;
+- across tiled floors, a zebra crossing, an escalator and a striped rug.
+
+Note each time it spoke and each time it should have. Turn it on by default
+only if it warns on stairs from far enough away to stop, and stays quiet on
+floors. If floors still trigger it, it needs more than banding before it
+speaks: the phone's tilt, or a trained class.
 
 ---
 

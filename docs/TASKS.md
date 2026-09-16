@@ -530,6 +530,8 @@ the reason it was scoped out was wrong — argue that first, in writing.
 - [ ] ~~Fire and emergency exit guidance~~ — §2.A.2 — needs indoor floor plans
 - [ ] ~~Video session recording~~ — §1.1 — substituted by the Phase 2 timeline
 
-Partial, and worth attempting: **stairs detection** (§2.A.3). It is a fall risk.
-A dedicated class or a floor-plane heuristic, with a confidence threshold that
-stays silent rather than guessing.
+Partial: **stairs detection** (§2.A.3). It is a fall risk. The floor-banding
+heuristic from PR #74 is ported onto the YOLO pipeline and wired into Scan, but
+off by default: it also fires on tiled floors and zebra crossings. Next is a
+device check against real stairs and real floors — see
+[`VISION.md`](VISION.md), "Stairs".

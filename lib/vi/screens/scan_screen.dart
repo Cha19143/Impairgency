@@ -307,7 +307,7 @@ class _ScanScreenState extends State<ScanScreen> {
       return;
     }
 
-    final cameraOk = await _service.start(_onDetections);
+    final cameraOk = await _service.start(_onFrame);
     if (!mounted) return;
     if (!cameraOk) {
       setState(() {
@@ -347,8 +347,8 @@ class _ScanScreenState extends State<ScanScreen> {
     if (meet != null && mounted) unawaited(_meet(meet));
   }
 
-  void _onDetections(List<Detection> detections) {
-    final guidance = guidanceFor(detections);
+  void _onFrame(ScanFrame frame) {
+    final guidance = guidanceFor(frame.detections, stairs: frame.stairs);
     if (!mounted) return;
     setState(() => _guidance = guidance.phrase);
     // While a friend's face is being taken down, "person ahead" is the friend.

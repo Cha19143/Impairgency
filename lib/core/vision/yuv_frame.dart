@@ -59,27 +59,10 @@ class YuvFrame {
   /// a few times a second. False, and nothing written, outside the frame.
   bool writeRgb(double x, double y, Float32List out, int at,
       {required double scale, required double shift}) {
-    final dx = x.floor();
-    final dy = y.floor();
-    if (dx < 0 || dy < 0 || dx >= uprightWidth || dy >= uprightHeight) {
-      return false;
-    }
-    int sx;
-    int sy;
-    switch (quarterTurns) {
-      case 1:
-        sx = dy;
-        sy = height - 1 - dx;
-      case 2:
-        sx = width - 1 - dx;
-        sy = height - 1 - dy;
-      case 3:
-        sx = width - 1 - dy;
-        sy = dx;
-      default:
-        sx = dx;
-        sy = dy;
-    }
+    final source = _source(x, y);
+    if (source < 0) return false;
+    final sx = source % width;
+    final sy = source ~/ width;
     final yIndex = sy * yRowStride + sx;
     final luma = yIndex < this.y.length ? this.y[yIndex].toDouble() : 0.0;
     final uvIndex = (sy ~/ 2) * uvRowStride + (sx ~/ 2) * uvPixelStride;
@@ -94,6 +77,39 @@ class YuvFrame {
             shift;
     out[at + 2] = (luma + 1.772 * cb).clamp(0.0, 255.0) * scale + shift;
     return true;
+  }
+
+  /// Brightness, 0 to 255, of the upright pixel nearest [x], [y] - or 0
+  /// outside the frame. Straight from the Y plane: the stairs search looks at
+  /// edges in brightness, and colour would cost three times the arithmetic
+  /// for nothing it uses.
+  int lumaAt(double x, double y) {
+    final source = _source(x, y);
+    if (source < 0) return 0;
+    final index = (source ~/ width) * yRowStride + source % width;
+    return index < this.y.length ? this.y[index] : 0;
+  }
+
+  /// The sensor pixel under upright [x], [y], as `row * width + column`, or
+  /// -1 outside the frame. Packed into one number so the pixel loops that
+  /// call it allocate nothing.
+  int _source(double x, double y) {
+    final dx = x.floor();
+    final dy = y.floor();
+    if (dx < 0 || dy < 0 || dx >= uprightWidth || dy >= uprightHeight) {
+      return -1;
+    }
+    // Not a record: one per pixel is the allocation the packing avoids.
+    switch (quarterTurns) {
+      case 1:
+        return (height - 1 - dx) * width + dy;
+      case 2:
+        return (height - 1 - dy) * width + (width - 1 - dx);
+      case 3:
+        return dx * width + (width - 1 - dy);
+      default:
+        return dy * width + dx;
+    }
   }
 }
 

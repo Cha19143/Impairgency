@@ -89,4 +89,14 @@ void main() {
     expect(out[3], 1 * 8 + 3);
     expect(out[6], 2 * 8 + 2);
   });
+
+  test('brightness alone, turned upright, and nothing outside the frame', () {
+    expect(frame().lumaAt(3, 1), 11);
+    final turned = frame(sensorOrientation: 90);
+    expect(turned.lumaAt(0, 0), 3 * 8 + 0);
+    expect(turned.lumaAt(3, 0), 0);
+    expect(turned.lumaAt(0, 7), 3 * 8 + 7);
+    expect(turned.lumaAt(-1, 0), 0);
+    expect(turned.lumaAt(4, 0), 0);
+  });
 }
