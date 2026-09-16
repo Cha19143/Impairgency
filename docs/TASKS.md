@@ -32,8 +32,8 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
 | Tester feedback round 2 — September 15 | `███████████░` | 36 / 38 |
-| Tester feedback round 3 — September 16 | `██████████░░` | 25 / 30 |
-| **Overall** | | **166 / 173  (96%)** |
+| Tester feedback round 3 — September 16 | `██████████░░` | 26 / 30 |
+| **Overall** | | **167 / 173  (97%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -576,7 +576,8 @@ can see them.
 - [x] Walls, doors and posts from a depth model, MiDaS v2.1 small (MIT),
       behind `--dart-define=DEPTH_WARNINGS=true`; off by itself on a phone too
       slow for it. See [`VISION.md`](VISION.md), "Depth"
-- [ ] Add the depth model for a device-check build: 66 MB, MIT, not committed
+- [x] Add the depth model for a device-check build: 66 MB, MIT, not committed.
+      On the test release as `impairgency-8c4014a-depth-check`
 - [ ] Depth device check: walls, a glass door, posts, a table edge, a parked
       motorcycle, open and narrow corridors, a slope down
 

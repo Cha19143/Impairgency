@@ -3,7 +3,7 @@
 ## Tester feedback round 3
 
 The testers' list of September 16, on branch `claude/tester-feedback-sept-16`,
-from the plan agreed that day. Nothing committed, pushed or deployed.
+from the plan agreed that day: PR calmadex/impairgency#86.
 `flutter analyze` is clean; **1297** Flutter tests, **90** rules tests
 and **13** browser tests pass. A release APK, the web app and an unsigned
 release iOS build all build. The checklist is in [`docs/TASKS.md`](docs/TASKS.md), "Tester feedback round 3".
@@ -37,16 +37,25 @@ release iOS build all build. The checklist is in [`docs/TASKS.md`](docs/TASKS.md
    (`SosEngine.fire(cancelled:, onCommitted:)`). The countdown no longer talks
    over its own "say cancel".
 
+Since then (the same evening): MobileFaceNet added (`a314026`), with its hash
+and shapes in `docs/VISION.md`; MiDaS downloaded for the depth check and kept
+out of git. **Hosting deployed** from `8c4014a`, and the live dashboard checked
+to hold the new build and none of the model files. On release
+`apk-2026-09-10`: `impairgency-8c4014a-(arm64-)release.apk` for testers, and
+`impairgency-8c4014a-depth-check-(arm64-)release.apk` with the depth model and
+flag, not for testers. The tester APK was installed on both emulators: the
+guardian's app opens without a microphone; the user app's Settings, Scan and
+Smart assistance work, with hands-free listening on Settings and "Somewhere
+else" asking by voice. That run found the Settings switch still naming four
+screens (`8c4014a`). SOS was not fired there: the emulators use the live
+project.
+
 ## Waiting on someone
 
-- **Two downloads, each needing a yes:** MobileFaceNet (5,233,552 bytes, from
-  `MCarlomagno/FaceRecognitionAuth`; weights for research use) and MiDaS v2.1
-  small (66,338,288 bytes, MIT, for a device-check build only).
-- **Commit, push, PR** of this branch; then `flutter build web --release` and
-  `firebase deploy --only hosting` for the admin fixes. The Firebase CLI's
-  login has expired (`firebase login --reauth`), which the emulators did not
-  mind and a deploy will.
-- **Release notes and APKs** on `apk-2026-09-10`.
+- **Merge PR #86** once CI is green.
+- **Superseded APKs** stay attached to the release (`836fb6b`, `8424e2f`,
+  `7ac4791` stairs check), marked as such in the notes; delete them when the
+  new ones are confirmed to install.
 
 ## Check on a real phone
 
