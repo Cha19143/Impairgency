@@ -51,6 +51,12 @@ class FakeBackend implements SpeechBackend {
 
   void status(String s) => _onStatus(s);
   void error(String code) => _onError(SpeechRecognitionError(code, true));
+  void partial(String words, {int session = -1}) {
+    final deliver = session < 0 ? results.last : results[session];
+    deliver(SpeechRecognitionResult.init(
+        [SpeechRecognitionWords(words, null, 1)], ResultType.partial));
+  }
+
   void heard(String words, {int session = -1}) {
     final deliver = session < 0 ? results.last : results[session];
     deliver(SpeechRecognitionResult.init(
@@ -139,5 +145,61 @@ void main() {
     final result = await hearing;
     expect(result, isA<NotHeard>());
     expect((result as NotHeard).failure, VoiceInputFailure.network);
+  });
+
+  group('a hot word', () {
+    test('settles the window on a partial, without waiting for the phrase',
+        () async {
+      // "Cancel" over the SOS countdown used to wait for a silence the
+      // countdown never left.
+      final seen = <String>[];
+      final hearing = recognizer.listen(
+        onPartial: seen.add,
+        settleOn: (partial) => partial.contains('cancel'),
+      );
+      await pumpEventQueue();
+      backend.status(SpeechToText.listeningStatus);
+      backend.partial('calling mum');
+      await pumpEventQueue();
+      backend.partial('calling mum cancel');
+
+      final result = await hearing;
+      expect((result as Heard).words, 'calling mum cancel');
+      expect(seen, ['calling mum', 'calling mum cancel']);
+      expect(backend.cancels, 1, reason: 'that session is over');
+    });
+
+    test("its session's late final result is not the next window's",
+        () async {
+      final first = recognizer.listen(settleOn: (p) => p == 'teka');
+      await pumpEventQueue();
+      backend.status(SpeechToText.listeningStatus);
+      backend.partial('teka');
+      expect((await first as Heard).words, 'teka');
+
+      clock = clock.add(const Duration(seconds: 1));
+      var settled = false;
+      final second = recognizer.listen()..then((_) => settled = true);
+      await pumpEventQueue();
+      backend.heard('teka', session: 0); // the first session, finishing late
+      await pumpEventQueue();
+      expect(settled, isFalse);
+
+      backend.heard('scan');
+      expect(((await second) as Heard).words, 'scan');
+    });
+
+    test('without one, a partial is only a partial', () async {
+      var settled = false;
+      final hearing = recognizer.listen()..then((_) => settled = true);
+      await pumpEventQueue();
+      backend.status(SpeechToText.listeningStatus);
+      backend.partial('cancel');
+      await pumpEventQueue();
+      expect(settled, isFalse);
+
+      backend.heard('cancel');
+      expect(((await hearing) as Heard).words, 'cancel');
+    });
   });
 }

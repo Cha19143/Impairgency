@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:impairgency/core/vision/depth.dart';
 import 'package:impairgency/core/vision/detection.dart';
 import 'package:impairgency/core/vision/stairs.dart';
 
@@ -50,13 +51,45 @@ void main() {
   });
 
   group('choosing what to say about a frame', () {
-    test('an empty frame is a clear path', () {
-      expect(guidanceFor(const []).phrase, kPathClear);
-      expect(guidanceFor(const []).urgent, isFalse);
+    test('an empty frame says no known objects, not that the path is clear',
+        () {
+      // The model has no walls, doors, posts, kerbs or steps. A frame with
+      // none of its 80 classes in it is not a clear path.
+      final guidance = guidanceFor(const []);
+      expect(guidance.phrase, kNoKnownObjects);
+      expect(guidance.phrase.toLowerCase(), isNot(contains('clear')));
+      expect(guidance.urgent, isFalse);
+      expect(guidance.nothingSeen, isTrue);
+      expect(guidanceFor([at(extent: 0.3)]).nothingSeen, isFalse);
+    });
+
+    test('a car outranks a chair of the same size', () {
+      final guidance = guidanceFor([
+        at(label: 'chair', centerX: 0.5, extent: 0.4),
+        at(label: 'car', centerX: 0.3, extent: 0.4),
+      ]);
+      expect(guidance.label, 'car');
+    });
+
+    test('a handheld object never says stop', () {
+      // A phone held up to the lens is very close, and nothing to stop for.
+      final phone = at(label: 'cell phone', centerX: 0.5, extent: 0.9);
+      expect(phone.phrase, isNot(startsWith('Stop')));
+      final guidance = guidanceFor([phone]);
+      expect(guidance.urgent, isFalse);
+      expect(guidance.phrase, 'cell phone very close ahead');
+
+      // And it does not drown out something that is.
+      expect(
+          guidanceFor([
+            phone,
+            at(label: 'bicycle', centerX: 0.6, extent: 0.4),
+          ]).label,
+          'bicycle');
     });
 
     test('low-confidence boxes are noise, not objects', () {
-      expect(guidanceFor([at(score: 0.2, extent: 0.8)]).phrase, kPathClear);
+      expect(guidanceFor([at(score: 0.2, extent: 0.8)]).phrase, kNoKnownObjects);
     });
 
     test('the riskiest object is the one announced', () {
@@ -144,7 +177,7 @@ void main() {
     });
 
     test('an unsure reading says nothing about stairs', () {
-      expect(guidanceFor(const [], stairs: unsure).phrase, kPathClear);
+      expect(guidanceFor(const [], stairs: unsure).phrase, kNoKnownObjects);
       expect(
           guidanceFor([at(label: 'chair', extent: 0.4)], stairs: unsure).phrase,
           isNot(contains('Stairs')));
@@ -182,6 +215,24 @@ void main() {
             now: now),
         isTrue,
       );
+    });
+
+    test('nothing seen is said when it becomes true, and seldom after', () {
+      final now = DateTime(2026, 9, 16, 12);
+      bool quietAfter(Duration gap, {String? last = kNoKnownObjects}) =>
+          shouldSpeak(
+            phrase: kNoKnownObjects,
+            urgent: false,
+            quiet: true,
+            lastPhrase: last,
+            lastSpokenAt: now.subtract(gap),
+            now: now,
+          );
+      expect(quietAfter(const Duration(seconds: 5)), isFalse,
+          reason: 'not every few seconds on an empty street');
+      expect(quietAfter(kQuietRepeat), isTrue);
+      expect(quietAfter(const Duration(seconds: 1), last: 'car ahead'), isTrue,
+          reason: 'the car has gone: that is news');
     });
 
     test('the same sentence waits out the cooldown', () {
@@ -284,6 +335,72 @@ void main() {
           xMin: 0.2, yMin: 0.1, xMax: 0.6, yMax: 0.8);
       expect(d.centerX, closeTo(0.4, 1e-9));
       expect(d.extent, closeTo(0.7, 1e-9), reason: 'height is the larger side');
+    });
+  });
+
+  group('something in the way with no name', () {
+    const wallAhead = DepthReading(
+        nearness: 0.6, direction: DepthDirection.ahead, confidence: 0.9);
+    const doorClose = DepthReading(
+        nearness: 0.9, direction: DepthDirection.ahead, confidence: 0.9);
+    const postLeft = DepthReading(
+        nearness: 0.7, direction: DepthDirection.left, confidence: 0.8);
+    const unsure = DepthReading(
+        nearness: 0.9, direction: DepthDirection.ahead, confidence: 0.4);
+
+    test('is said as something, and where', () {
+      // A wall used to be "no known objects" - or, before that, a clear path.
+      final ahead = guidanceFor(const [], depth: wallAhead);
+      expect(ahead.phrase, 'Something ahead. Slow down.');
+      expect(ahead.urgent, isFalse);
+      expect(ahead.label, 'obstacle', reason: 'the guardian feed shows it');
+
+      expect(guidanceFor(const [], depth: postLeft).phrase,
+          'Something on your left. Slow down.');
+
+      final close = guidanceFor(const [], depth: doorClose);
+      expect(close.phrase, kSomethingAhead);
+      expect(close.urgent, isTrue);
+    });
+
+    test('an unsure reading says nothing', () {
+      expect(guidanceFor(const [], depth: unsure).phrase, kNoKnownObjects);
+    });
+
+    test('a named urgent object outranks it', () {
+      final guidance = guidanceFor(
+          [at(label: 'car', centerX: 0.5, extent: 0.8)],
+          depth: doorClose);
+      expect(guidance.label, 'car');
+    });
+
+    test('stairs outrank it', () {
+      const stairs =
+          StairsReading(confidence: 0.9, treads: 6, spacingRegularity: 0.95);
+      expect(guidanceFor(const [], stairs: stairs, depth: doorClose).phrase,
+          kStairsAhead);
+    });
+
+    test('what a named object already is, is not said twice', () {
+      // The chair the detector saw is the thing the depth model saw.
+      final guidance = guidanceFor(
+          [at(label: 'chair', centerX: 0.5, extent: 0.45)],
+          depth: wallAhead);
+      expect(guidance.label, 'chair');
+
+      // A small object named ahead does not hide a wall behind it.
+      expect(
+          guidanceFor([at(label: 'cup', centerX: 0.5, extent: 0.1)],
+                  depth: wallAhead)
+              .label,
+          'obstacle');
+
+      // Nor does an object named on the other side.
+      expect(
+          guidanceFor([at(label: 'chair', centerX: 0.9, extent: 0.5)],
+                  depth: postLeft)
+              .label,
+          'obstacle');
     });
   });
 }

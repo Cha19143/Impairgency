@@ -5,6 +5,7 @@ import '../../core/navigation/destination.dart';
 import '../../core/navigation/map_services.dart';
 import '../../core/navigation/place_search.dart';
 import '../../core/navigation/route.dart';
+import 'dictated_field.dart';
 import 'vi_button.dart';
 
 /// What a search found, and from where - or why it found nothing.
@@ -45,17 +46,36 @@ class PlaceSearchPanel extends StatefulWidget {
   final void Function(String sentence)? onResult;
 
   @override
-  State<PlaceSearchPanel> createState() => _PlaceSearchPanelState();
+  State<PlaceSearchPanel> createState() => PlaceSearchPanelState();
 }
 
-class _PlaceSearchPanelState extends State<PlaceSearchPanel> {
+class PlaceSearchPanelState extends State<PlaceSearchPanel> {
   final _query = TextEditingController();
+  final _focus = FocusNode();
+  final _field = GlobalKey<DictatedFieldState>();
+
+  /// Asks for a place to search for: by voice when there is a microphone,
+  /// otherwise by putting the keyboard on the field.
+  Future<void> ask() async {
+    final context = _field.currentContext;
+    if (context != null) {
+      await Scrollable.ensureVisible(context,
+          duration: const Duration(milliseconds: 200));
+    }
+    final field = _field.currentState;
+    if (field != null && field.canDictate) {
+      await field.dictate();
+    } else {
+      _focus.requestFocus();
+    }
+  }
   bool _searching = false;
   PlaceSearchResult? _result;
   String? _searched;
 
   @override
   void dispose() {
+    _focus.dispose();
     _query.dispose();
     super.dispose();
   }
@@ -96,14 +116,25 @@ class _PlaceSearchPanelState extends State<PlaceSearchPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
+        DictatedField(
+          key: _field,
+          label: 'Place to search for',
+          prompt: 'Say the place to search for: a shop, a clinic, a street.',
           controller: _query,
-          textInputAction: TextInputAction.search,
-          onSubmitted: (_) => _run(),
-          style: const TextStyle(fontSize: 20, color: AppColors.textPrimary),
-          decoration: const InputDecoration(
-            labelText: 'Search for a place that is not saved',
-            hintText: 'A shop, a clinic, a street',
+          inForm: false,
+          // Said and kept means searched: nobody should have to find the
+          // Search button after answering by voice.
+          onDictated: (_) => _run(),
+          field: TextField(
+            controller: _query,
+            focusNode: _focus,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _run(),
+            style: const TextStyle(fontSize: 20, color: AppColors.textPrimary),
+            decoration: const InputDecoration(
+              labelText: 'Search for a place that is not saved',
+              hintText: 'A shop, a clinic, a street',
+            ),
           ),
         ),
         const SizedBox(height: 10),

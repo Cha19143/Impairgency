@@ -36,6 +36,7 @@ class WhatCanISayScreen extends StatelessWidget {
       final example = hint == null ? words.first : '${words.first} $hint';
       lines.add('$example, to ${kCommandDescriptions[command]!.toLowerCase()}.');
     }
+    lines.add(kPressAnyButton);
     return lines.join(' ');
   }
 
@@ -65,6 +66,7 @@ class WhatCanISayScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
                 children: [
+                  const _PressAnyButton(),
                   for (final command in _order)
                     if ((kVoiceKeywords[command] ?? const []).isNotEmpty)
                       _CommandRow(
@@ -99,6 +101,48 @@ class WhatCanISayScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Said at the end of the list, and shown at the top of it.
+const String kPressAnyButton =
+    'And on any screen, say what a button says to press it.';
+
+/// Every button is a command too: its label.
+class _PressAnyButton extends StatelessWidget {
+  const _PressAnyButton();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: 'Press any button. Say what the button says, such as Continue '
+            'or Back.',
+        child: const ExcludeSemantics(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Press any button',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Say what the button says, such as "Continue" or "Back"',
+                  style: TextStyle(
+                    fontSize: 16,
+                    height: 1.4,
+                    color: AppColors.cyan,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _CommandRow extends StatelessWidget {

@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/auth/email_address.dart';
 import '../../core/speech/speaker.dart';
+import '../voice_controller.dart';
+import '../widgets/dictated_field.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
+import '../widgets/voice_form.dart';
 
 /// Returns null on success, or a sentence to say and show.
 typedef CreateAccountHandler = Future<String?> Function(
@@ -17,10 +20,11 @@ typedef CreateAccountHandler = Future<String?> Function(
 /// with nowhere to be stored, and a login screen at the very start for an
 /// account that did not exist yet.
 ///
-/// **Credentials are never dictated.** `ui.pdf` p.7 offered to "speak the
-/// details instead of typing"; a password said out loud is not a password, and
-/// dictated email addresses are wrong more often than they are right. Voice
-/// moves between the fields. The keyboard enters them.
+/// **A password is never dictated.** `ui.pdf` p.7 offered to "speak the
+/// details instead of typing"; a password said out loud is not a password. The
+/// email address can be said - it is read back letter by letter and kept only
+/// on a yes, because a dictated address is wrong often enough that nobody
+/// should have to find out from an email that never arrives.
 class CreateAccountScreen extends StatefulWidget {
   const CreateAccountScreen({
     super.key,
@@ -92,12 +96,20 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       body: const [
         'Your email and a password of at least eight characters.',
       ],
-      spokenSuffix: 'Voice moves you between the fields. Use the keyboard to '
-          'type them. A password said out loud is not a password.',
-      extra: Column(
+      spokenSuffix: 'Say fill in to say your email address. Type the password '
+          'with the keyboard: a password said out loud is not a password.',
+      micDetail: kFormMicDetail,
+      extra: VoiceForm(
+        submitLabel: 'Create account',
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(
+          DictatedField(
+            label: 'Email address',
+            controller: _email,
+            shape: DictationShape.email,
+            enabled: !_busy,
+            field: Semantics(
             textField: true,
             label: 'Email address',
             child: TextField(
@@ -116,6 +128,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               contentPadding:
                   EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             ),
+          ),
           ),
           ),
           const SizedBox(height: 14),
@@ -145,6 +158,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           ),
           ),
         ],
+      ),
       ),
       actions: [
         ViButton(

@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../../core/places/place.dart';
 import '../../core/places/routine.dart';
 import '../../core/speech/speaker.dart';
+import '../widgets/press_by_voice.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
 
@@ -133,18 +134,22 @@ class _PlaceCard extends StatelessWidget {
                           color: AppColors.cyan)),
                 ],
                 const SizedBox(height: 10),
-                Semantics(
-                  button: true,
+                PressByVoice(
                   label: 'Forget $name',
-                  onTap: onForget,
-                  child: ExcludeSemantics(
-                    child: TextButton.icon(
-                      onPressed: onForget,
-                      icon: const Icon(Icons.delete_outline,
-                          color: AppColors.red, size: 22),
-                      label: const Text('Forget this place',
-                          style: TextStyle(
-                              fontSize: 16, color: AppColors.red)),
+                  onPressed: onForget,
+                  child: Semantics(
+                    button: true,
+                    label: 'Forget $name',
+                    onTap: onForget,
+                    child: ExcludeSemantics(
+                      child: TextButton.icon(
+                        onPressed: onForget,
+                        icon: const Icon(Icons.delete_outline,
+                            color: AppColors.red, size: 22),
+                        label: const Text('Forget this place',
+                            style: TextStyle(
+                                fontSize: 16, color: AppColors.red)),
+                      ),
                     ),
                   ),
                 ),

@@ -39,7 +39,8 @@ class SosCountdownScreen extends StatefulWidget {
 
   /// Opens the microphone for the cancel word. Called once, as the countdown
   /// starts, because a countdown that only *says* "say cancel" and is not
-  /// listening is a countdown that cannot be cancelled by voice.
+  /// listening is a countdown that cannot be cancelled by voice. What it
+  /// starts keeps listening until the SOS is cancelled or has called.
   final VoidCallback? startListening;
 
   final Duration duration;
@@ -54,13 +55,20 @@ class _SosCountdownScreenState extends State<SosCountdownScreen> {
   StreamSubscription<VoiceCommand>? _voiceSub;
   bool _settled = false;
 
+  /// Whether the opening lines - the first count and how to stop it - have
+  /// been said. Until then the count is not spoken: every spoken line
+  /// replaces narration still being said, and "Calling Mum in 2" a second in
+  /// cut off "Say cancel, or touch the screen", so nobody heard how to stop
+  /// it. The number on screen keeps counting either way.
+  bool _hintSaid = false;
+
   @override
   void initState() {
     super.initState();
-    widget.speaker.speakLines([
+    unawaited(widget.speaker.speakLines([
       armingAnnouncement(_secondsLeft, contactName: widget.contactName),
       kArmingHint,
-    ]);
+    ]).then((_) => _hintSaid = true));
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     _voiceSub = widget.voice?.listen((command) {
@@ -86,7 +94,7 @@ class _SosCountdownScreenState extends State<SosCountdownScreen> {
     setState(() => _secondsLeft = next);
     if (next <= 0) {
       _fire();
-    } else {
+    } else if (_hintSaid) {
       widget.speaker
           .speak(armingAnnouncement(next, contactName: widget.contactName));
     }

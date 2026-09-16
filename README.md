@@ -99,6 +99,11 @@ shipped, turned into a failing test.
 | `test/rules/firestore.test.js` | A guardian reading a user they were never paired with. Location leaking after consent is revoked. A client making itself an admin. A pairing code redeemed twice. |
 | `test/e2e/auth-gate.spec.js` | A correct password that redisplays the login form. An admin route reachable without an admin. The dashboard is driven in a real browser, so these are caught in the build that ships rather than in a test harness. |
 | `test/vi/hands_free_test.dart` | A microphone that listens without a tap and hears the app instead of the person: the dashboard's own prompt contains "scan", "read" and "help". A hazard warning spoken into an open microphone. A failing microphone retried forever. |
+| `test/core/voice/spoken_targets_test.dart` | A sentence that happens to contain "back" pressing Back; "Share my location" heard as "where am I"; two buttons pressed for one phrase. |
+| `test/core/voice/dictation_test.dart` | An email kept as the recogniser wrote it, a phone number with its words left in, the letter o read as a zero. |
+| `test/vi/cancel_listener_test.dart` | An SOS countdown that heard itself, stopped listening with seconds to go, and could not be cancelled by voice; a microphone reopened behind the phone call. |
+| `test/core/vision/depth_test.dart` | A floor read as a wall, a wall read as a floor, and a guess said where the model was not sure. |
+| `test/vi/screens/journey_test.dart` | Directions that go on after "stop", a route not drawn, warnings that stop when the map opens. |
 | `test/core/navigation/route_follower_test.dart` | A turn said late, twice, or not at all; one wild GPS reading setting off a new route; "turn left" given from a compass the phone does not have. |
 | `test/core/vision/faces_test.dart` | A stranger named as a friend; a face saved from five views of two people; a friend's name repeated every frame. |
 | `test/data/friend_store_test.dart` | Saved faces written outside the app's folder, or into a backup. A corrupt file that stops the scan screen. |
@@ -106,9 +111,9 @@ shipped, turned into a failing test.
 | `test/e2e/overview.spec.js` | Numbers that survive an empty database. The predecessor hardcoded 15.4K and 99.2% and looked entirely convincing; these read §1.3's figures out of Firestore and assert the empty state stays empty. |
 
 ```bash
-flutter test                 # 1142 unit and widget tests
+flutter test                 # 1297 unit and widget tests
 tool/test_rules.sh           # 90 security rules tests, on the emulator
-tool/test_e2e.sh             # 12 browser tests against the dashboard
+tool/test_e2e.sh             # 13 browser tests against the dashboard
 tool/eval_detector.py --fetch  # what the detector finds, on 846 annotated photos
 flutter build apk && flutter build ios && flutter build web
 ```

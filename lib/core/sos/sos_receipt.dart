@@ -45,6 +45,11 @@ enum LegOutcome {
   /// Saying which is the difference between a user who waits and one who
   /// gives up.
   pending,
+
+  /// Not attempted, because the user said cancel first - after the countdown,
+  /// while the alarm sounded and the position was found, before anyone was
+  /// called.
+  cancelled,
 }
 
 class LegResult {
@@ -71,6 +76,9 @@ class SosReceipt {
   /// user rang the next contact from the receipt.
   List<LegResult> get calls => legs.where((l) => l.leg == SosLeg.call).toList();
 
+  /// The user stopped it before the call.
+  bool get cancelled => legs.any((l) => l.outcome == LegOutcome.cancelled);
+
   bool get anyoneReached =>
       calls.any((c) => c.succeeded) ||
       (of(SosLeg.guardians)?.succeeded ?? false);
@@ -91,7 +99,12 @@ class SosReceipt {
   /// the user needs in the first two seconds. Everything else follows.
   String get spoken {
     final lines = <String>[
-      if (anyoneReached) _whoWasReached() else 'Nobody was reached.',
+      if (cancelled)
+        'Cancelled before calling.'
+      else if (anyoneReached)
+        _whoWasReached()
+      else
+        'Nobody was reached.',
       for (final leg in legs) sentenceFor(leg),
     ];
     return lines.join(' ');
@@ -118,6 +131,8 @@ class SosReceipt {
           result.detail == null ? 'Your contact was called.' : 'Called ${result.detail}.',
         (SosLeg.call, LegOutcome.notConfigured) =>
           'No emergency contact is saved, so nobody was called.',
+        (SosLeg.call, LegOutcome.cancelled) =>
+          'You said cancel, so nobody was called.',
         (SosLeg.call, _) =>
           result.detail == null
               ? 'The call did not connect.'
@@ -125,6 +140,7 @@ class SosReceipt {
 
         // Already a full sentence from the location policy, which names which
         // of the four failures it was.
+        (SosLeg.location, LegOutcome.cancelled) => 'Your location was not sent.',
         (SosLeg.location, _) => result.detail ?? 'Your location was not sent.',
 
         (SosLeg.guardians, LegOutcome.done) =>
@@ -133,6 +149,8 @@ class SosReceipt {
               : '${result.detail} were told.',
         (SosLeg.guardians, LegOutcome.notConfigured) =>
           'You have no guardian, so nobody was alerted.',
+        (SosLeg.guardians, LegOutcome.cancelled) =>
+          'You said cancel, so your guardian was not alerted.',
         (SosLeg.guardians, LegOutcome.pending) =>
           'Your guardian alert is waiting for a connection, and will be sent '
               'as soon as this phone has one.',
@@ -142,5 +160,9 @@ class SosReceipt {
       };
 
   /// One line for the top of the screen, and the first thing spoken.
-  String get headline => anyoneReached ? 'Help has been called' : 'Nobody was reached';
+  String get headline => cancelled
+      ? 'Cancelled before calling'
+      : anyoneReached
+          ? 'Help has been called'
+          : 'Nobody was reached';
 }

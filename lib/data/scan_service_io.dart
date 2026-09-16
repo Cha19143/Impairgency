@@ -6,11 +6,14 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
+import '../core/vision/depth.dart';
 import '../core/vision/detection.dart';
 import '../core/vision/faces.dart';
 import '../core/vision/stairs.dart';
 import '../core/vision/yolo.dart';
 import '../core/vision/yuv_frame.dart';
+import 'crash_reporting.dart';
+import 'depth_estimator.dart';
 import 'face_recognizer.dart';
 
 /// Camera frames in, detections out.
@@ -104,6 +107,24 @@ class ScanService {
   StairsReading _stairs = StairsReading.none;
   DateTime _stairsAt = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// The depth model, loaded only when [kDepthWarnings] is on and the file is
+  /// in the build. It runs inside the same busy window as the objects, so
+  /// dispose() waits for it too.
+  DepthEstimator? _depth;
+  DepthReading _depthReading = DepthReading.none;
+  DateTime _depthAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int _slowDepthRuns = 0;
+  String? _notice;
+
+  /// As with stairs: how often the depth model runs, and how long a reading
+  /// stands for the frames between.
+  static const Duration _depthGap = Duration(milliseconds: 700);
+  static const Duration _depthFresh = Duration(milliseconds: 1500);
+
+  /// A run slower than this, twice, and the depth model is switched off: a
+  /// warning that arrives a second late describes where the user was.
+  static const Duration _depthTooSlow = Duration(milliseconds: 400);
+
   CameraController? get controller => _controller;
   bool get isReady => _controller?.value.isInitialized == true;
 
@@ -160,6 +181,16 @@ class ScanService {
       _output = outputBytes.buffer.asFloat32List();
 
       _interpreter = interpreter;
+      if (kDepthWarnings) {
+        _depth = await DepthEstimator.load();
+        if (_depth == null) {
+          crashRecorder.handled(
+            StateError('$kDepthModelAsset is not in this build'),
+            null,
+            reason: 'Depth warnings were switched on and could not start',
+          );
+        }
+      }
       try {
         // Off the thread that draws the screen. The camera preview is for
         // whoever is helping rather than for the user, so the jank itself is
@@ -297,7 +328,16 @@ class ScanService {
         ));
       }
       final frame = _uprightFrame(image);
-      onFrame(ScanFrame(detections: detections, stairs: _stairsIn(frame)));
+      final depth = await _depthIn(frame);
+      if (_disposed) return;
+      final notice = _notice;
+      _notice = null;
+      onFrame(ScanFrame(
+        detections: detections,
+        stairs: _stairsIn(frame),
+        depth: depth,
+        notice: notice,
+      ));
       // Inside the same busy window as the objects, so dispose() waits for
       // the face models too before closing anything.
       await _lookForFaces(frame, detections);
@@ -339,6 +379,29 @@ class ScanService {
     return now.difference(_stairsAt) <= _stairsFresh
         ? _stairs
         : StairsReading.none;
+  }
+
+  /// Something in the way in [frame], or the last reading while it is fresh -
+  /// and nothing unless a build switched depth warnings on and has the model.
+  Future<DepthReading> _depthIn(YuvFrame frame) async {
+    final depth = _depth;
+    if (depth == null) return DepthReading.none;
+    final now = DateTime.now();
+    if (now.difference(_depthAt) >= _depthGap) {
+      final clock = Stopwatch()..start();
+      _depthReading = await depth.estimate(frame);
+      _depthAt = DateTime.now();
+      if (clock.elapsed > _depthTooSlow && ++_slowDepthRuns >= 2) {
+        _depth = null;
+        _depthReading = DepthReading.none;
+        _notice = 'Depth warnings are off on this phone: it is too slow for '
+            'them. Obstacle names still work.';
+        await depth.close();
+      }
+    }
+    return DateTime.now().difference(_depthAt) <= _depthFresh
+        ? _depthReading
+        : DepthReading.none;
   }
 
   Future<void> _lookForFaces(
@@ -493,6 +556,8 @@ class ScanService {
     _watch = null;
     await _faces?.close();
     _faces = null;
+    await _depth?.close();
+    _depth = null;
   }
 
   /// Exposed so a test can check the maths without a camera.

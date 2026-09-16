@@ -1,15 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../core/admin/admin_user.dart';
 import '../admin_theme.dart';
 import '../admin_ui.dart';
 import 'admin_shell.dart';
 
+/// How long a page may load before it is said to have failed.
+///
+/// A Firestore read with no connection can wait indefinitely, and a spinner
+/// that never resolves is the one state this page promises not to show.
+const Duration kAdminLoadTimeout = Duration(seconds: 15);
+
 /// Loads something, then shows it inside the shell.
 ///
-/// The three failure states are spelled out rather than collapsed into a
-/// spinner that never resolves: still loading, refused, and genuinely empty.
-/// The last one matters most — an empty dashboard has to look empty rather
-/// than showing zeroes that read as measurements.
+/// The failure states are spelled out rather than collapsed into a spinner
+/// that never resolves: still loading, refused, unreachable, and genuinely
+/// empty. The last one matters most — an empty dashboard has to look empty
+/// rather than showing zeroes that read as measurements.
 class AdminPage<T> extends StatefulWidget {
   const AdminPage({
     super.key,
@@ -60,7 +69,7 @@ class _AdminPageState<T> extends State<AdminPage<T>> {
   bool _hasLast = false;
 
   Future<T> _load() async {
-    final data = await widget.load();
+    final data = await widget.load().timeout(kAdminLoadTimeout);
     _last = data;
     _hasLast = true;
     return data;
@@ -78,6 +87,18 @@ class _AdminPageState<T> extends State<AdminPage<T>> {
     }
   }
 
+  /// A click on the section already open loads it again. Navigating to the
+  /// current route is a no-op in go_router and there is no animation to show
+  /// it happened, so the click used to do nothing visible at all - which is
+  /// how a working sidebar gets reported as broken.
+  void _select(AdminSection section) {
+    if (section.route == widget.route) {
+      unawaited(_reload());
+      return;
+    }
+    widget.onSelect?.call(section);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AdminShell(
@@ -85,7 +106,7 @@ class _AdminPageState<T> extends State<AdminPage<T>> {
       title: widget.title,
       subtitle: widget.subtitle,
       account: widget.account,
-      onSelect: widget.onSelect,
+      onSelect: widget.onSelect == null ? null : _select,
       onSignOut: widget.onSignOut,
       child: FutureBuilder<T>(
         future: _future,
@@ -106,14 +127,34 @@ class _AdminPageState<T> extends State<AdminPage<T>> {
             );
           }
           if (snapshot.hasError) {
-            return AdminMessage(
-              icon: Icons.lock_outline,
-              tone: AdminTone.bad,
-              title: 'Could not load this page',
-              detail: 'The database refused the read. This usually means the '
-                  'signed-in account is not on the admin roster.',
-              onRetry: _reload,
-            );
+            // Said by cause. Every failure used to read as a refusal, so a
+            // dropped connection told an administrator they were not one.
+            final error = snapshot.error!;
+            return switch (describeFailure(error)) {
+              AdminLoadFailure.refused => AdminMessage(
+                  icon: Icons.lock_outline,
+                  tone: AdminTone.bad,
+                  title: 'Could not load this page',
+                  detail: 'The database refused the read. This usually means '
+                      'the signed-in account is not on the admin roster.',
+                  onRetry: _reload,
+                ),
+              AdminLoadFailure.unreachable => AdminMessage(
+                  icon: Icons.cloud_off_outlined,
+                  tone: AdminTone.warn,
+                  title: 'Could not reach the database',
+                  detail: 'Check the connection and try again. Nothing is '
+                      'shown until it has actually been read.',
+                  onRetry: _reload,
+                ),
+              AdminLoadFailure.other => AdminMessage(
+                  icon: Icons.error_outline,
+                  tone: AdminTone.bad,
+                  title: 'Could not load this page',
+                  detail: 'The read failed: ${'$error'.split('\n').first}',
+                  onRetry: _reload,
+                ),
+            };
           }
           final data = snapshot.data as T;
           if (widget.isEmpty?.call(data) ?? false) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
@@ -7,6 +9,7 @@ import '../../core/sos/sos_receipt.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/voice/voice_commands.dart';
 import '../../data/sos_engine.dart';
+import '../cancel_listener.dart';
 import '../voice_controller.dart';
 import 'sos_countdown_screen.dart';
 import 'sos_receipt_screen.dart';
@@ -63,22 +66,96 @@ class _SosFlowState extends State<SosFlow> {
   EmergencyContact? get _next =>
       _called < widget.contacts.length ? widget.contacts[_called] : null;
 
+  /// The spoken commands, shared by the countdown and the seconds after it.
+  late final Stream<VoiceCommand>? _commands =
+      widget.voice?.asBroadcastStream() ?? widget.voiceController?.commands;
+
+  String? get _contactName =>
+      widget.contacts.isEmpty ? null : widget.contacts.first.name;
+
+  /// The microphone, kept open for "cancel" from the countdown until the
+  /// dialler opens.
+  CancelListener? _listener;
+
+  CancelListener? get _cancelListener {
+    final controller = widget.voiceController;
+    if (controller == null) return null;
+    return _listener ??= CancelListener(
+      controller,
+      // Each window spans a whole countdown and then some; the listener opens
+      // the next one whenever a window ends.
+      window: kArmingDuration + const Duration(seconds: 2),
+      // It listens while the app talks, and what the app says contains the
+      // word "cancel" - and "help". Heard back, that is not the user.
+      echoOf: () => [
+        for (var s = kArmingDuration.inSeconds; s >= 0; s--)
+          armingAnnouncement(s, contactName: _contactName),
+        kArmingHint,
+        kSosAlarm,
+      ],
+    );
+  }
+
+  /// "Cancel" heard after the countdown, while the alarm sounds and the
+  /// position is found.
+  StreamSubscription<VoiceCommand>? _firingVoice;
+
+  /// Whether "cancel" can still stop this SOS: until the dialler opens.
+  bool _cancellable = false;
+
+  void _stopListening() {
+    _cancellable = false;
+    unawaited(_firingVoice?.cancel());
+    _firingVoice = null;
+    unawaited(_listener?.stop());
+    _listener = null;
+  }
+
   Future<void> _fire() async {
-    // Whatever the microphone is doing, the legs come first.
-    await widget.voiceController?.stop();
     if (!mounted) return;
+    // The microphone stays open. It used to be closed here, "the legs come
+    // first" - but the alarm and the position take seconds before anyone is
+    // rung, and a "cancel" in those seconds should still count.
+    final cancelled = Completer<void>();
+    _cancellable = true;
+    unawaited(_firingVoice?.cancel());
+    _firingVoice = _commands?.listen((command) {
+      if (command == VoiceCommand.cancel &&
+          _cancellable &&
+          !cancelled.isCompleted) {
+        cancelled.complete();
+      }
+    });
+    unawaited(_cancelListener?.run());
     setState(() => _running = true);
     final receipt = await widget.engine.fire(
       userId: widget.userId,
       contacts: widget.contacts,
       guardianCount: widget.guardianCount,
+      cancelled: cancelled.future,
+      // Past this, "cancel" has nothing left to stop - and the dialler is
+      // about to put the app behind the call, where the microphone must not
+      // be open.
+      onCommitted: _stopListening,
     );
+    _stopListening();
     if (!mounted) return;
+    if (receipt.cancelled) {
+      await widget.speaker.speak(kCancelledAnnouncement);
+      if (mounted) widget.onFinished();
+      return;
+    }
     setState(() {
       _running = false;
       _called = widget.contacts.isEmpty ? 0 : 1;
       _receipt = receipt;
     });
+  }
+
+  @override
+  void dispose() {
+    _stopListening();
+    super.dispose();
   }
 
   Future<void> _callNext() async {
@@ -107,6 +184,7 @@ class _SosFlowState extends State<SosFlow> {
   }
 
   Future<void> _cancel() async {
+    _stopListening();
     await widget.engine.recordCancellation(widget.userId);
     if (mounted) widget.onFinished();
   }
@@ -131,50 +209,43 @@ class _SosFlowState extends State<SosFlow> {
     }
 
     if (_running) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppColors.navy,
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: AppColors.red),
-              SizedBox(height: 24),
-              Text(
-                'Calling for help…',
-                style: TextStyle(fontSize: 22, color: AppColors.textPrimary),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(color: AppColors.red),
+                const SizedBox(height: 24),
+                const Text(
+                  'Calling for help…',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 22, color: AppColors.textPrimary),
+                ),
+                if (_cancellable && widget.voiceController != null) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Nobody has been called yet. Say "cancel" to stop.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 17, color: AppColors.textSecondary),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       );
     }
 
-    final controller = widget.voiceController;
-    final contactName =
-        widget.contacts.isEmpty ? null : widget.contacts.first.name;
+    final listener = _cancelListener;
     return SosCountdownScreen(
-      contactName: contactName,
+      contactName: _contactName,
       speaker: widget.speaker,
-      voice: widget.voice ?? controller?.commands,
-      startListening: controller == null
-          ? null
-          : () => controller.listen(
-                only: kCancellationCommands,
-                dispatch: false,
-                auto: true,
-                silenceSpeaker: false,
-                // Whatever else was listening, this outranks it: a countdown
-                // nobody can cancel by voice is not cancellable by a user who
-                // has already put the phone away.
-                preempt: true,
-                // It listens while it talks, and what it says contains the
-                // word "cancel". Heard back, that sentence is not the user.
-                echoOf: () => [
-                  for (var s = kArmingDuration.inSeconds; s >= 0; s--)
-                    armingAnnouncement(s, contactName: contactName),
-                  kArmingHint,
-                ],
-              ),
+      voice: _commands,
+      startListening: listener == null ? null : () => unawaited(listener.run()),
       onFire: _fire,
       onCancel: _cancel,
     );

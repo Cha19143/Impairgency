@@ -1,3 +1,66 @@
+# Where we left off — 2026-09-16
+
+## Tester feedback round 3
+
+The testers' list of September 16, on branch `claude/tester-feedback-sept-16`,
+from the plan agreed that day. Nothing committed, pushed or deployed.
+`flutter analyze` is clean; **1297** Flutter tests, **90** rules tests
+and **13** browser tests pass. A release APK, the web app and an unsigned
+release iOS build all build. The checklist is in [`docs/TASKS.md`](docs/TASKS.md), "Tester feedback round 3".
+
+1. **Voice on every screen.** Hands-free listens on every screen of the user
+   app, through a fallback scope the router sets (`AppSession._listenOn`): not
+   on the first safety notice, not during SOS, not in the guardian app. Every
+   `ViScreen` offers the microphone. Any button is pressed by saying its label
+   (`core/voice/spoken_targets.dart`, `vi/voice_targets.dart`,
+   `vi/widgets/press_by_voice.dart`). Forms are dictated with read-back
+   (`core/voice/dictation.dart`, `VoiceController.dictate`,
+   `vi/widgets/dictated_field.dart`, `vi/widgets/voice_form.dart`), passwords
+   never.
+2. **Admin sidebar.** A roster read with no answer was remembered as "not an
+   administrator". `AdminRepository.rosterCheck` now tells a refusal from no
+   answer; the session retries and the sign-in page says it is checking. Pages
+   explain an unreachable database and time out; the open section reloads when
+   clicked.
+3. **Scan.** "Path looks clear" is "No known objects in view", said rarely.
+   Classes are weighted (`core/vision/class_risk.dart`); a handheld object is
+   never a Stop. A depth model for walls (`core/vision/depth.dart`,
+   `data/depth_estimator_io.dart`) is wired in **behind
+   `--dart-define=DEPTH_WARNINGS=true`, and its 66 MB file is not in the
+   repository**.
+4. **A map.** Directions moved to `/journey` (`vi/screens/journey_screen.dart`),
+   with the route drawn on OpenStreetMap tiles; Scan is surroundings only. Both
+   warn through one `SurroundingsWatch`. "Somewhere else" leads the chooser.
+5. **SOS cancel by voice.** The countdown listened once and stopped; a
+   `CancelListener` now reopens the microphone for as long as it runs, acts on
+   a partial "cancel", and keeps listening until the dialler opens
+   (`SosEngine.fire(cancelled:, onCommitted:)`). The countdown no longer talks
+   over its own "say cancel".
+
+## Waiting on someone
+
+- **Two downloads, each needing a yes:** MobileFaceNet (5,233,552 bytes, from
+  `MCarlomagno/FaceRecognitionAuth`; weights for research use) and MiDaS v2.1
+  small (66,338,288 bytes, MIT, for a device-check build only).
+- **Commit, push, PR** of this branch; then `flutter build web --release` and
+  `firebase deploy --only hosting` for the admin fixes. The Firebase CLI's
+  login has expired (`firebase login --reauth`), which the emulators did not
+  mind and a deploy will.
+- **Release notes and APKs** on `apk-2026-09-10`.
+
+## Check on a real phone
+
+- Dictation: Filipino names and a Gmail address through the platform
+  recogniser; the first run's microphone prompt on the welcome screen.
+- A "cancel" heard over the countdown's own voice, on Android and on iOS.
+- The camera handed from Scan to the map and back; a walk in Malolos on the
+  map.
+- Pressing buttons by voice with hands-free on in a noisy room: anything
+  pressed that was not asked for.
+- With the depth file and flag: the checklist in `docs/VISION.md`, "Depth".
+
+---
+
 # Where we left off — 2026-09-15
 
 ## Tester feedback round 2

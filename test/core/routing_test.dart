@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:impairgency/admin/screens/admin_shell.dart';
 import 'package:impairgency/app/routes.dart';
 
 void main() {
@@ -80,17 +81,20 @@ void main() {
         () {
       // A matrix rather than one case each, because the two bugs found so far
       // were both a location that was never paired with a session state.
-      const locations = [
+      // The sections come from the sidebar itself, so an entry added there is
+      // checked here without anyone remembering to.
+      final locations = [
         Routes.adminRoot,
         Routes.adminSignIn,
-        Routes.adminOverview,
-        Routes.adminUsers,
-        Routes.adminHealth,
-        Routes.adminAccessibility,
+        for (final section in adminSections) section.route,
       ];
       final sessions = {
         'anonymous': anon,
         'signed in, not admin': const SessionState(signedIn: true),
+        // The roster read did not answer. Held at sign-in, which says the
+        // check is still going - never let into a dashboard it cannot read.
+        'signed in, roster unknown':
+            const SessionState(signedIn: true, adminCheckPending: true),
         'admin': admin,
       };
 

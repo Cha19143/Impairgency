@@ -157,8 +157,27 @@ not run.
   saying so.
 - **Stairs** are not a COCO class either. A separate heuristic looks for them,
   and is off by default: see "Stairs" below.
+- **Walls, doors and posts** are not classes. A separate depth model can
+  warn about them, and is off by default: see "Depth" below.
 - **One camera has no depth.** Nearness is inferred from box size. A poster of
   a person is a person.
+
+## What it says, and in what order
+
+- **Nothing named is not a clear path.** An empty frame is *"No known objects
+  in view"*: said when it becomes true, and after that every 20 seconds rather
+  than every 3. It used to be *"Path looks clear"*, which promised something
+  the model cannot know.
+- **What it is matters as well as how big.** Size and centrality are weighted
+  by class (`core/vision/class_risk.dart`): vehicles 1.5–1.6, bicycles 1.3,
+  dogs and hydrants 1.2, furniture 1.1, people 1.0, and things held in a hand
+  or sitting on a table 0.2–0.4. A car is named before a chair the same size.
+- **A thing held in a hand is never a "Stop".** Below a weight of 0.5 a class
+  is described, not shouted: a phone at the lens is *"cell phone very close
+  ahead"*.
+- **Sooner.** "Close" starts at a quarter of the frame rather than a third, and
+  a different sentence waits 600 ms rather than 900. "Very close" - the Stop -
+  is unchanged at 55%.
 
 ## Licence
 
@@ -247,6 +266,102 @@ speaks: the phone's tilt, or a trained class.
 
 ---
 
+# Depth
+
+YOLO11n names 80 kinds of thing, and a wall, a door, a post, a kerb and the
+edge of a table are none of them. The testers walked into things Scan did not
+mention, and until this round an empty frame was announced as *"Path looks
+clear"*. That sentence is gone for everyone (below). The walls are the job of a
+second model, behind a flag.
+
+**It is off by default, and the model is not in the repository.** Builds
+switch it on with `--dart-define=DEPTH_WARNINGS=true`, and a device-check build
+adds the model file first.
+
+## The model
+
+| | |
+|---|---|
+| Model | MiDaS v2.1 small, Intel ISL — **MIT** |
+| File | `model_opt.tflite`, from `https://github.com/isl-org/MiDaS/releases/download/v2_1/model_opt.tflite`, **66,338,288 bytes** |
+| Put at | `assets/models/model_opt.tflite` — in `.gitignore`; 66 MB is too much for the repository and for every build |
+| Input | `[1, 256, 256, 3]` float32: RGB divided by 255, then ImageNet's mean `[0.485, 0.456, 0.406]` and deviation `[0.229, 0.224, 0.225]` |
+| Output | `[1, 256, 256]` float32, **relative inverse depth**: larger is nearer, with a scale and offset that change from frame to frame |
+| Checked | At load, by shape, in `data/depth_estimator_io.dart`; before adding, with `python3 tool/tflite_shapes.py assets/models/model_opt.tflite` |
+
+If it earns its place, an fp16 conversion is about 33 MB; that needs TensorFlow
+(a python3.13 virtual environment) and a decision about where to host it.
+
+## What it looks for
+
+A surface standing up out of the floor, in the walking corridor
+(`core/vision/depth.dart`). For a camera looking at flat ground, inverse depth
+rises in a straight line from the top of the ground to the bottom of the
+picture, whatever the model's scale. So:
+
+1. The frame's own 5th and 95th percentiles become 0 and 1.
+2. A straight line is fitted to the bottom of the picture (rows 80–98%), in
+   whichever of three bands - left, ahead, right - shows the most floor.
+3. From just below the middle to 80% down, each band's rows are compared with
+   that line. A run of rows at least **0.15** above it, for at least 8% of the
+   picture, is something in the way. Confidence is how far above (0.3 is sure)
+   times how many rows (15% is sure).
+4. Below **0.6** confidence, nothing is said. If the bottom of the picture is
+   not rising at all and is as near as anything in the frame, it is something
+   right in front.
+
+It is 0 to 1 and not a probability: nothing here was calibrated.
+
+## How it runs
+
+- In `ScanService`, inside the same busy window as YOLO, stairs and faces, so
+  closing a screen waits for it. At most every **700 ms**; a reading stands for
+  **1.5 s** of frames after.
+- The middle square of the frame, the size of its shorter side, sampled with
+  `fillSquare` from the camera's YUV planes, turned upright.
+- On its own background isolate where one starts.
+- **Too slow, and it switches itself off:** two runs over 400 ms and the model
+  is closed, and the app says once *"Depth warnings are off on this phone: it
+  is too slow for them. Obstacle names still work."*
+
+## What it says
+
+Through `guidanceFor`, in this order: an object urgent in its own right; stairs;
+then, if no object big enough (over 30% of the frame) was named on that side:
+
+- *"Stop. Something right in front of you."* — ahead, and near (0.8 of the
+  frame's range or more): hazard priority, a buzz, and the guardian's feed shows
+  "Obstacle: obstacle".
+- *"Something ahead. Slow down."*, *"Something on your left. Slow down."* —
+  not yet near enough to stop for.
+
+## Why it is off: what it may get wrong
+
+- A **ramp or slope down** is floor that seems to stop.
+- A **kerb seen from the road** is a wall, and so is a step up.
+- The **side of a narrow corridor** can stand above the floor line in the left
+  or right band: something beside you, every few metres.
+- **Glass** is often seen through, and a glass door is exactly what it is for.
+- A person holding the phone tilted down sees little but floor; tilted up, the
+  floor line is fitted to too few rows.
+
+## Before turning it on
+
+Build with the file added and the flag on, and hold the phone as users do. Walk
+towards, and past:
+
+- a wall; a glass door; a post; a table edge; a parked motorcycle;
+- an open corridor, and a narrow one;
+- a downward slope, a kerb from both sides, a step up.
+
+Note every "Stop" that was not for something, and every thing walked up to that
+was not said. Turn it on by default only if it warns on walls, doors and posts
+from far enough away to stop and stays quiet in an open corridor. Note too
+whether the phone switched it off for being slow, and how warm it got with
+YOLO, stairs and depth running together.
+
+---
+
 # Faces
 
 Recognising friends (§2.A.6, §2.B.3) runs two more small models through the
@@ -273,7 +388,7 @@ on this phone yet"* when asked, and nothing else changes.
 | File | Source | Size | Checked |
 |---|---|---|---|
 | `face_detection_short_range.tflite` | Google, `https://storage.googleapis.com/mediapipe-assets/face_detection_short_range.tflite` | 229,032 bytes, SHA-256 `3bc182eb9f33925d9e58b5c8d59308a760f4adea8f282370e428c51212c26633` | MD5 matches Google's; `input [1,128,128,3]`, `regressors [1,896,16]`, `classificators [1,896,1]`, all float32 |
-| `mobilefacenet.tflite` | Proposed: `MCarlomagno/FaceRecognitionAuth`, `assets/mobilefacenet.tflite` (repository BSD-3-Clause, archived) | 5,233,552 bytes | Not downloaded. Check `input [1,112,112,3]` and `[1,N]` output with `tool/tflite_shapes.py` before adding |
+| `mobilefacenet.tflite` | Agreed on 2026-09-16: `MCarlomagno/FaceRecognitionAuth`, `assets/mobilefacenet.tflite` (repository BSD-3-Clause, archived; weights MS1M-derived, research use) | 5,233,552 bytes | Not downloaded yet: it waits for a yes at the moment of download. Then check `input [1,112,112,3]` and `[1,N]` output with `tool/tflite_shapes.py`, and record the SHA-256 here |
 
 `tool/tflite_shapes.py` reads a model's tensors without TensorFlow; it reports
 YOLO11n as `[1,3,640,640]` in and `[1,84,8400]` out, as `ScanService` expects.

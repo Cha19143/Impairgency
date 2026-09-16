@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/admin/admin_theme.dart';
 import 'package:impairgency/admin/screens/admin_shell.dart';
@@ -82,5 +83,32 @@ void main() {
     await pump(tester);
     expect(find.bySemanticsLabel('Overview'), findsWidgets);
     handle.dispose();
+  });
+
+  testWidgets('each section is a button to a screen reader, the open one selected',
+      (tester) async {
+    // A bare InkWell was announced as its text alone: nothing said it could be
+    // pressed, and nothing said which section was open.
+    final semantics = tester.ensureSemantics();
+    await pump(tester);
+
+    SemanticsNode nav(String label) => tester.getSemantics(find.descendant(
+        of: find.byType(AdminNav), matching: find.text(label)));
+
+    expect(
+        nav('Overview'),
+        isSemantics(
+            label: 'Overview',
+            isButton: true,
+            isSelected: true,
+            hasTapAction: true));
+    expect(
+        nav('Users'),
+        isSemantics(
+            label: 'Users',
+            isButton: true,
+            isSelected: false,
+            hasTapAction: true));
+    semantics.dispose();
   });
 }

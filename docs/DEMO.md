@@ -139,7 +139,7 @@ part; that is the point.
 3. **Directions, turn by turn.** On the dashboard say *"take me to"* and a
    shop nearby. It offers what it found one at a time — *"Jollibee, Paseo del
    Congreso, Malolos, about 600 metres away. Say yes to go there, next for
-   another, or no"* — say *"next"*, then *"yes"*. Scan opens with the route
+   another, or no"* — say *"next"*, then *"yes"*. The map opens with the route
    summary, and then *"In about 50 metres, turn left onto Mabini Street."*
    **Say:** the route is OpenStreetMap's, free and best effort, and the
    credit is on screen.
@@ -159,6 +159,44 @@ part; that is the point.
    turning the switch off deletes it, which you can show next.
 6. **Who is here.** Say *"who is here"* with Sam in view. Then *"forget
    Sam"*, and *"yes"*.
+
+---
+
+## Round 3 — voice everywhere, a map, and a cancel that works (6 min)
+
+Hands-free stays on. Keep the phone on the table, screen up, for 1 to 4.
+
+1. **Say a button.** Open Settings and say *"saved places"*. The phone says
+   *"Saved places."* and opens it. Say *"back"*. **Say:** every button on
+   every screen answers to its own label, so there is no list of commands to
+   learn for them; a command said on its own - "back", "scan" - still does
+   what the screen means by it.
+2. **Fill in a contact by voice.** Open *Emergency contacts* and say *"fill
+   in"*. *"Say their name."* - *"Lola Nena"*. *"Name: Lola Nena. Say yes to
+   keep it, or say it again."* - *"yes"*. *"Say their phone number."* -
+   *"zero nine one seven, one two three, four five six seven"*. It reads the
+   number back in threes; say *"yes"*, then *"add this person"*. **Say:**
+   nothing is kept until it has been heard back and agreed to, and a password
+   is never dictated.
+3. **Somewhere else, on a map.** Say *"navigate"*, then *"somewhere else"*,
+   and a place nearby. Choose it. The map opens: the route, the blue dot, the
+   flag, the next turn in large type, and the camera in the corner still
+   warning. Say *"stop directions"*: Scan opens and keeps warning. **Say:**
+   Scan is what is around you; Smart assistance is getting somewhere; both
+   warn about obstacles and people.
+4. **No known objects.** On Scan, point the camera at a blank wall. It says
+   *"No known objects in view"* - once, not every three seconds - and not
+   "path clear". **Say:** the model knows 80 kinds of thing and a wall is not
+   one of them; the app no longer promises what it cannot see. The depth model
+   that can see walls is built, off, and waiting for its device check.
+5. **Cancel the countdown by voice.** Press SOS and, over the countdown, say
+   *"cancel"*. It stops before anyone is called. **Say:** it used to hear its
+   own "say cancel" and stop listening with seconds to go.
+6. **Cancel after the countdown.** Press SOS again and let it reach *"Calling
+   now"*. While it says *"Emergency. Calling for help"*, say *"cancel"*.
+   Nobody is called. **Say:** "cancel" works until the phone's dialler opens;
+   after that the call is the phone's, and it is hung up with the phone's own
+   button.
 
 ---
 
@@ -188,5 +226,10 @@ part; that is the point.
 - **Sam is not recognised.** The match threshold has not been calibrated on
   this camera. Good light, face the phone, about an arm's length. Two tries,
   then move on.
+- **A button is not pressed by voice.** Say its label as written, and nothing
+  else; or tap the microphone first. Labels that share every word with
+  another are asked about - answer with the word that differs.
+- **The map is blank.** The tiles come from OpenStreetMap over the network;
+  the directions are spoken without them. Say so and carry on.
 - **The verification email does not arrive.** Check spam. The demo can use an
   account made before the cutoff, which is not held.

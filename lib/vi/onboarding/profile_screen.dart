@@ -4,8 +4,12 @@ import 'package:flutter/services.dart';
 import '../../app/theme.dart';
 import '../../core/profile/impairment.dart';
 import '../../core/speech/speaker.dart';
+import '../voice_controller.dart';
+import '../widgets/dictated_field.dart';
+import '../widgets/press_by_voice.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
+import '../widgets/voice_form.dart';
 
 /// Name, age, type of impairment — and, optionally, a phone number.
 ///
@@ -121,11 +125,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'about first.',
       ],
       spokenSuffix: 'Three fields and a list of six choices. The last field, '
-          'a phone number, is optional.',
-      extra: Column(
+          'a phone number, is optional. Say fill in to answer them by voice, '
+          'and say a choice to choose it.',
+      micDetail: kFormMicDetail,
+      extra: VoiceForm(
+        submitLabel: 'Continue',
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(
+          DictatedField(
+            label: 'Name',
+            prompt: 'Say your name.',
+            controller: _name,
+            shape: DictationShape.name,
+            enabled: !_busy,
+            field: Semantics(
             textField: true,
             label: 'Your name',
             child: TextField(
@@ -138,8 +152,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               decoration: _decoration('Your name'),
             ),
           ),
+          ),
           const SizedBox(height: 14),
-          Semantics(
+          DictatedField(
+            label: 'Age',
+            prompt: 'Say your age, in years.',
+            controller: _age,
+            shape: DictationShape.number,
+            enabled: !_busy,
+            field: Semantics(
             textField: true,
             label: 'Your age, in years',
             child: TextField(
@@ -152,6 +173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: fieldStyle,
               decoration: _decoration('Your age'),
             ),
+          ),
           ),
           const SizedBox(height: 22),
           Semantics(
@@ -176,7 +198,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           if (_impairment == ImpairmentType.other) ...[
             const SizedBox(height: 6),
-            Semantics(
+            DictatedField(
+              label: 'Description',
+              prompt: 'Describe your impairment in your own words.',
+              controller: _other,
+              enabled: !_busy,
+              field: Semantics(
               textField: true,
               label: 'Describe your impairment',
               child: TextField(
@@ -187,9 +214,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: _decoration('Describe it in your own words'),
               ),
             ),
+            ),
           ],
           const SizedBox(height: 22),
-          Semantics(
+          DictatedField(
+            label: 'Phone number',
+            prompt: 'Say your phone number. It is optional: say cancel to '
+                'leave it empty.',
+            controller: _phone,
+            shape: DictationShape.phone,
+            enabled: !_busy,
+            field: Semantics(
             textField: true,
             label: 'Your phone number, optional. A guardian can call it.',
             child: TextField(
@@ -204,6 +239,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
+          ),
           if (_error != null) ...[
             const SizedBox(height: 14),
             Semantics(
@@ -216,6 +252,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ],
+      ),
       ),
       actions: [
         ViButton(
@@ -246,69 +283,74 @@ class _ChoiceRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        selected: selected,
-        enabled: enabled,
-        label: '$label. $detail',
-        onTap: enabled ? onTap : null,
-        child: ExcludeSemantics(
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Material(
-              color: selected ? AppColors.navyRaised : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                onTap: enabled ? onTap : null,
+  Widget build(BuildContext context) => PressByVoice(
+        // The choice's name alone: "blind", not the sentence under it.
+        label: label,
+        onPressed: enabled ? onTap : null,
+        child: Semantics(
+          button: true,
+          selected: selected,
+          enabled: enabled,
+          label: '$label. $detail',
+          onTap: enabled ? onTap : null,
+          child: ExcludeSemantics(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Material(
+                color: selected ? AppColors.navyRaised : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: kMinTargetSize),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: selected ? AppColors.cyan : AppColors.hairline,
-                      width: selected ? 3 : 1.5,
+                child: InkWell(
+                  onTap: enabled ? onTap : null,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: kMinTargetSize),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: selected ? AppColors.cyan : AppColors.hairline,
+                        width: selected ? 3 : 1.5,
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        selected
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
-                        size: 30,
-                        color: selected
-                            ? AppColors.cyan
-                            : AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              label,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              detail,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                height: 1.3,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
+                    child: Row(
+                      children: [
+                        Icon(
+                          selected
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          size: 30,
+                          color: selected
+                              ? AppColors.cyan
+                              : AppColors.textSecondary,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                detail,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  height: 1.3,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

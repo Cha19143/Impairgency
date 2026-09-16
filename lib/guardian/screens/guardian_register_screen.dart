@@ -213,6 +213,9 @@ class _GuardianRegisterScreenState extends State<GuardianRegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return ViScreen(
+      // A guardian can see the form; the app's microphone is for the person
+      // they watch over.
+      mic: false,
       speaker: widget.speaker,
       title: 'Create a guardian account',
       body: const [

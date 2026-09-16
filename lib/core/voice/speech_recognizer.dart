@@ -78,10 +78,16 @@ abstract interface class SpeechRecognizer {
   /// Completes when the phrase ends, when the window closes, or when the
   /// attempt fails. Never throws for the ordinary failures — a microphone
   /// that could not be opened is a [NotHeard], not an exception.
+  ///
+  /// [settleOn] ends the phrase early: when it returns true for a partial
+  /// result, that partial is what was [Heard]. "Cancel" said over the SOS
+  /// countdown should not wait for two seconds of silence the countdown never
+  /// leaves.
   Future<VoiceHearing> listen({
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
     void Function(String partial)? onPartial,
+    bool Function(String partial)? settleOn,
   });
 
   /// Stops listening without waiting for a result.

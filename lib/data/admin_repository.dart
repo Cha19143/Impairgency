@@ -23,14 +23,29 @@ class AdminRepository {
   /// Whether this account is on the roster.
   ///
   /// A plain document read: the rules allow it only for admins, so a non-admin
-  /// gets a permission error, which is the answer.
-  Future<bool> isAdmin(String uid) async {
+  /// gets a permission error, which is the answer. Any other failure is not an
+  /// answer, and is said as [RosterCheck.unknown] so the session asks again
+  /// instead of remembering a refusal nobody made.
+  ///
+  /// From the server only. Offline, a default read can fall back to an empty
+  /// cache and report the document missing - the same "no" by another road.
+  Future<RosterCheck> rosterCheck(String uid) async {
     try {
-      return (await _db.collection('admins').doc(uid).get()).exists;
-    } catch (_) {
-      return false;
+      final doc = await _db
+          .collection('admins')
+          .doc(uid)
+          .get(const GetOptions(source: Source.server))
+          .timeout(rosterTimeout);
+      return doc.exists ? RosterCheck.admin : RosterCheck.notAdmin;
+    } catch (e) {
+      return describeFailure(e) == AdminLoadFailure.refused
+          ? RosterCheck.notAdmin
+          : RosterCheck.unknown;
     }
   }
+
+  /// How long the roster read may take before it counts as unanswered.
+  static const Duration rosterTimeout = Duration(seconds: 8);
 
   /// §1.3's five metrics, over [period].
   Future<UsageOverview> overview({Duration period = defaultPeriod}) async {

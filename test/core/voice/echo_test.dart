@@ -35,8 +35,41 @@ void main() {
         'cancel');
   });
 
+  test("a one-word sentence of the app's, heard back whole, is the app", () {
+    // A button pressed by voice is named as it is pressed. Heard back by the
+    // next window, "Continue" would press Continue on the next screen too.
+    expect(withoutEcho('continue', ['Continue.']), '');
+    expect(withoutEcho('continue please', ['Continue.']), 'continue please');
+    expect(withoutEcho('cancel', ['Cancel.', kArmingHint]), '');
+  });
+
   test('help inside the app sentence is removed, help alone is kept', () {
     expect(withoutEcho('calling for help in 3', [armingAnnouncement(3)]), '');
     expect(withoutEcho('help', countdown), 'help');
+  });
+
+  group('a partial result that may still become the app', () {
+    const hint = 'Say cancel, or touch the screen anywhere, to stop this.';
+
+    test('ends in a word the app says with more to come', () {
+      // The microphone can open after "say": the next partial may be
+      // "cancel or touch", the app's own sentence.
+      expect(mayBeEchoStart('cancel', [hint]), isTrue);
+      expect(mayBeEchoStart('calling mum in 3 cancel', [hint]), isTrue);
+    });
+
+    test('a word the app does not say can be acted on at once', () {
+      expect(mayBeEchoStart('teka', [hint]), isFalse);
+      expect(mayBeEchoStart('cancel it', [hint]), isFalse);
+    });
+
+    test("the last word of the app's sentence has nothing to come", () {
+      expect(mayBeEchoStart('this', [hint]), isFalse);
+    });
+
+    test('nothing heard, or nothing said, is nothing to wait for', () {
+      expect(mayBeEchoStart('', [hint]), isFalse);
+      expect(mayBeEchoStart('cancel', const []), isFalse);
+    });
   });
 }

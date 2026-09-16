@@ -23,8 +23,9 @@ claim does not.
 | Admin dashboard delivered as **web** | Overview, §6 |
 | Privacy, consent, reliability, safety notice | §7 |
 | **Familiar person recognition — narrowed.** Only people who said yes, out loud, when they were saved. Kept on the phone as numbers, never as pictures, never uploaded or backed up. Deleted when the consent is turned off, and at sign-out. Anyone else is compared and discarded in the same frame | §2.A.6, §2.B.3 |
-| **Walking directions, turn by turn**, from OpenStreetMap's free router. Best effort: when there is no route (no connection, no path on the map, the service down), the app says which and gives the straight-line direction instead | Smart assistance, Scan |
-| **Hands-free voice.** The microphone reopens by itself on the main, scan, read and where-to screens; the app's own speech is not heard as a command; a Settings switch turns it off | §2.C |
+| **Walking directions, turn by turn, on a map**, from OpenStreetMap's free router and tiles. Best effort: when there is no route (no connection, no path on the map, the service down), the app says which and gives the straight-line direction instead. The obstacle warnings run underneath, as on Scan | Smart assistance, journey map |
+| **Hands-free voice, on every screen.** The microphone reopens by itself; the app's own speech is not heard as a command; a Settings switch turns it off. Any button is pressed by saying its label, and forms are filled in by voice with what was heard read back - passwords never | §2.C |
+| **SOS cancelled by voice** for the whole countdown, and after it until the dialler opens | §2.A.5 |
 | **New accounts confirm their email** before they reach the app. Accounts made before the cutoff are not held | §7 |
 
 ## Deliberately not built
@@ -48,6 +49,7 @@ the point.
 | | |
 |---|---|
 | **Stairs detection** §2.A.3 | A floor-banding heuristic (from PR #74) is built and wired into Scan. Above a 0.6 confidence it says "Stop. Stairs ahead." at hazard priority, never up or down; below it, nothing. **Off by default** (`--dart-define=STAIRS_WARNINGS=true` turns it on): banding cannot tell stairs from a tiled floor (0.86 in its tests) or a zebra crossing (0.75), and it has not been checked on a real staircase. See [`VISION.md`](VISION.md), "Stairs". |
+| **Walls, doors and posts** §2.A.1 | The object model has no class for them, and an empty frame is now said as *"No known objects in view"* rather than a clear path. A depth model (MiDaS v2.1 small, MIT) is wired in behind `--dart-define=DEPTH_WARNINGS=true`: something standing out of the floor in the walking corridor is *"Something ahead. Slow down."*, or a Stop when near. **Off by default, and the 66 MB model is not in the repository**: it has not been checked on a phone, and slopes, kerbs and narrow corridors are the cases it may get wrong. See [`VISION.md`](VISION.md), "Depth". |
 | **Detection performance** §1.3 | Counts and positioning quality, not accuracy. Accuracy needs labelled ground truth and nobody has labelled it. The dashboard says so on screen. |
 | **Crash and response-time monitoring** §1.4 | Reported to Firebase; the dashboard links to the console rather than mirroring it, because reading it back needs a service account and therefore a paid plan. |
 | **Friend recognition accuracy** §2.A.6 | The match threshold is MobileFaceNet's published starting point, not a measurement on this app's camera. It needs calibrating with people who agree to take part, at walking distances and in daylight and indoors, before anyone relies on it. The two face models are downloaded separately; a build without them says recognition is not available. See [`VISION.md`](VISION.md). |
@@ -59,12 +61,11 @@ the point.
 ```
 Requirements built            16 of 21
 Declared out of scope          5, each with a reason
-Flutter tests               1142
+Flutter tests               1297
 Security rules tests          90
-Browser tests                 12
-Platforms building             2 of 3 checked this round: Android and web.
-                                        iOS not rebuilt - the build Mac's Xcode
-                                        licence has not been accepted.
+Browser tests                 13
+Platforms building             3 of 3: Android (release APK), web, and
+                                        iOS (release, unsigned).
 Contrast pairs at WCAG AA      8 of 8   (three clear AAA)
 ```
 

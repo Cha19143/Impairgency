@@ -6,13 +6,16 @@ import 'package:impairgency/app/routes.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/location/location_fix.dart';
 import 'package:impairgency/core/location/location_source.dart';
+import 'package:impairgency/core/sos/sos_countdown.dart';
 import 'package:impairgency/core/speech/speaker.dart';
+import 'package:impairgency/core/voice/listening_policy.dart';
 import 'package:impairgency/core/voice/speech_recognizer.dart';
 import 'package:impairgency/core/voice/voice_commands.dart';
 import 'package:impairgency/vi/screens/dashboard_screen.dart';
 import 'package:impairgency/vi/screens/sos_countdown_screen.dart';
 import 'package:impairgency/vi/voice_actions.dart';
 import 'package:impairgency/vi/voice_controller.dart';
+import 'package:impairgency/vi/voice_targets.dart';
 import 'package:impairgency/vi/widgets/voice_mic_button.dart';
 
 class RecordingSpeaker implements Speaker {
@@ -61,6 +64,7 @@ class FakeRecognizer implements SpeechRecognizer {
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
     void Function(String partial)? onPartial,
+    bool Function(String partial)? settleOn,
   }) async {
     listens++;
     final held = hold;
@@ -92,6 +96,7 @@ class SessionRecognizer implements SpeechRecognizer {
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
     void Function(String partial)? onPartial,
+    bool Function(String partial)? settleOn,
   }) {
     final session = Completer<VoiceHearing>();
     sessions.add(session);
@@ -107,6 +112,50 @@ class SessionRecognizer implements SpeechRecognizer {
   }
 
   bool get open => sessions.isNotEmpty && !sessions.last.isCompleted;
+}
+
+/// Behaves like the platform recogniser with partial results: each window
+/// hears what the test says a word at a time, and ends early when the
+/// controller's hot-word check says so.
+class PartialRecognizer implements SpeechRecognizer {
+  final sessions = <Completer<VoiceHearing>>[];
+  bool Function(String partial)? _settleOn;
+
+  bool get open => sessions.isNotEmpty && !sessions.last.isCompleted;
+
+  @override
+  Future<RecognizerReadiness> prepare() async => RecognizerReadiness.ready;
+
+  @override
+  Future<VoiceHearing> listen({
+    Duration listenFor = kListenWindow,
+    Duration pauseFor = kPauseEndsPhrase,
+    void Function(String partial)? onPartial,
+    bool Function(String partial)? settleOn,
+  }) {
+    _settleOn = settleOn;
+    final session = Completer<VoiceHearing>();
+    sessions.add(session);
+    return session.future;
+  }
+
+  /// A partial result arrives.
+  void partial(String words) {
+    if (!open) return;
+    if (_settleOn?.call(words) ?? false) sessions.last.complete(Heard(words));
+  }
+
+  /// The phrase ends.
+  void finish(String words) {
+    if (open) sessions.last.complete(Heard(words));
+  }
+
+  @override
+  Future<void> cancel() async {
+    for (final s in sessions) {
+      if (!s.isCompleted) s.complete(const NotHeard(VoiceInputFailure.failed));
+    }
+  }
 }
 
 class _NoLocation implements LocationSource {
@@ -235,6 +284,315 @@ void main() {
       expect(heard, isEmpty);
       expect(speaker.said, isEmpty,
           reason: 'nothing is said over the top of the countdown');
+    });
+  });
+
+  group('a hot word on a partial result', () {
+    final countdown = [
+      for (var s = 3; s >= 0; s--) armingAnnouncement(s, contactName: 'Mum'),
+      kArmingHint,
+    ];
+
+    Future<ListenOutcome> listenForCancel(VoiceController c) => c.listen(
+          only: kCancellationCommands,
+          dispatch: false,
+          auto: true,
+          silenceSpeaker: false,
+          preempt: true,
+          settleEarly: true,
+          echoOf: () => countdown,
+        );
+
+    test('a partial cancel is acted on before the phrase ends', () async {
+      final r = PartialRecognizer();
+      final c = controller(r, RecordingSpeaker());
+      final heard = <VoiceCommand>[];
+      c.commands.listen(heard.add);
+
+      final listening = listenForCancel(c);
+      await pumpEventQueue();
+      r.partial('calling mum in 2');
+      expect(r.open, isTrue);
+      r.partial('calling mum in 2 teka');
+
+      expect(await listening, ListenOutcome.acted);
+      await pumpEventQueue();
+      expect(heard, [VoiceCommand.cancel]);
+    });
+
+    test('a partial ending in a word the app is saying waits for the phrase',
+        () async {
+      // The microphone may have opened just after "say". Acting on "cancel"
+      // now could be acting on the app's own "say cancel, or touch...".
+      final r = PartialRecognizer();
+      final c = controller(r, RecordingSpeaker());
+      final heard = <VoiceCommand>[];
+      c.commands.listen(heard.add);
+
+      final listening = listenForCancel(c);
+      await pumpEventQueue();
+      r.partial('cancel');
+      await pumpEventQueue();
+      expect(r.open, isTrue, reason: 'not settled on the partial');
+
+      r.finish('cancel');
+      expect(await listening, ListenOutcome.acted);
+      await pumpEventQueue();
+      expect(heard, [VoiceCommand.cancel], reason: 'said alone, it is the user');
+    });
+
+    test("the app's own sentence never settles a window", () async {
+      final r = PartialRecognizer();
+      final c = controller(r, RecordingSpeaker());
+      final heard = <VoiceCommand>[];
+      c.commands.listen(heard.add);
+
+      final listening = listenForCancel(c);
+      await pumpEventQueue();
+      r.partial('say cancel');
+      r.partial('say cancel or touch');
+      await pumpEventQueue();
+      expect(r.open, isTrue);
+
+      r.finish('say cancel or touch the screen anywhere to stop this');
+      expect(await listening, ListenOutcome.nothingHeard);
+      expect(heard, isEmpty);
+    });
+  });
+
+  group('buttons, by name', () {
+    // The testers asked for every button to work by voice.
+    test('a button is pressed by saying its name', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+      var pressed = 0;
+      c.targets.register(VoiceTarget('Saved places', () => pressed++));
+
+      final listening = c.listen();
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('open saved places'));
+
+      expect(await listening, ListenOutcome.acted);
+      expect(pressed, 1);
+      expect(speaker.said, ['Saved places.'], reason: 'heard to have happened');
+    });
+
+    test('a command said on its own is still the command', () async {
+      // Scan's Back asks first; its button may not. The command decides.
+      final r = SessionRecognizer();
+      final routes = <String>[];
+      final c = controller(r, RecordingSpeaker(), routes: routes);
+      var pressed = 0;
+      c.targets.register(VoiceTarget('Scan', () => pressed++));
+
+      final listening = c.listen();
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('scan'));
+      await listening;
+
+      expect(routes, [Routes.scan]);
+      expect(pressed, 0);
+    });
+
+    test('a button named in full outranks a command that shares a word',
+        () async {
+      // "location" is a word for "where am I". "Share my location" is not.
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+      var pressed = 0;
+      c.targets.register(VoiceTarget('Share my location', () => pressed++));
+
+      final listening = c.listen();
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('share my location'));
+      await listening;
+
+      expect(pressed, 1);
+      expect(c.lastCommand, isNull);
+    });
+
+    test('help is help, whatever button shares the word', () async {
+      final r = SessionRecognizer();
+      final routes = <String>[];
+      final c = controller(r, RecordingSpeaker(), routes: routes);
+      var pressed = 0;
+      c.targets.register(VoiceTarget('Help me choose', () => pressed++));
+
+      final listening = c.listen();
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('help me choose'));
+      await listening;
+
+      expect(pressed, 0);
+      expect(routes, [Routes.sos]);
+    });
+
+    test('two buttons that both match are asked about', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+      final pressed = <String>[];
+      c.targets
+        ..register(VoiceTarget('Call Mum work', () => pressed.add('work')))
+        ..register(VoiceTarget('Call Mum mobile', () => pressed.add('mobile')));
+
+      final listening = c.listen();
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('call mum mobile work'));
+      await pumpEventQueue();
+      expect(speaker.said.last, 'Did you mean Call Mum work, or Call Mum mobile?');
+      expect(pressed, isEmpty);
+
+      r.sessions.last.complete(const Heard('mobile'));
+      expect(await listening, ListenOutcome.acted);
+      expect(pressed, ['mobile']);
+    });
+
+    test('an answer that picks neither presses nothing, and says so', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+      final pressed = <String>[];
+      c.targets
+        ..register(VoiceTarget('Call Mum work', () => pressed.add('work')))
+        ..register(VoiceTarget('Call Mum mobile', () => pressed.add('mobile')));
+
+      final listening = c.listen();
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('call mum mobile work'));
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('the bakery'));
+      await listening;
+
+      expect(pressed, isEmpty);
+      expect(speaker.said.last, 'Nothing was pressed.');
+    });
+
+    test('the countdown window never presses buttons', () async {
+      final r = SessionRecognizer();
+      final c = controller(r, RecordingSpeaker());
+      var pressed = 0;
+      c.targets.register(VoiceTarget('Cancel', () => pressed++));
+      final heard = <VoiceCommand>[];
+      c.commands.listen(heard.add);
+
+      final listening = c.listen(
+        only: kCancellationCommands,
+        dispatch: false,
+        auto: true,
+        silenceSpeaker: false,
+        preempt: true,
+      );
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('cancel'));
+      await listening;
+      await pumpEventQueue();
+
+      expect(pressed, 0);
+      expect(heard, [VoiceCommand.cancel]);
+    });
+
+    test("the last screen's buttons are not pressed from the next", () async {
+      // Its Back is still mounted for a frame after the next screen opens.
+      final r = SessionRecognizer();
+      final c = controller(r, RecordingSpeaker())..routeChanged(Routes.settings);
+      var pressed = 0;
+      c.targets.register(VoiceTarget('Saved places', () => pressed++));
+      c.routeChanged(Routes.home);
+
+      final listening = c.listen();
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('saved places'));
+      expect(await listening, ListenOutcome.notUnderstood);
+      expect(pressed, 0);
+    });
+  });
+
+  group('dictation', () {
+    test('reads back what it heard, and keeps it on yes', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+
+      final kept =
+          c.dictate(label: 'Phone number', shape: DictationShape.phone);
+      await pumpEventQueue();
+      expect(speaker.said.last, 'Say the phone number.');
+
+      r.sessions.last.complete(const Heard(
+          'zero nine one seven one two three four five six seven'));
+      await pumpEventQueue();
+      expect(speaker.said.last,
+          'Phone number: 0 9 1, 7 1 2, 3 4 5, 6 7. Say yes to keep it, or say '
+          'it again.');
+
+      r.sessions.last.complete(const Heard('yes'));
+      expect(await kept, '09171234567');
+      expect(speaker.said.last, 'Phone number kept.');
+    });
+
+    test('anything else is the answer said again, and is read back in turn',
+        () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+
+      final kept = c.dictate(label: 'Email address', shape: DictationShape.email);
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('ana at gmail dot com'));
+      await pumpEventQueue();
+      // A "no" inside a longer answer is part of the answer.
+      r.sessions.last.complete(const Heard('no reply at gmail dot com'));
+      await pumpEventQueue();
+      expect(speaker.said.last, startsWith('Email address: n o r e p l y at gmail'));
+
+      r.sessions.last.complete(const Heard('okay'));
+      expect(await kept, 'noreply@gmail.com');
+    });
+
+    test('no, or cancel, leaves the field as it was', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+
+      final kept = c.dictate(label: 'Name', shape: DictationShape.name);
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('ana'));
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('no'));
+
+      expect(await kept, isNull);
+      expect(speaker.said.last, 'The name was left as it was.');
+    });
+
+    test('silence leaves the field as it was', () async {
+      final r = SessionRecognizer();
+      final c = controller(r, RecordingSpeaker());
+
+      final kept = c.dictate(label: 'Name');
+      await pumpEventQueue();
+      r.sessions.last.complete(const NotHeard(VoiceInputFailure.nothingHeard));
+      expect(await kept, isNull);
+    });
+
+    test('never presses a button, or acts on a command', () async {
+      final r = SessionRecognizer();
+      final routes = <String>[];
+      final c = controller(r, RecordingSpeaker(), routes: routes);
+      var pressed = 0;
+      c.targets.register(VoiceTarget('Scan', () => pressed++));
+
+      final kept = c.dictate(label: 'Place name');
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('scan'));
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('yes'));
+
+      expect(await kept, 'scan');
+      expect(pressed, 0);
+      expect(routes, isEmpty);
     });
   });
 

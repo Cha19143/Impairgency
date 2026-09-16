@@ -90,6 +90,9 @@ class JourneyGuide {
   /// The route being followed, if any.
   WalkingRoute? get route => _route;
 
+  /// How far along [route] the user is, in metres, once that is known.
+  double? get along => _follower?.along;
+
   RouteFollower? _follower;
   NavigationSession? _straight;
   LocationFix? _lastFix;

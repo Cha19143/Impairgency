@@ -9,9 +9,10 @@ typedef SignInHandler = Future<String?> Function(String email, String password);
 
 /// The dashboard's front door.
 ///
-/// Two states on one page: the form, and — when someone authenticates with an
-/// account that is not on the admin roster — the explanation of why the
-/// dashboard still will not open.
+/// Three states on one page: the form; when someone authenticates with an
+/// account that is not on the admin roster, the explanation of why the
+/// dashboard still will not open; and, when the roster could not be read at
+/// all, that it is still being checked.
 ///
 /// The layout answers to the dashboard behind it. At
 /// [kAdminSidebarBreakpoint], the width where the shell shows its sidebar
@@ -26,6 +27,8 @@ class AdminSignInScreen extends StatefulWidget {
     required this.onSignIn,
     this.signedInAs,
     this.signedInUid,
+    this.checkingRoster = false,
+    this.onCheckAgain,
     this.onSignOut,
   });
 
@@ -40,6 +43,16 @@ class AdminSignInScreen extends StatefulWidget {
   final String? signedInAs;
 
   final String? signedInUid;
+
+  /// With [signedInAs]: the roster read did not answer, so whether this
+  /// account is an administrator is not known yet. Saying "not an
+  /// administrator" then would be a guess, and the wrong one for the person
+  /// most likely to be here.
+  final bool checkingRoster;
+
+  /// Asks the roster again.
+  final Future<void> Function()? onCheckAgain;
+
   final VoidCallback? onSignOut;
 
   @override
@@ -53,6 +66,18 @@ class _AdminSignInScreenState extends State<AdminSignInScreen> {
   String? _error;
   bool _busy = false;
   bool _revealPassword = false;
+  bool _checking = false;
+
+  Future<void> _checkAgain() async {
+    final check = widget.onCheckAgain;
+    if (check == null || _checking) return;
+    setState(() => _checking = true);
+    try {
+      await check();
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -90,7 +115,11 @@ class _AdminSignInScreenState extends State<AdminSignInScreen> {
       body: _Page(
         wide: wide,
         maxCardWidth: onRoster ? 416 : 520,
-        card: onRoster ? _signInCard(wide) : _notOnRosterCard(context, wide),
+        card: onRoster
+            ? _signInCard(wide)
+            : widget.checkingRoster
+                ? _checkingRosterCard(wide)
+                : _notOnRosterCard(context, wide),
       ),
     );
   }
@@ -220,6 +249,87 @@ class _AdminSignInScreenState extends State<AdminSignInScreen> {
           const _Footnote(
             'Administrator accounts are granted in the Firebase console. '
             'Signing in here does not create one.',
+          ),
+        ],
+      );
+
+  Widget _checkingRosterCard(bool wide) => _Card(
+        children: [
+          if (!wide) ...[
+            const _BrandMark(onDark: false),
+            const SizedBox(height: 26),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AdminColors.field,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(Icons.cloud_sync_outlined,
+                    size: 20, color: AdminColors.chrome),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: const Text(
+                    'Checking the admin roster…',
+                    style: TextStyle(
+                      fontSize: 19,
+                      height: 1.25,
+                      fontWeight: FontWeight.bold,
+                      color: AdminColors.ink,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'You are signed in as ${widget.signedInAs}, but the database has '
+            'not answered whether that account is an administrator. This '
+            'usually means the connection is slow or down. The dashboard '
+            'opens as soon as it answers.',
+            style: const TextStyle(
+                fontSize: 13.5, height: 1.5, color: AdminColors.ink),
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _checking ? null : _checkAgain,
+            style: FilledButton.styleFrom(
+              backgroundColor: AdminColors.chrome,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor:
+                  AdminColors.chrome.withValues(alpha: 0.88),
+              disabledForegroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(46),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            child: Text(_checking ? 'Checking…' : 'Check again'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: widget.onSignOut,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AdminColors.ink,
+              minimumSize: const Size.fromHeight(46),
+              side: const BorderSide(color: AdminColors.line),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            child: const Text('Sign out'),
           ),
         ],
       );

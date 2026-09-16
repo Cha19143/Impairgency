@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/safety/safety_notice.dart';
 import '../../core/speech/speaker.dart';
+import '../widgets/press_by_voice.dart';
 
 /// The first thing the app says, and the first thing it asks for.
 ///
@@ -94,17 +95,21 @@ class _SafetyNoticeScreenState extends State<SafetyNoticeScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: Semantics(
-                button: true,
-                label: label,
-                onTap: _acknowledge,
-                child: ExcludeSemantics(
-                  child: FilledButton(
-                    onPressed: _acknowledge,
-                    child: Text(label.toUpperCase()),
+              child: PressByVoice(
+  label: label,
+  onPressed: _acknowledge,
+  child: Semantics(
+                  button: true,
+                  label: label,
+                  onTap: _acknowledge,
+                  child: ExcludeSemantics(
+                    child: FilledButton(
+                      onPressed: _acknowledge,
+                      child: Text(label.toUpperCase()),
+                    ),
                   ),
                 ),
-              ),
+),
             ),
           ],
         ),

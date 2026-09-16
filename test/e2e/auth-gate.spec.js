@@ -73,3 +73,29 @@ test('an administrator signs in and lands on the overview', async ({ page }) => 
   await expect(page).toHaveURL(/#\/admin\/overview$/);
   await expect(screen(page).getByRole('heading', { name: 'Overview' })).toBeVisible();
 });
+
+// Reported as "the sidebar does not work". Every screen behind it had its own
+// widget test, with the navigation callback stubbed out; nothing had clicked
+// the sidebar through the real router, the real roster read and the real rules.
+test('an administrator can open every sidebar section', async ({ page }) => {
+  await open(page, '/admin');
+  await signIn(page, { email: ADMIN.email, password: ADMIN.password });
+  await expect(page).toHaveURL(/#\/admin\/overview$/);
+
+  // Ending where it started, so every click is a move somewhere else.
+  const sections = [
+    { label: 'Users', path: '/admin/users', heading: 'Users' },
+    { label: 'System health', path: '/admin/health', heading: 'System health' },
+    { label: 'Accessibility', path: '/admin/accessibility', heading: 'Accessibility results' },
+    { label: 'Overview', path: '/admin/overview', heading: 'Overview' },
+  ];
+  for (const { label, path, heading } of sections) {
+    await screen(page).getByRole('button', { name: label, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`#${path}$`));
+    await expect(
+      screen(page).getByRole('heading', { name: heading, exact: true }),
+    ).toBeVisible();
+    // Still signed in: a click that bounced to the sign-in page is the defect.
+    await expect(screen(page).getByRole('heading', { name: 'Sign in' })).toHaveCount(0);
+  }
+});

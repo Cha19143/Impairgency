@@ -4,11 +4,19 @@ import 'package:flutter/foundation.dart';
 
 import '../core/speech/speaker.dart';
 import '../core/speech/speech_queue.dart';
+import '../core/voice/dictation.dart';
 import '../core/voice/echo.dart';
 import '../core/voice/listening_policy.dart';
 import '../core/voice/speech_recognizer.dart';
+import '../core/voice/spoken_targets.dart';
 import '../core/voice/voice_commands.dart';
 import 'voice_actions.dart';
+import 'voice_targets.dart';
+
+export '../core/voice/dictation.dart' show DictationShape;
+
+/// How many times a field is asked for before it is left as it was.
+const int kDictationTries = 3;
 
 /// Where one attempt to hear a command is, for the screen to show.
 enum VoicePhase {
@@ -185,6 +193,9 @@ class VoiceController extends ChangeNotifier {
   final List<_Attached> _scopes = [];
   String? _route;
 
+  /// The route the app is showing, as the router last said.
+  String? get route => _route;
+
   /// Starts listening for [scope] on the current route.
   VoiceScopeHandle attach(VoiceScope scope) {
     final entry = _Attached(scope, _route);
@@ -201,19 +212,38 @@ class VoiceController extends ChangeNotifier {
     });
   }
 
-  /// The newest scope attached on the route the app is showing.
+  /// The newest scope attached on the route the app is showing - or, on a
+  /// screen that attached none, [fallbackScope]'s.
   VoiceScope? get _active {
     for (final entry in _scopes.reversed) {
       if (entry.route == _route) return entry.scope;
     }
-    return null;
+    return _fallbackScope?.call(_route);
   }
+
+  VoiceScope? Function(String? route)? _fallbackScope;
+
+  /// The scope for a screen that attached none of its own.
+  ///
+  /// Only four screens used to attach one, so on every other screen
+  /// hands-free listening had nothing to listen for and the microphone stayed
+  /// shut: the settings, the forms, the lists. The router sets this for the
+  /// visually impaired app's routes. Left null, such a screen is deaf, as it
+  /// always was.
+  set fallbackScope(VoiceScope? Function(String? route)? scope) {
+    _fallbackScope = scope;
+    _rearm();
+  }
+
+  /// The buttons on screen that saying their label presses.
+  final VoiceTargets targets = VoiceTargets();
 
   /// The route changed. What was listening stops; the next screen's scope, if
   /// it has one, takes over.
   void routeChanged(String path) {
     if (path == _route) return;
     _route = path;
+    targets.routeChanged(path);
     if (isBusy) unawaited(stop());
     _rearm();
   }
@@ -241,6 +271,9 @@ class VoiceController extends ChangeNotifier {
 
   /// The hands-free microphone is being kept open right now.
   bool get isHandsFreeActive => _looping;
+
+  /// Whether the app is on screen, as far as this controller was told.
+  bool get isForeground => _foreground;
 
   /// The app went to the background or came back. A microphone left open
   /// behind another app is not something anyone agreed to.
@@ -350,6 +383,122 @@ class VoiceController extends ChangeNotifier {
     }
   }
 
+  /// Says [prompt], then hears one phrase and returns its words as they were
+  /// heard: no command looked for, no button pressed. Null when nothing was.
+  Future<String?> _hear(String prompt,
+      {Duration listenFor = kListenWindow}) async {
+    _holds++;
+    try {
+      if (isBusy) await stop();
+      await speaker.speak(prompt);
+      _captured = null;
+      final outcome = await listen(
+        dispatch: false,
+        preempt: true,
+        quiet: true,
+        capture: true,
+        listenFor: listenFor,
+      );
+      return outcome == ListenOutcome.acted ? _captured : null;
+    } finally {
+      _holds--;
+      _rearm();
+    }
+  }
+
+  String? _captured;
+
+  /// Asks for one field by voice, reads back what was heard, and returns it
+  /// once the user says yes - or null, with the field left as it was.
+  ///
+  /// "No" or "cancel" leaves the field. Anything else is the answer said
+  /// again, and is read back in turn. Never for a password: a password said
+  /// out loud is not a password.
+  Future<String?> dictate({
+    required String label,
+    DictationShape shape = DictationShape.words,
+    String? prompt,
+    Duration listenFor = kListenWindow,
+  }) async {
+    _holds++;
+    try {
+      final name = label.toLowerCase();
+      var heard =
+          await _hear(prompt ?? 'Say the $name.', listenFor: listenFor);
+      for (var tries = 0; heard != null && tries < kDictationTries; tries++) {
+        final answer = _shortAnswer(heard);
+        if (answer == VoiceCommand.no || answer == VoiceCommand.cancel) break;
+        final value = shapeDictation(shape, heard);
+        if (value.isEmpty) {
+          heard = await _hear(
+              'I did not catch the $name in that. Say it again, or say '
+              'cancel.',
+              listenFor: listenFor);
+          continue;
+        }
+        final reply = await _hear(
+            '$label: ${readBack(shape, value)}. Say yes to keep it, or say '
+            'it again.',
+            listenFor: listenFor);
+        if (reply == null) break;
+        final verdict = _shortAnswer(reply);
+        if (verdict == VoiceCommand.yes) {
+          await speaker.speak('$label kept.');
+          return value;
+        }
+        if (verdict == VoiceCommand.no || verdict == VoiceCommand.cancel) {
+          break;
+        }
+        heard = reply;
+      }
+      await speaker.speak('The $name was left as it was.');
+      return null;
+    } finally {
+      _holds--;
+      _rearm();
+    }
+  }
+
+  /// Yes, no or cancel, when that is all [words] says. Two words at most, so
+  /// a name or an address that happens to contain "no" is not an answer.
+  static VoiceCommand? _shortAnswer(String words) {
+    if (spokenWords(words).length > 2) return null;
+    return parseVoiceCommand(words, only: const {
+      VoiceCommand.yes,
+      VoiceCommand.no,
+      VoiceCommand.cancel,
+    })?.command;
+  }
+
+  /// Presses the button [choices] names, asking first when it names more
+  /// than one.
+  Future<void> _press(List<VoiceTarget> choices, String heard) async {
+    var target = choices.length == 1 ? choices.single : null;
+    if (target == null) {
+      final names = [for (final c in choices.take(3)) c.label];
+      final answer = await _hear('Did you mean ${_joinOr(names)}?');
+      final picked =
+          answer == null ? const <int>[] : matchChoice(answer, names);
+      if (picked.length != 1) {
+        await speaker.speak('Nothing was pressed.');
+        return;
+      }
+      target = choices[picked.single];
+    }
+    _transcript = heard;
+    _set(VoicePhase.heard);
+    // Said as it is pressed, so a press by voice is heard to have happened.
+    // Heard back by the next window, a sentence this short is taken out as
+    // the app's own - see withoutEcho.
+    unawaited(speaker.speak('${target.label}.'));
+    target.onPressed();
+    if (_phase == VoicePhase.heard) _set(VoicePhase.idle);
+  }
+
+  static String _joinOr(List<String> words) => words.length == 1
+      ? words.single
+      : '${words.sublist(0, words.length - 1).join(', ')}, or ${words.last}';
+
   /// Asks [question] and listens for the answer: yes, no, next. Returns the
   /// answer, or null if none came. Works with hands-free off, because a
   /// question the app asks has to be answerable either way.
@@ -396,6 +545,16 @@ class VoiceController extends ChangeNotifier {
   /// user. The SOS countdown keeps talking — it is counting down — and
   /// passes false, with [echoOf] naming what it says: those words, heard
   /// back, are the app and not the user, and are taken out before matching.
+  /// [settleEarly] acts on a command as soon as a partial result holds one,
+  /// instead of waiting for the phrase to end - unless the partial ends in a
+  /// word the app itself says with more to come ([mayBeEchoStart]).
+  /// [capture] wants the words, not a command: whatever was heard is kept for
+  /// the caller and nothing is acted on.
+  ///
+  /// With [dispatch], a phrase that names a button on screen presses it. A
+  /// button named in full outranks a command that only shares a word with it
+  /// - "Share my location" is not "where am I" - but a command said on its
+  /// own is still the command, and help is always help.
   ///
   /// If the microphone is already open, this returns [ListenOutcome.busy] -
   /// unless it outranks what is listening: a tap outranks the app's own
@@ -410,6 +569,8 @@ class VoiceController extends ChangeNotifier {
     bool quiet = false,
     bool silenceSpeaker = true,
     bool preempt = false,
+    bool settleEarly = false,
+    bool capture = false,
     Iterable<String> Function()? echoOf,
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
@@ -452,6 +613,17 @@ class VoiceController extends ChangeNotifier {
     _set(VoicePhase.listening);
     final opened = _now();
 
+    // What the app said that the microphone may have heard.
+    List<String> saidSoFar() => [
+          ...?echoOf?.call(),
+          ...?scope?.echoOf?.call(),
+          // With the app still talking, what it said while the window was
+          // open - and just before - is the app, not the person.
+          if (!silenceSpeaker)
+            ...?_activity
+                ?.spokenSince(opened.subtract(const Duration(seconds: 2))),
+        ];
+
     final hearing = await recognizer.listen(
       listenFor: listenFor,
       pauseFor: pauseFor,
@@ -460,6 +632,16 @@ class VoiceController extends ChangeNotifier {
         _transcript = partial;
         notifyListeners();
       },
+      settleOn: !settleEarly
+          ? null
+          : (partial) {
+              if (attempt != _attempt) return false;
+              final said = saidSoFar();
+              return !mayBeEchoStart(partial, said) &&
+                  parseVoiceCommand(withoutEcho(partial, said),
+                          only: vocabulary) !=
+                      null;
+            },
     );
     if (attempt != _attempt) return ListenOutcome.cancelled;
 
@@ -482,14 +664,7 @@ class VoiceController extends ChangeNotifier {
         return outcome;
       case Heard(:final words):
         _transcript = words;
-        final said = <String>[
-          ...?echoOf?.call(),
-          ...?scope?.echoOf?.call(),
-          // With the app still talking, what it said while the window was
-          // open - and just before - is the app, not the person.
-          if (!silenceSpeaker)
-            ...?_activity?.spokenSince(opened.subtract(const Duration(seconds: 2))),
-        ];
+        final said = saidSoFar();
         final meant = said.isEmpty ? words : withoutEcho(words, said);
         if (meant.trim().isEmpty) {
           if (auto || quiet) {
@@ -498,6 +673,13 @@ class VoiceController extends ChangeNotifier {
             await _fail(VoiceInputFailure.nothingHeard, only: vocabulary);
           }
           return ListenOutcome.nothingHeard;
+        }
+
+        if (capture) {
+          _captured = meant;
+          _set(VoicePhase.heard);
+          if (attempt == _attempt) _set(VoicePhase.idle);
+          return ListenOutcome.acted;
         }
 
         final limit = scope?.maxWords?.call();
@@ -516,6 +698,18 @@ class VoiceController extends ChangeNotifier {
         }
 
         final parsed = parseVoiceCommand(meant, only: vocabulary);
+        if (dispatch &&
+            !help &&
+            (parsed == null || !isOnlyCommandPhrase(meant, parsed.command))) {
+          final exact = targets.matches(meant, exactOnly: true);
+          final named = exact.isNotEmpty || parsed != null
+              ? exact
+              : targets.matches(meant);
+          if (named.isNotEmpty) {
+            await _press(named, words);
+            return ListenOutcome.acted;
+          }
+        }
         if (parsed == null) {
           if (quiet) {
             _set(VoicePhase.idle);

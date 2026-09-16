@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/auth/email_address.dart';
 import '../../core/speech/speaker.dart';
+import '../voice_controller.dart';
+import '../widgets/dictated_field.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
+import '../widgets/voice_form.dart';
 
 /// Returns null on success, or a sentence to say and show.
 typedef SignInHandler = Future<String?> Function(String email, String password);
@@ -101,13 +104,22 @@ class _SignInScreenState extends State<SignInScreen> {
       body: const [
         'The email and password you already use for ImpairGency.',
       ],
-      spokenSuffix: 'Use the keyboard to type them. If you do not have an '
-          'account yet, there is a button to create one.',
-      extra: AutofillGroup(
+      spokenSuffix: 'Say fill in to say your email address. Type the password '
+          'with the keyboard. If you do not have an account yet, there is a '
+          'button to create one.',
+      micDetail: kFormMicDetail,
+      extra: VoiceForm(
+        submitLabel: 'Sign in',
+        child: AutofillGroup(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Semantics(
+            DictatedField(
+              label: 'Email address',
+              controller: _email,
+              shape: DictationShape.email,
+              enabled: !_busy,
+              field: Semantics(
               textField: true,
               label: 'Email address',
               child: TextField(
@@ -128,6 +140,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                 ),
               ),
+            ),
             ),
             const SizedBox(height: 14),
             Semantics(
@@ -156,6 +169,7 @@ class _SignInScreenState extends State<SignInScreen> {
             ),
           ],
         ),
+      ),
       ),
       actions: [
         ViButton(
