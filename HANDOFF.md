@@ -1,3 +1,93 @@
+# Where we left off — 2026-09-23
+
+## Tester feedback round 4
+
+The testers' list of September 18, on branch `claude/tester-feedback-sept-18`,
+from the plan agreed on 2026-09-23: PR calmadex/impairgency#87.
+`flutter analyze` is clean; **1418** Flutter tests, **96** rules tests and
+**16** browser tests pass. A release APK, the web app and an unsigned release
+iOS build all build. The checklist is in [`docs/TASKS.md`](docs/TASKS.md),
+"Tester feedback round 4".
+
+1. **SOS.** "Cancel" acts on the first partial: the hint no longer says it
+   mid-sentence. The `sos_events` record is written before the dialler
+   opens, under an id chosen then, so "I am okay" after the call - said or
+   pressed - can mark it resolved; the guardian's phone then says so.
+2. **Admin.** System health lists every SOS of the last 30 days, with Mark
+   resolved (the rules let an administrator change three fields and nothing
+   else). Nothing ever wrote `session_summaries`; `JourneyRecorder` now
+   records each journey and publishes its summary, with history consent
+   only, so Overview and System health have something to show.
+3. **Voice.** Near misses (`core/voice/fuzzy.dart`), Tagalog particles,
+   "stop", "back", friends and hands-free on every screen, a failing
+   microphone tried again on the next screen, and dictation that takes edits
+   (`core/voice/dictation_edit.dart`).
+4. **Smart assistance.** Results first, numbered and read out; search
+   without a position; turns no longer dropped; "Keep going" between turns.
+5. **Scan.** The banding heuristic is gone. A one-class YOLO11n
+   (`data/stairs_detector_io.dart`) runs beside the COCO model every 500 ms.
+   Friends from the home screen, with who-do-I-know, rename and forget
+   everyone.
+
+Since then (the same day): the branch is pushed and PR #87 open. **Rules,
+indexes and hosting deployed** from `fadb8f0`: the `session_summaries`
+index was missing live and is added, both `sos_events` indexes were there,
+and the live dashboard was checked to be this build and to serve none of
+the model files. On release `apk-2026-09-10`, retitled "Android test build
+2026-09-23": `impairgency-fadb8f0-(arm64-)release.apk`, without the stairs
+model.
+
+**The stairs model** was trained the same day on this Mac, from Open Images:
+2,478 photographs of stairs and 488 of floors, 60 epochs in 36 minutes
+(`a1a9ca2` fixed the tools first: the export path, the run folder, the
+camera size the measurement simulates, and negatives it never trained on).
+On photographs it never saw, at 0.55 it finds 49% of close stairs and names
+stairs on 5% of photographs with none, so **"Stop" stays off**, and the
+named tier moved from 0.35 to 0.55. It takes about a quarter of zebra
+crossings for stairs: Open Images has no human-checked crossing to train it
+against. `assets/models/yolo11n_stairs.tflite`, 10.6 MB; hash and table in
+[`docs/VISION.md`](docs/VISION.md), "Stairs".
+
+## Waiting on someone
+
+- **Merge PR #87.** Its CI fails only at the artifact upload: the
+  account's Actions storage (500 MB) is full with five APK artifacts of
+  about 145 MB each, and every run since September 16 has failed there.
+  Analyze, the tests and both APK builds pass. Delete the old artifacts, or
+  have the workflow keep less (only the arm64 APK, a `retention-days`).
+- **A tester APK with the stairs model**: built, not uploaded - asks first.
+- **Crossings for the stairs model**: phone photographs of zebra crossings,
+  tiled floors and rugs (`tool/fetch_stairs.py --negatives <folder>`), or
+  Open Images' train-split machine labels (a 7.35 GB list); then train again
+  (about 40 minutes) and measure.
+- **Superseded APKs** on the release: the `8c4014a` tester pair, `836fb6b`,
+  `8424e2f`, and the `7ac4791` stairs check, whose heuristic is gone. Delete
+  them once the new ones are confirmed to install. The `8c4014a`
+  depth-check pair is still the depth check.
+- **Three live Firestore indexes** that `firestore.indexes.json` does not
+  have: `sessions (viUid, startedAt)`, `sos_events (resolved, firedAt)` and
+  `sos_events (viUid, firedAt)`, from an older schema.
+  `firebase deploy --only firestore:indexes --force` removes them, once
+  nothing old reads them.
+- **The "Feedback September 18" session** still has this round's plan open
+  for approval; approving it there would do the round again.
+- **On the emulator**: a journey with history on writes a summary, and with
+  it off nothing. It needs live OSRM answers, or a fake route.
+
+## Check on a real phone
+
+- SOS: "cancel" over the countdown's own voice; fire, hang up, "I am okay";
+  the guardian's card and the dashboard row.
+- Dictation edits and spelling; a Filipino name and a Gmail address.
+- A walked route: numbered results, "Keep going", standing still for 40 s.
+- A journey with history on reaching Overview; with it off, nothing.
+- "Hello friend Sam" from the home screen, and the views counted aloud.
+- Stairs (`docs/DEMO.md`, step 12): real flights up and down, indoors and
+  out; a tiled floor, a zebra crossing and a striped rug. Every miss and
+  false alarm into `docs/VISION.md`.
+
+---
+
 # Where we left off — 2026-09-16
 
 ## Tester feedback round 3

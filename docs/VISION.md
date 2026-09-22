@@ -204,9 +204,13 @@ models are. Its boxes join the frame's detections as `stairs`, so everything
 after that - ranking, "close" and "very close", the guardian's feed, the
 journey record - treats stairs as one more object.
 
-**The model is not trained yet.** The pipeline is built and tested against a
-fake; a build without `assets/models/yolo11n_stairs.tflite` runs exactly as
-before and says nothing about stairs.
+**Trained on 2026-09-23, and it names stairs; it does not say "Stop".** On
+photographs it never trained on, it finds about half the stairs close
+enough to matter and names stairs on 5% of photographs that have none -
+short of what a "Stop" needs (below, "The gate"). Its worst mistake is the
+zebra crossing: a quarter of them. A build without
+`assets/models/yolo11n_stairs.tflite` runs as before and says nothing about
+stairs.
 
 ## Why not the heuristic
 
@@ -223,16 +227,26 @@ every tester build, and is gone; its history is in PR #74.
 `build/stairs-data/` (git-ignored):
 
 - **Positives**: Open Images train images with boxes for the class named
-  "Stairs" in Open Images' own class list. The class id is looked up by name
-  when the script runs and printed - record it here when it is. Crowds of
-  stairs in one box and pictures of stairs are left out.
-- **Negatives**, with empty label files: photographs of tiled floors, rugs,
-  corridors and zebra crossings taken on the phones the app runs on
-  (`--negatives`), and Open Images validation images with a chosen
-  image-level label and no Stairs box (`--negative-label`).
+  "Stairs" in Open Images' own class list, `/m/01lynh` (looked up by name
+  when the script runs). Crowds of stairs in one box and pictures of stairs
+  are left out. That leaves **2,478** images, every one the train split has.
+- **Negatives**, with empty label files: photographs taken on the phones the
+  app runs on (`--negatives`), and Open Images validation images with a
+  chosen human-checked label and no Stairs box (`--negative-label`). The
+  first run had no phone photographs; it took all **488** validation images
+  labelled floor, tile, carpet, walkway or sidewalk.
 - **Licences**: Open Images annotations are CC BY 4.0 and its images are
   listed as CC BY 2.0, as for the evaluation set above. `SOURCES.txt` lists
   every image with its id, for the attribution.
+
+Split by a hash of the image id: 2,693 for training (446 negatives), 273
+for validation (42). About 940 MB, under `build/`.
+
+**No zebra crossings, rugs or tiled floors among the negatives.** Open
+Images has those labels, but its human-checked labels have not one of them
+in the validation or test split, so the two cases the old heuristic failed
+on are the two the model was not shown. Phone photographs of them, passed
+with `--negatives`, are how to add them.
 
 Open Images labels no direction, so the model learns "stairs", never up or
 down.
@@ -240,20 +254,33 @@ down.
 ## Training
 
 `tool/train_stairs.sh`: `yolo detect train model=yolo11n.pt data=stairs.yaml
-imgsz=416 epochs=60 batch=32` - about one to two hours on a Colab T4, longer
-on the Mac's GPU - then the same export as the COCO model, LiteRT with float16
-weights and a planar input. The script checks the shapes with
-`tool/tflite_shapes.py` and refuses anything other than `[1, 3, 416, 416]` in
-and `[1, 5, anchors]` out, which is what `StairsDetector.load` checks too. The
-weights start from Ultralytics' `yolo11n.pt` and inherit its AGPL-3.0, as the
-COCO model does.
+imgsz=416 epochs=60 batch=32`, then the same export as the COCO model:
+Ultralytics' LiteRT path (`format=litert`; Ultralytics 8.4 renamed it from
+`tflite`), float32 weights, a planar input and box coordinates as fractions
+of it. The script checks the shapes with `tool/tflite_shapes.py` and refuses
+anything other than `[1, 3, 416, 416]` in and `[1, 5, anchors]` out, which
+is what `StairsDetector.load` checks too. The weights start from
+Ultralytics' `yolo11n.pt` and inherit its AGPL-3.0, as the COCO model does.
+
+The export was checked before it was trusted: the same tools re-exporting
+`yolo11n.pt` at 640 give a model whose output on the same input is
+bit-identical to the shipped `yolo11n.tflite` (the files differ only in the
+metadata Ultralytics embeds), so the stairs model is read by the code that
+already reads the COCO one. Both are float32; LiteRT's GPU delegate runs
+float32 weights in float16 by itself.
 
 | | |
 |---|---|
-| File | `assets/models/yolo11n_stairs.tflite` - *not yet* |
-| Open Images class | *recorded when fetched* |
-| Images | *positives, negatives* |
-| SHA-256 | *recorded when exported* |
+| File | `assets/models/yolo11n_stairs.tflite`, 10,568,442 bytes |
+| SHA-256 | `0840fcbc054ac4ca33bf444d7eff22f73714a39930b19c81338ef2a72b72ba21` |
+| Shapes | `[1, 3, 416, 416]` float32 in, `[1, 5, 3549]` out |
+| Open Images class | `/m/01lynh`, "Stairs" |
+| Images | 2,478 with stairs, 488 without |
+| Started from | `yolo11n.pt`, SHA-256 `0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1` |
+| Trained | 2026-09-23 on this Mac's GPU (Apple M5 Pro, `device=mps`): 60 epochs in 36 minutes. Ultralytics 8.4.159, PyTorch 2.13, litert-torch 0.9.4, Python 3.13 |
+| Kept | epoch 58: mAP50 0.633, mAP50-95 0.422 on the 273 photographs held back from training |
+
+Trained on Open Images V7 annotations, © Google LLC, CC BY 4.0.
 
 ## How it runs
 
@@ -269,7 +296,8 @@ COCO model does.
 
 ## What it says
 
-- Below **0.35** (`kStairsSoft`), nothing.
+- Below **0.55** (`kStairsSoft`), nothing. It was 0.35 until the model was
+  measured: there it named stairs on 9% of photographs with none.
 - Otherwise named, with where: *"Stairs on your right"*, *"Stairs ahead,
   close"*, *"Stairs close, on your left"*. At navigation priority, so the next
   description does not drop it; told to the guardian as "Obstacle: stairs" and
@@ -286,20 +314,59 @@ COCO model does.
 
 ## The gate
 
-`tool/eval_detector.py --stairs --fetch --negatives <folder>` runs the model
-through the app's own pipeline on Open Images validation "Stairs" boxes and on
-the negatives, at 0.35, 0.45, 0.55 and 0.65:
+```bash
+tool/eval_detector.py --stairs --fetch --per-class 1000 --negative-limit 600 \
+  --negative-label Tile --negative-label Floor --negative-label Flooring \
+  --negative-label Carpet --negative-label Walkway --negative-label Sidewalk \
+  --negative-machine-label "Zebra crossing" \
+  --negative-machine-label "Pedestrian crossing" \
+  --negative-machine-label Rug --negative-machine-label "Tile flooring" \
+  --negative-machine-label Hardwood --negative-machine-label "Wood flooring" \
+  --negative-machine-label "Laminate flooring"
+```
 
-| score ≥ | close+ recall | all recall | negatives firing |
-|---|---|---|---|
-| *to be measured* | | | |
+runs the model through the app's own pipeline - a 720-pixel camera frame, the
+416 letterbox, the same suppression - on photographs it never trained on:
+Open Images validation and test photographs with Stairs boxes (154
+photographs, 181 boxes, 145 of them close or nearer), and 598 test
+photographs with none. The crossings, rugs and wooden floors among those are
+from Open Images' machine-generated labels at 0.7 or more, marked
+"(machine)": its human-checked labels have none of them in either split. Two
+of the "zebra crossings" were looked at: a street crossing, and the painted
+stripes of a model airport.
+
+| score ≥ | close+ recall | all recall | negatives, close+ | negatives named at all |
+|---|---|---|---|---|
+| 0.35 | 57% | 54% | 44/598, 7% | 51/598, 9% |
+| 0.45 | 53% | 50% | 34/598, 6% | 37/598, 6% |
+| **0.55** | **49%** | 45% | 27/598, 5% | **29/598, 5%** |
+| 0.65 | 46% | 41% | 16/598, 3% | 16/598, 3% |
+
+Named at all at 0.55, by what the photograph shows (one photograph can show
+two): floor 8 of 306, hardwood 6 of 88, wood flooring 3 of 51, carpet 2 of
+53, flooring 4 of 49, tile 3 of 46, walkway 1 of 46, sidewalk 1 of 46,
+laminate 1 of 40 - and **zebra crossings 5 of 19, pedestrian crossings 5 of
+26, rugs 5 of 26**. Every zebra crossing named at 0.35 is still named at
+0.55: the model is sure of them, so no threshold removes them. Crossings and
+rugs in training would; phone photographs of them with `--negatives`, or
+Open Images' machine labels for its train split (a 7.35 GB list), are where
+they would come from.
 
 **"Stop" is turned on only if**, at 0.55, stairs close or nearer are found at
 least **70%** of the time and at most **5%** of the negatives fire (a stairs
-box close or nearer). Otherwise the model ships named-only, and the table says
-why. Then, on a phone: real flights up and down, indoors and out; a tiled
-floor, a zebra crossing, an escalator and a striped rug - every miss and every
-false alarm noted here.
+box close or nearer). **The first model does not pass:** 49%, with 27 of 598
+negatives firing. It ships named-only, with `STAIRS_STOP` off.
+
+**The named tier moved from 0.35 to 0.55**, by a rule set before the numbers
+were read: the lowest score at which at most 5% of the negatives are named
+at all. It costs eight points of close recall.
+
+These are per photograph. Walking, the app looks twice a second, so a
+staircase approached for a few seconds has several chances to be found - and
+a tiled floor several chances to be taken for stairs. Which of those wins is
+for the phone: real flights up and down, indoors and out; a tiled floor, a
+zebra crossing, an escalator and a striped rug - every miss and every false
+alarm noted here.
 
 ---
 

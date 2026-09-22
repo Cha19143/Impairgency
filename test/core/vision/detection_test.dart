@@ -173,7 +173,7 @@ void main() {
 
     test('a less sure box is only ever named', () {
       stairsMayStop = true;
-      final guidance = guidanceFor([stairs(score: 0.45)]);
+      final guidance = guidanceFor([stairs(score: kStairsHard - 0.01)]);
       expect(guidance.urgent, isFalse);
       expect(guidance.phrase, 'Stairs very close, ahead');
     });

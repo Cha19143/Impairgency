@@ -33,8 +33,8 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
 | Tester feedback round 2 — September 15 | `███████████░` | 36 / 38 |
 | Tester feedback round 3 — September 16 | `██████████░░` | 26 / 30 |
-| Tester feedback round 4 — September 18 | `█████████░░░` | 26 / 36 |
-| **Overall** | | **193 / 209  (92%)** |
+| Tester feedback round 4 — September 18 | `█████████░░░` | 29 / 37 |
+| **Overall** | | **196 / 210  (93%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -688,8 +688,11 @@ summaries are written this round.
       own name goes in a summary
 - [x] Browser tests: SOS rows, Mark resolved through the real rules, and
       both kinds of empty Overview
-- [ ] Deploy the rules, indexes and hosting (after Dex confirms), and check
-      `firebase firestore:indexes` lists both `sos_events` indexes
+- [x] Deployed on 2026-09-23 from `fadb8f0`: rules, indexes and hosting.
+      Both `sos_events` indexes were live already; the `session_summaries`
+      one (`concernCount`, `startedAt`) was not, and is added. The tester
+      APKs `impairgency-fadb8f0-(arm64-)release` are on release
+      `apk-2026-09-10`
 - [ ] On the emulator: a journey with history on writes a summary; with it
       off, nothing
 
@@ -742,11 +745,18 @@ summaries are written this round.
       guardian, kept on the journey. "Stop" for stairs waits for the gate
 - [x] Tools: `fetch_stairs.py` (Open Images "Stairs", floors as negatives),
       `train_stairs.sh`, `eval_detector.py --stairs`
-- [ ] Fetch the data and train the model (asks first: Open Images, and
-      Ultralytics' `yolo11n.pt`), check its shapes, record its hash
-- [ ] Measure it: close recall and floors firing per score, into
-      [`VISION.md`](VISION.md). "Stop" on only if close recall ≥ 70% and ≤ 5%
-      of negatives fire at 0.55
+- [x] Fetch the data and train the model: 2,478 Open Images photographs
+      of stairs and 488 of floors, 60 epochs on this Mac; shapes checked,
+      hash in [`VISION.md`](VISION.md). The tools were fixed first: the
+      export path, the run folder, the camera size the measurement
+      simulates, and negatives it never trained on
+- [x] Measure it: at 0.55 it finds 49% of close stairs and names stairs on
+      5% of photographs with none, so "Stop" stays off; the named tier moved
+      from 0.35 to 0.55 by the same 5%
+- [ ] Crossings and rugs as training negatives: the model takes a quarter
+      of zebra crossings for stairs, and Open Images has no human-checked
+      crossing to train against. Phone photographs (`--negatives`), or its
+      train split's machine labels (a 7.35 GB list)
 - [x] "Hello friend Sam" from the home screen; with recognition off it asks
       to turn it on; the real reason when it cannot run
 - [x] Ten seconds to take a face down, counted aloud
@@ -755,7 +765,7 @@ summaries are written this round.
 - [x] Each bundled model is named in `pubspec.yaml`, so MiDaS never ships to
       testers; `tool/build_depth_check.sh` adds it for that one build
 - [ ] On a phone: meet a friend from the home screen; a staircase, a tiled
-      floor, a zebra crossing and a striped rug once the model is in
+      floor, a zebra crossing and a striped rug, in a build with the model
 
 ---
 

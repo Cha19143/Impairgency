@@ -69,9 +69,11 @@ PAIRS = {
 BANDS = [('very close (>0.55)', 0.55), ('close (0.30-0.55)', 0.30),
          ('far (<0.30)', 0.0)]
 
-# The scores the stairs model is measured at: kStairsSoft, kStairsHard, and
-# either side of the hard one.
+# The scores the stairs model is measured at. 0.35 is where the named tier
+# started; kStairsSoft and kStairsHard have both been 0.55 since the first
+# measurement (docs/VISION.md, "The gate"); 0.65 is past them.
 STAIRS_SCORES = [0.35, 0.45, 0.55, 0.65]
+STAIRS_SOFT = STAIRS_HARD = 0.55
 
 
 def band_of(w, h):
@@ -395,8 +397,8 @@ def stairs_main(args):
         if os.path.exists(listed):
             for r in csv.DictReader(open(listed)):
                 kinds[os.path.join(folder, r['file'])] = r['labels'].split(';')
-    hard, soft = STAIRS_SCORES[2], STAIRS_SCORES[0]
-    by_kind = collections.defaultdict(lambda: [0, 0, 0])
+    lowest, soft, hard = STAIRS_SCORES[0], STAIRS_SOFT, STAIRS_HARD
+    by_kind = collections.defaultdict(lambda: [0, 0, 0, 0])
 
     fired, named = collections.Counter(), collections.Counter()
     for path in negatives:
@@ -413,9 +415,10 @@ def stairs_main(args):
         for kind in kinds.get(path, ()):
             row = by_kind[kind]
             row[0] += 1
-            row[1] += any(d[0] >= hard and max(d[4]-d[2], d[5]-d[3]) > 0.30
-                          for d in dets)
+            row[1] += any(d[0] >= lowest for d in dets)
             row[2] += any(d[0] >= soft for d in dets)
+            row[3] += any(d[0] >= hard and max(d[4]-d[2], d[5]-d[3]) > 0.30
+                          for d in dets)
 
     def share(n):
         return (f'{n}/{len(negatives)} {n/len(negatives):4.0%}'
@@ -438,11 +441,14 @@ def stairs_main(args):
               f'{share(fired[t]):>18s} {share(named[t]):>15s}')
     if by_kind:
         print(f'\n{"negatives by label":30s} {"photos":>7s} '
-              f'{"close+ at " + str(hard):>16s} {"any at " + str(soft):>12s}')
-        for kind, (n, c, a) in sorted(by_kind.items(), key=lambda kv: -kv[1][0]):
-            print(f'{kind:30s} {n:7d} {c:16d} {a:12d}')
-    print('\nGate for "Stop": close+ recall >= 70% and negatives <= 5% at '
-          'kStairsHard (0.55).')
+              f'{"any at " + str(lowest):>12s} {"any at " + str(soft):>12s} '
+              f'{"close+ at " + str(hard):>15s}')
+        for kind, (n, a, b, c) in sorted(by_kind.items(),
+                                         key=lambda kv: -kv[1][0]):
+            print(f'{kind:30s} {n:7d} {a:12d} {b:12d} {c:15d}')
+    print(f'\nGate for "Stop": close+ recall >= 70% and negatives <= 5% at '
+          f'kStairsHard ({hard}). The named tier, kStairsSoft ({soft}): the '
+          f'lowest score\nat which at most 5% of negatives are named at all.')
 
 
 def main():

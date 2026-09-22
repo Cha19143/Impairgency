@@ -254,10 +254,11 @@ hands-free on. They are also the testers' checklist for this round.
     *"One. Two. … Five. Saved Sam."* Sam walks up: *"Your friend Sam is
     approaching."* *"Who do I know"*: *"You have saved one person: Sam."*
     *"Rename Sam to Samuel"*, then *"forget Samuel"* and *"yes"*.
-12. Once the stairs model is in the build: walk towards a staircase -
-    *"Stairs ahead, close"*. A tiled floor, a zebra crossing and a striped
-    rug: nothing. Note every miss and every false alarm for
-    [`VISION.md`](VISION.md).
+12. In a build with the stairs model (the `fadb8f0` APKs do not have it):
+    walk towards a staircase - *"Stairs ahead, close"*, never *"Stop"*. A
+    tiled floor and a striped rug: nothing. A zebra crossing may be taken
+    for stairs - the model does that to about a quarter of them. Note every
+    miss and every false alarm for [`VISION.md`](VISION.md).
 
 ---
 

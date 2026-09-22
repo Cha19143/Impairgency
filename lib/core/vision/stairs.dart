@@ -47,15 +47,22 @@ const bool kStairsWarnings =
     bool.fromEnvironment('STAIRS_WARNINGS', defaultValue: true);
 
 /// Below this, a stairs box is not mentioned at all.
-const double kStairsSoft = 0.35;
+///
+/// The lowest score at which at most 5 percent of photographs with no stairs
+/// in them - floors, carpets, walkways, crossings - get a stairs box at all:
+/// at 0.35 the first model named stairs on 9 percent of them, at 0.55 on 5
+/// (`docs/VISION.md`, "The gate"). Stairs said over every tiled floor would
+/// be stairs nobody listens for.
+const double kStairsSoft = 0.55;
 
 /// At or above this, stairs close enough to stop for are a "Stop".
 ///
 /// Only once the measurement in `docs/VISION.md`, "Stairs", says the model
 /// earns it: recall on close stairs of at least 70 percent, and false alarms
 /// on tiled floors, rugs and zebra crossings of at most 5 percent, at this
-/// score. Until then [stairsMayStop] is off and stairs are named, never
-/// shouted - a "Stop" for every tiled floor teaches someone to ignore "Stop".
+/// score. The first model found 49 percent. Until then [stairsMayStop] is
+/// off and stairs are named, never shouted - a "Stop" for every tiled floor
+/// teaches someone to ignore "Stop".
 const double kStairsHard = 0.55;
 
 /// Whether stairs may be a "Stop": `--dart-define=STAIRS_STOP=true`, once

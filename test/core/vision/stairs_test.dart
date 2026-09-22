@@ -67,7 +67,8 @@ void main() {
     });
 
     test('below the soft tier, nothing', () {
-      expect(stairsDetections([raw(score: 0.3)], box), isEmpty);
+      expect(stairsDetections([raw(score: kStairsSoft - 0.01)], box), isEmpty);
+      expect(stairsDetections([raw(score: kStairsSoft)], box), hasLength(1));
     });
 
     test('a box wholly in the padding is nothing', () {
