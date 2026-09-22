@@ -82,7 +82,8 @@ void main() {
           onSafetyNotice: () {}, onSignOut: () {}, onBack: () {},
         ),
       );
-      await tapAction(tester, find.text('Hands-free voice: on'));
+      expect(find.textContaining('On: listens without a tap'), findsOneWidget);
+      await tapAction(tester, find.text('Hands-free voice'));
       expect(toggles, 1);
 
       await pump(

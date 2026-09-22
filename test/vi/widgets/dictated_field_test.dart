@@ -60,9 +60,11 @@ void main() {
     mic.say(const Heard('j d e x at gmail dot com'));
     await settle(tester);
     expect(speaker.said.last,
-        'Email address: j d e x at gmail dot com. Say yes to keep it, or say '
-        'it again.');
+        'Email address: j d e x at gmail dot com. Say done to keep it, add '
+        'and more, delete last word, spell it, or say it again.');
     expect(email.text, isEmpty, reason: 'nothing is kept before the yes');
+    expect(find.textContaining('Heard: j d e x at gmail dot com'),
+        findsNothing, reason: 'the window it was heard in has closed');
 
     mic.say(const Heard('yes'));
     await settle(tester);

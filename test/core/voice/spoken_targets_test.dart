@@ -105,4 +105,18 @@ void main() {
       expect(matchChoice('the bakery', choices), isEmpty);
     });
   });
+
+  group('round 4', () {
+    test('a word one letter off still names its button', () {
+      expect(matchSpokenTargets('save places', ['Saved places', 'Settings']),
+          [0]);
+    });
+
+    test('"on" is part of what is said, except after tap', () {
+      expect(matchSpokenTargets('tap on back', ['Back', 'Settings']), [0]);
+      expect(identifyingWords('turn on hands free'),
+          ['turn', 'on', 'hands', 'free']);
+      expect(matchSpokenTargets('hands free voice', ['Hands-free voice']), [0]);
+    });
+  });
 }

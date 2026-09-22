@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 
 import '../core/speech/speaker.dart';
 import '../core/speech/speech_queue.dart';
+import '../core/auth/email_address.dart';
 import '../core/voice/dictation.dart';
+import '../core/voice/dictation_edit.dart';
 import '../core/voice/echo.dart';
 import '../core/voice/listening_policy.dart';
 import '../core/voice/speech_recognizer.dart';
@@ -15,8 +17,26 @@ import 'voice_targets.dart';
 
 export '../core/voice/dictation.dart' show DictationShape;
 
-/// How many times a field is asked for before it is left as it was.
+/// How many times a field is asked for, with nothing usable heard, before
+/// it is left as it was.
 const int kDictationTries = 3;
+
+/// How many replies one field may take - adding, deleting, spelling -
+/// before it is left as it was.
+const int kDictationRounds = 8;
+
+/// With hands-free on, "I heard…, you can say…" is said at most this often,
+/// and never twice for the same words.
+const Duration kMisheardCooldown = Duration(seconds: 20);
+
+/// Said once, the first time hands-free starts listening after the app
+/// opens, so someone who never pressed anything knows they can just talk.
+const String kHandsFreeListening = 'Hands-free listening is on. Just speak.';
+
+/// How long after the microphone first opens that is said: after the
+/// screen's own opening words have been queued, so it follows them rather
+/// than being replaced by them.
+const Duration kHandsFreeAnnounceDelay = Duration(milliseconds: 1500);
 
 /// Where one attempt to hear a command is, for the screen to show.
 enum VoicePhase {
@@ -50,6 +70,7 @@ class VoiceScope {
     this.handsFree = true,
     this.echoOf,
     this.maxWords,
+    this.wholePhrase = kWholePhraseCommands,
   });
 
   /// The vocabulary, asked each time the microphone opens - Read Text's
@@ -78,6 +99,10 @@ class VoiceScope {
   /// sets one while a page is read aloud: a page of words half-heard back
   /// through the microphone is not a command, and a command is short.
   final int Function()? maxWords;
+
+  /// Commands heard only as all of what was said. The SOS receipt empties
+  /// it: there, "please cancel it" means the emergency is over.
+  final Set<VoiceCommand> wholePhrase;
 }
 
 /// Undoes one [VoiceController.attach], and only that one.
@@ -126,6 +151,7 @@ class VoiceController extends ChangeNotifier {
     required this.actions,
     this.onNavigate,
     this.screenReaderOn,
+    this.listeningCue,
     Future<void> Function(Duration delay)? wait,
     DateTime Function()? now,
   })  : _wait = wait ?? ((delay) => Future<void>.delayed(delay)),
@@ -150,6 +176,11 @@ class VoiceController extends ChangeNotifier {
   /// aloud - "Emergency SOS, button" - and a microphone left open hears it,
   /// so while one is on, the labels on screen are the app's own voice too.
   final bool Function()? screenReaderOn;
+
+  /// A buzz when the microphone opens after the app asked something, so
+  /// the person knows to start talking. Not spoken: the recogniser would
+  /// write it down.
+  final void Function()? listeningCue;
 
   final Future<void> Function(Duration delay) _wait;
   final DateTime Function() _now;
@@ -251,6 +282,11 @@ class VoiceController extends ChangeNotifier {
     _route = path;
     targets.routeChanged(path);
     if (isBusy) unawaited(stop());
+    // A microphone that kept failing is worth another try on the next
+    // screen - it was given up on for good until the app went behind
+    // another, and the testers thought hands-free needed a button. A refused
+    // permission is not: asking again on every screen would nag.
+    if (_gaveUp && !_gaveUpBlocked) _gaveUp = false;
     _rearm();
   }
 
@@ -262,6 +298,11 @@ class VoiceController extends ChangeNotifier {
   bool _inLoopWindow = false;
   bool _hazard = false;
   bool _gaveUp = false;
+
+  /// Why: a microphone this app may not use, rather than one that failed.
+  bool _gaveUpBlocked = false;
+
+  bool _announced = false;
   int _holds = 0;
 
   /// Whether the microphone reopens by itself on screens that ask for it.
@@ -270,6 +311,7 @@ class VoiceController extends ChangeNotifier {
     if (_handsFree == on) return;
     _handsFree = on;
     _gaveUp = false;
+    _gaveUpBlocked = false;
     if (!on && isAutoListening) unawaited(stop());
     notifyListeners();
     _rearm();
@@ -289,7 +331,11 @@ class VoiceController extends ChangeNotifier {
     if (!foreground) {
       if (isBusy) unawaited(stop());
     } else {
+      // Back from Settings, perhaps having allowed the microphone: every
+      // give-up is forgotten, and a refusal is explained again once.
       _gaveUp = false;
+      _gaveUpBlocked = false;
+      _explainedOnce = false;
       _rearm();
     }
   }
@@ -310,6 +356,10 @@ class VoiceController extends ChangeNotifier {
   Future<void> _loop() async {
     _looping = true;
     notifyListeners();
+    if (!_announced) {
+      _announced = true;
+      unawaited(_announceHandsFree());
+    }
     var failures = 0;
     var networkFailures = 0;
     _networkSaid = false;
@@ -347,6 +397,7 @@ class VoiceController extends ChangeNotifier {
         );
         if (delay == null) {
           _gaveUp = true;
+          _gaveUpBlocked = outcome == ListenOutcome.blocked;
           if (outcome == ListenOutcome.failed) {
             await speaker.speak(kHandsFreeStopped);
           }
@@ -357,6 +408,18 @@ class VoiceController extends ChangeNotifier {
     } finally {
       _looping = false;
       if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Says, once, that hands-free is listening - after whatever the screen
+  /// is saying, not over it.
+  Future<void> _announceHandsFree() async {
+    await _wait(kHandsFreeAnnounceDelay);
+    if (_disposed || !_looping) return;
+    if (speaker case final PrioritySpeaker queue) {
+      await queue.announce(kHandsFreeListening, priority: SpeechPriority.info);
+    } else {
+      await speaker.speak(kHandsFreeListening);
     }
   }
 
@@ -382,7 +445,7 @@ class VoiceController extends ChangeNotifier {
     try {
       if (isBusy) await stop();
       if (cue != null) await speaker.speak(cue);
-      return await listen(only: only, preempt: true);
+      return await listen(only: only, preempt: true, cue: true);
     } finally {
       _holds--;
       _rearm();
@@ -392,7 +455,9 @@ class VoiceController extends ChangeNotifier {
   /// Says [prompt], then hears one phrase and returns its words as they were
   /// heard: no command looked for, no button pressed. Null when nothing was.
   Future<String?> _hear(String prompt,
-      {Duration listenFor = kListenWindow}) async {
+      {Duration listenFor = kListenWindow,
+      Duration pauseFor = kPauseEndsPhrase,
+      ListenKind kind = ListenKind.command}) async {
     _holds++;
     try {
       if (isBusy) await stop();
@@ -403,7 +468,10 @@ class VoiceController extends ChangeNotifier {
         preempt: true,
         quiet: true,
         capture: true,
+        cue: true,
+        kind: kind,
         listenFor: listenFor,
+        pauseFor: pauseFor,
       );
       return outcome == ListenOutcome.acted ? _captured : null;
     } finally {
@@ -414,48 +482,118 @@ class VoiceController extends ChangeNotifier {
 
   String? _captured;
 
-  /// Asks for one field by voice, reads back what was heard, and returns it
-  /// once the user says yes - or null, with the field left as it was.
+  /// Asks for one field by voice and returns what the user kept - or null,
+  /// with the field left as it was.
   ///
-  /// "No" or "cancel" leaves the field. Anything else is the answer said
-  /// again, and is read back in turn. Never for a password: a password said
-  /// out loud is not a password.
+  /// Each reply is read back, and can be kept ("done", "tama"), added to
+  /// ("add dot com"), taken back a word at a time, cleared, spelled letter
+  /// by letter, heard again, or said again whole. An email address that is
+  /// not complete is not kept. [initial] is what the field holds already:
+  /// silence never empties it. Never for a password: a password said out
+  /// loud is not a password.
   Future<String?> dictate({
     required String label,
     DictationShape shape = DictationShape.words,
     String? prompt,
-    Duration listenFor = kListenWindow,
+    String? initial,
+    Duration listenFor = kDictationWindow,
   }) async {
     _holds++;
     try {
       final name = label.toLowerCase();
-      var heard =
-          await _hear(prompt ?? 'Say the $name.', listenFor: listenFor);
-      for (var tries = 0; heard != null && tries < kDictationTries; tries++) {
-        final answer = _shortAnswer(heard);
-        if (answer == VoiceCommand.no || answer == VoiceCommand.cancel) break;
-        final value = shapeDictation(shape, heard);
-        if (value.isEmpty) {
-          heard = await _hear(
-              'I did not catch the $name in that. Say it again, or say '
-              'cancel.',
-              listenFor: listenFor);
+      var value = initial?.trim() ?? '';
+      var misheard = 0;
+      var spelling = false;
+      var readBacks = 0;
+
+      String? problem() => shape == DictationShape.email && value.isNotEmpty
+          ? emailAddressProblem(value)
+          : null;
+      String readBackPrompt() {
+        if (value.isEmpty) return '$label is empty. Say the $name.';
+        final said = '$label: ${readBack(shape, value)}.';
+        final incomplete =
+            problem() == null ? '' : ' That is not a complete email address yet.';
+        final hint = readBacks++ == 0
+            ? ' Say done to keep it, add and more, delete last word, spell it, '
+                'or say it again.'
+            : ' Say done, or change it.';
+        return '$said$incomplete$hint';
+      }
+
+      var ask = prompt ?? 'Say the $name.';
+      for (var round = 0; round < kDictationRounds; round++) {
+        final heard = await _hear(ask,
+            listenFor: listenFor,
+            pauseFor: kDictationPause,
+            kind: ListenKind.dictation);
+        if (heard == null) {
+          if (++misheard >= kDictationTries) break;
+          ask = value.isEmpty
+              ? 'I did not hear anything. Say the $name, or say cancel.'
+              : 'I did not hear anything. ${readBackPrompt()}';
           continue;
         }
-        final reply = await _hear(
-            '$label: ${readBack(shape, value)}. Say yes to keep it, or say '
-            'it again.',
-            listenFor: listenFor);
-        if (reply == null) break;
-        final verdict = _shortAnswer(reply);
-        if (verdict == VoiceCommand.yes) {
-          await speaker.speak('$label kept.');
-          return value;
+        final before = value;
+        switch (parseDictationEdit(heard, spelling: spelling)) {
+          case EditDone():
+            if (value.isEmpty) {
+              ask = 'There is nothing to keep yet. Say the $name.';
+              continue;
+            }
+            if (problem() != null) {
+              ask = 'That is not a complete email address yet: '
+                  '${readBack(shape, value)}. Say the rest, add and more, or '
+                  'spell it.';
+              continue;
+            }
+            await speaker.speak('$label kept.');
+            return value;
+          case EditCancel():
+            round = kDictationRounds;
+            continue;
+          case EditRetry():
+            value = initial?.trim() ?? '';
+            spelling = false;
+            ask = 'Say the $name again.';
+            continue;
+          case EditClear():
+            value = '';
+            spelling = false;
+            ask = 'Cleared. Say the $name.';
+            continue;
+          case EditDeleteLast():
+            value = deleteLast(shape, value);
+          case EditReadBack():
+            break;
+          case EditSpell():
+            spelling = true;
+            ask = 'Say it letter by letter. Say done when you are finished.';
+            continue;
+          case EditAdd(:final text):
+            final more = shapeDictation(shape, text);
+            if (more.isNotEmpty) {
+              value = joinDictation(shape, value,
+                  shape == DictationShape.email ? more : more.trim());
+            }
+          case EditLetters(:final letters):
+            value = joinDictation(shape, value,
+                shape == DictationShape.email ? letters.toLowerCase() : letters);
+          case EditReplace(:final text):
+            final shaped = shapeDictation(shape, text);
+            if (shaped.isEmpty) {
+              if (++misheard >= kDictationTries) {
+                round = kDictationRounds;
+                continue;
+              }
+              ask = 'I did not catch the $name in that. Say it again, or say '
+                  'cancel.';
+              continue;
+            }
+            value = shaped;
         }
-        if (verdict == VoiceCommand.no || verdict == VoiceCommand.cancel) {
-          break;
-        }
-        heard = reply;
+        if (value != before) misheard = 0;
+        ask = readBackPrompt();
       }
       await speaker.speak('The $name was left as it was.');
       return null;
@@ -463,17 +601,6 @@ class VoiceController extends ChangeNotifier {
       _holds--;
       _rearm();
     }
-  }
-
-  /// Yes, no or cancel, when that is all [words] says. Two words at most, so
-  /// a name or an address that happens to contain "no" is not an answer.
-  static VoiceCommand? _shortAnswer(String words) {
-    if (spokenWords(words).length > 2) return null;
-    return parseVoiceCommand(words, only: const {
-      VoiceCommand.yes,
-      VoiceCommand.no,
-      VoiceCommand.cancel,
-    })?.command;
   }
 
   /// Presses the button [choices] names, asking first when it names more
@@ -522,6 +649,7 @@ class VoiceController extends ChangeNotifier {
         dispatch: false,
         preempt: true,
         quiet: true,
+        cue: true,
         listenFor: timeout,
       );
       return outcome == ListenOutcome.acted ? _lastParsed : null;
@@ -578,6 +706,9 @@ class VoiceController extends ChangeNotifier {
     bool settleEarly = false,
     bool capture = false,
     Iterable<String> Function()? echoOf,
+    Set<VoiceCommand>? wholePhrase,
+    bool cue = false,
+    ListenKind kind = ListenKind.command,
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
   }) async {
@@ -600,6 +731,12 @@ class VoiceController extends ChangeNotifier {
     // own: with hands-free on, "I need help finding the settings" across the
     // room started an emergency.
     final helpLimit = auto ? kHandsFreeHelpWords : null;
+    final whole = wholePhrase ?? scope?.wholePhrase ?? kWholePhraseCommands;
+    ParsedCommand? parse(String words, {Set<VoiceCommand>? among}) =>
+        parseVoiceCommand(words,
+            only: among ?? vocabulary,
+            helpMaxWords: helpLimit,
+            wholePhrase: whole);
 
     final readiness = await recognizer.prepare();
     if (attempt != _attempt) return ListenOutcome.cancelled;
@@ -644,6 +781,12 @@ class VoiceController extends ChangeNotifier {
     final hearing = await recognizer.listen(
       listenFor: listenFor,
       pauseFor: pauseFor,
+      kind: kind,
+      onListening: !cue
+          ? null
+          : () {
+              if (attempt == _attempt) listeningCue?.call();
+            },
       onPartial: (partial) {
         if (attempt != _attempt) return;
         _transcript = partial;
@@ -655,9 +798,7 @@ class VoiceController extends ChangeNotifier {
               if (attempt != _attempt) return false;
               final said = saidSoFar();
               return !mayBeEchoStart(partial, said) &&
-                  parseVoiceCommand(withoutEcho(partial, said),
-                          only: vocabulary, helpMaxWords: helpLimit) !=
-                      null;
+                  parse(withoutEcho(partial, said)) != null;
             },
     );
     if (attempt != _attempt) return ListenOutcome.cancelled;
@@ -715,18 +856,14 @@ class VoiceController extends ChangeNotifier {
         // A screen's own reading of the words never gets in the way of help.
         final onWords = scope?.onWords;
         final help = vocabulary.contains(VoiceCommand.help) &&
-            parseVoiceCommand(meant,
-                    only: const {VoiceCommand.help},
-                    helpMaxWords: helpLimit) !=
-                null &&
+            parse(meant, among: const {VoiceCommand.help}) != null &&
             (exact.isEmpty || isOnlyCommandPhrase(meant, VoiceCommand.help));
         if (dispatch && onWords != null && !help && await onWords(meant)) {
           if (attempt == _attempt) _set(VoicePhase.idle);
           return ListenOutcome.acted;
         }
 
-        final parsed = parseVoiceCommand(meant,
-            only: vocabulary, helpMaxWords: helpLimit);
+        final parsed = parse(meant);
         if (dispatch &&
             !help &&
             (parsed == null || !isOnlyCommandPhrase(meant, parsed.command))) {
@@ -741,6 +878,7 @@ class VoiceController extends ChangeNotifier {
         if (parsed == null) {
           if (quiet) {
             _set(VoicePhase.idle);
+            if (auto && dispatch) await _misheard(meant, vocabulary);
           } else {
             await _fail(VoiceInputFailure.notUnderstood,
                 only: vocabulary, transcript: words);
@@ -757,6 +895,32 @@ class VoiceController extends ChangeNotifier {
         }
         return ListenOutcome.acted;
     }
+  }
+
+  DateTime? _misheardAt;
+  String? _misheardWords;
+
+  /// Hands-free heard what might have been a command, and was not one. Said
+  /// once in [kMisheardCooldown], and not for the same words twice, so the
+  /// room's conversation does not get a reply every few seconds - but
+  /// someone who half-said "navigat for me" hears what to say instead.
+  Future<void> _misheard(String words, Set<VoiceCommand> vocabulary) async {
+    if (!looksLikeCommandAttempt(words,
+        allowed: vocabulary,
+        labels: [for (final t in targets.current) t.label])) {
+      return;
+    }
+    final now = _now();
+    final last = _misheardAt;
+    if (words == _misheardWords) return;
+    if (last != null && now.difference(last) < kMisheardCooldown) return;
+    _misheardAt = now;
+    _misheardWords = words;
+    await speaker.speak(voiceFailureMessage(
+      VoiceInputFailure.notUnderstood,
+      transcript: words,
+      examples: examplesFor(vocabulary).take(3).toList(),
+    ));
   }
 
   static ListenOutcome _outcomeFor(VoiceInputFailure failure) =>
@@ -777,7 +941,9 @@ class VoiceController extends ChangeNotifier {
     if (scope?.exclusive ?? false) return;
     final outcome =
         await actions().handle(parsed.command, argument: parsed.argument);
-    if (outcome.repeatLast) {
+    if (outcome.stopSpeaking) {
+      await speaker.stop();
+    } else if (outcome.repeatLast) {
       await speaker.repeat();
     } else {
       await speaker.speak(outcome.spoken);

@@ -124,4 +124,24 @@ void main() {
       expect(kArgumentHints[command], isNotEmpty, reason: '$command');
     }
   });
+
+  group('whole-phrase commands', () {
+    test('"please cancel it" cancels where a screen hears cancel anywhere', () {
+      expect(
+          parseVoiceCommand('please cancel it',
+                  only: kCancellationCommands, wholePhrase: const {})
+              ?.command,
+          VoiceCommand.cancel);
+      expect(
+          parseVoiceCommand('please cancel it',
+                  only: kEverydayCommands, wholePhrase: kWholePhraseCommands)
+              ?.command,
+          isNull);
+      expect(
+          parseVoiceCommand('cancel please',
+                  only: kEverydayCommands, wholePhrase: kWholePhraseCommands)
+              ?.command,
+          VoiceCommand.cancel);
+    });
+  });
 }

@@ -51,6 +51,16 @@ enum VoiceInputFailure {
   failed,
 }
 
+/// What a window is listening for.
+enum ListenKind {
+  /// A few words to act on.
+  command,
+
+  /// Something to be written down - an email address, a name. Longer, with
+  /// pauses in it, and the recogniser is told so.
+  dictation,
+}
+
 /// The outcome of one listening window.
 sealed class VoiceHearing {
   const VoiceHearing();
@@ -83,11 +93,20 @@ abstract interface class SpeechRecognizer {
   /// result, that partial is what was [Heard]. "Cancel" said over the SOS
   /// countdown should not wait for two seconds of silence the countdown never
   /// leaves.
+  ///
+  /// [onListening] is called when the microphone is actually open - not when
+  /// it was asked for - so a cue there is a cue to start talking.
+  ///
+  /// However short [pauseFor] is, up to [kStartGrace] is allowed before the
+  /// first word: the silence rule starts when the microphone opens, and
+  /// someone told "say the email address" takes a moment to begin.
   Future<VoiceHearing> listen({
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
     void Function(String partial)? onPartial,
     bool Function(String partial)? settleOn,
+    void Function()? onListening,
   });
 
   /// Stops listening without waiting for a result.
@@ -99,6 +118,15 @@ const Duration kListenWindow = Duration(seconds: 8);
 
 /// Silence that ends a phrase.
 const Duration kPauseEndsPhrase = Duration(seconds: 2);
+
+/// How long a dictation window stays open, and the silence that ends it.
+/// An address said with a pause to remember it used to be cut off at two
+/// seconds.
+const Duration kDictationWindow = Duration(seconds: 20);
+const Duration kDictationPause = Duration(milliseconds: 2500);
+
+/// The silence allowed before the first word of any window.
+const Duration kStartGrace = Duration(seconds: 6);
 
 VoiceInputFailure failureForReadiness(RecognizerReadiness readiness) =>
     switch (readiness) {

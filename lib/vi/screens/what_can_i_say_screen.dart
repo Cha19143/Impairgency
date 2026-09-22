@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/speech/speaker.dart';
+import '../../core/voice/dictation_edit.dart';
 import '../../core/voice/voice_commands.dart';
 import '../widgets/vi_button.dart';
 
@@ -37,6 +38,10 @@ class WhatCanISayScreen extends StatelessWidget {
       lines.add('$example, to ${kCommandDescriptions[command]!.toLowerCase()}.');
     }
     lines.add(kPressAnyButton);
+    lines.add('While you are saying a field:');
+    for (final entry in kDictationEditWords.entries) {
+      lines.add('${entry.value.first}, to ${entry.key.toLowerCase()}.');
+    }
     return lines.join(' ');
   }
 
@@ -74,6 +79,24 @@ class WhatCanISayScreen extends StatelessWidget {
                         description: kCommandDescriptions[command]!,
                         after: kArgumentHints[command],
                       ),
+                  // The words that edit a field being said, from the same
+                  // list the dictation parser reads.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 14),
+                    child: Semantics(
+                      header: true,
+                      child: const Text(
+                        'While saying a field',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  for (final entry in kDictationEditWords.entries)
+                    _CommandRow(words: entry.value, description: entry.key),
                 ],
               ),
             ),

@@ -103,13 +103,14 @@ class SettingsScreen extends StatelessWidget {
             ),
           if (onToggleHandsFree != null)
             ViButton(
-              label: handsFree
-                  ? 'Hands-free voice: on'
-                  : 'Hands-free voice: off',
+              // The state is not in the label. "Hands-free voice: on" as a
+              // button's name made "turn on hands-free" press it - and turn
+              // it off.
+              label: 'Hands-free voice',
               detail: handsFree
-                  ? 'Listens without a tap on every screen, for commands '
+                  ? 'On: listens without a tap on every screen, for commands '
                       "and buttons' names. Tap to turn it off."
-                  : 'Tap to speak before each command. Tap to turn '
+                  : 'Off: tap to speak before each command. Tap to turn '
                       'hands-free on.',
               icon: handsFree ? Icons.mic : Icons.mic_off_outlined,
               kind: ViButtonKind.secondary,

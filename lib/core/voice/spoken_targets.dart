@@ -6,6 +6,7 @@
 /// Pure, so the matching is tested without a microphone or a screen.
 library;
 
+import 'fuzzy.dart';
 import 'voice_commands.dart';
 
 /// Said before a button's name without being part of it.
@@ -38,7 +39,6 @@ const Set<String> _filler = {
   'your',
   'this',
   'that',
-  'on',
   'in',
   'button',
   'please',
@@ -51,11 +51,15 @@ const int kTargetSlack = 2;
 
 /// The words that identify [text]: lower case, press words off the front,
 /// filler out.
+///
+/// "On" is kept - "turn on hands-free" is not "hands-free" - except straight
+/// after a press word: "tap on Back".
 List<String> identifyingWords(String text) {
   final words = spokenWords(text);
   var start = 0;
   while (start < words.length - 1 && kPressWords.contains(words[start])) {
     start++;
+    if (start < words.length - 1 && words[start] == 'on') start++;
   }
   final rest = words.sublist(start);
   final kept = [
@@ -84,7 +88,7 @@ List<int> matchSpokenTargets(String words, List<String> labels,
       exact.add(i);
     } else if (!exactOnly &&
         said.length <= label.length + kTargetSlack &&
-        label.every(said.contains)) {
+        label.every((l) => said.any((w) => wordsAlike(w, l)))) {
       loose.add(i);
     }
   }
@@ -119,7 +123,7 @@ const List<Set<String>> _ordinals = [
 bool _same(List<String> a, List<String> b) {
   if (a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
+    if (!wordsAlike(b[i], a[i])) return false;
   }
   return true;
 }

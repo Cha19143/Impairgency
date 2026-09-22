@@ -25,8 +25,10 @@ class OpenWindows implements SpeechRecognizer {
   Future<VoiceHearing> listen({
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
     void Function(String partial)? onPartial,
     bool Function(String partial)? settleOn,
+    void Function()? onListening,
   }) {
     final window = Completer<VoiceHearing>();
     sessions.add(window);

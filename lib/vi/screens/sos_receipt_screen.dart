@@ -97,6 +97,8 @@ class _SosReceiptScreenState extends State<SosReceiptScreen>
         onCommand: _onVoice,
         exclusive: true,
         echoOf: () => [widget.receipt.spoken, ?_hint],
+        // "Please cancel it" means it is over, here.
+        wholePhrase: const {},
       ));
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -109,4 +109,48 @@ void main() {
         'the clinic on rizal');
     expect(shapeDictation(DictationShape.words, '   '), '');
   });
+
+  group('round 4: addresses as people say them', () {
+    String email(String heard) => shapeDictation(DictationShape.email, heard);
+
+    test('the lead-in and the politeness are not the address', () {
+      expect(email('my email is j d e x at gmail dot com'), 'jdex@gmail.com');
+      expect(email('ang email ko ay ana at yahoo dot com po'),
+          'ana@yahoo.com');
+      expect(email('it is ben at gmail dot com thank you'), 'ben@gmail.com');
+    });
+
+    test('symbols said the ways people say them', () {
+      expect(email('mark under score 92 at outlook dot com'),
+          'mark_92@outlook.com');
+      expect(email('ana at the rate gmail dotcom'), 'ana@gmail.com');
+      expect(email('ana arroba yahoo tuldok com'), 'ana@yahoo.com');
+      expect(email('ben at g mail dot com'), 'ben@gmail.com');
+      expect(email('lea gitling cruz at icloud dot com'),
+          'lea-cruz@icloud.com');
+    });
+
+    test('letters by name, beside other letters', () {
+      expect(email('jay dee ee ex at gmail dot com'), 'jdex@gmail.com');
+      expect(email('b as in boy e n at gmail dot com'), 'ben@gmail.com');
+    });
+
+    test('numbers as they are said', () {
+      expect(email('ana twenty two at gmail dot com'), 'ana22@gmail.com');
+      expect(email('ana double seven at gmail dot com'), 'ana77@gmail.com');
+      expect(email('ana nineteen ninety at gmail dot com'),
+          'ana1990@gmail.com');
+    });
+
+    test('accents are typed without them', () {
+      expect(email('nuñez at gmail dot com'), 'nunez@gmail.com');
+    });
+
+    test('a phone number: tens, doubles, and a hundred', () {
+      String phone(String heard) => shapeDictation(DictationShape.phone, heard);
+      expect(phone('zero nine one seven double five'), '091755');
+      expect(phone('zero nine one seven one hundred five'), '0917105');
+      expect(phone('plus six three nine seventeen'), '+63917');
+    });
+  });
 }

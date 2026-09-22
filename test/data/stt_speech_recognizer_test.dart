@@ -13,6 +13,8 @@ class FakeBackend implements SpeechBackend {
   final results = <void Function(SpeechRecognitionResult)>[];
   int listens = 0;
   int cancels = 0;
+  final options = <SpeechListenOptions>[];
+  final pauses = <Duration>[];
 
   @override
   bool isListening = false;
@@ -36,9 +38,13 @@ class FakeBackend implements SpeechBackend {
     required SpeechListenOptions options,
   }) async {
     listens++;
+    this.options.add(options);
     results.add(onResult);
     isListening = true;
   }
+
+  @override
+  void changePauseFor(Duration pauseFor) => pauses.add(pauseFor);
 
   @override
   Future<void> cancel() async {
@@ -200,6 +206,65 @@ void main() {
 
       backend.heard('cancel');
       expect(((await hearing) as Heard).words, 'cancel');
+    });
+  });
+
+  group('round 4: time to start talking', () {
+    test('up to six seconds before the first word, then the window\'s own '
+        'silence rule', () async {
+      // The pause timer starts when the microphone opens. Someone who took
+      // two seconds to begin an email address lost the window.
+      final hearing = recognizer.listen(pauseFor: const Duration(seconds: 2));
+      await pumpEventQueue();
+      expect(backend.options.single.pauseFor, kStartGrace);
+      backend.status(SpeechToText.listeningStatus);
+      backend.partial('j');
+      expect(backend.pauses, [const Duration(seconds: 2)]);
+      backend.partial('j d');
+      expect(backend.pauses, hasLength(1), reason: 'once');
+      backend.heard('j d e x');
+      expect(await hearing, isA<Heard>());
+    });
+
+    test('a window with a long pause already needs no grace', () async {
+      final hearing = recognizer.listen(pauseFor: const Duration(seconds: 8));
+      await pumpEventQueue();
+      expect(backend.options.single.pauseFor, const Duration(seconds: 8));
+      backend.status(SpeechToText.listeningStatus);
+      backend.heard('scan');
+      await hearing;
+      expect(backend.pauses, isEmpty);
+    });
+
+    test('dictation asks the platform for dictation', () async {
+      final hearing = recognizer.listen(kind: ListenKind.dictation);
+      await pumpEventQueue();
+      expect(backend.options.single.listenMode, ListenMode.dictation);
+      backend.status(SpeechToText.listeningStatus);
+      backend.heard('ana');
+      await hearing;
+
+      clock = clock.add(const Duration(seconds: 1));
+      backend.isListening = false;
+      final command = recognizer.listen();
+      await pumpEventQueue();
+      expect(backend.options, hasLength(2));
+      expect(backend.options.last.listenMode, ListenMode.confirmation);
+      backend.status(SpeechToText.listeningStatus);
+      backend.heard('scan');
+      await command;
+    });
+
+    test('says when the microphone is really open, once', () async {
+      var opened = 0;
+      final hearing = recognizer.listen(onListening: () => opened++);
+      await pumpEventQueue();
+      expect(opened, 0, reason: 'asked for is not open');
+      backend.status(SpeechToText.listeningStatus);
+      backend.status(SpeechToText.listeningStatus);
+      expect(opened, 1);
+      backend.heard('scan');
+      await hearing;
     });
   });
 }

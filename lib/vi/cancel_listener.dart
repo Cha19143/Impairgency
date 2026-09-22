@@ -76,6 +76,8 @@ class CancelListener {
           preempt: true,
           settleEarly: true,
           echoOf: echoOf,
+          // "Cancel it", "please stop" - anything with a cancel word in it.
+          wholePhrase: const {},
           listenFor: window,
           pauseFor: kCancelPause,
         );

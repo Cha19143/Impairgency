@@ -41,6 +41,8 @@ void main() {
       for (final command in VoiceCommand.values) {
         final outcome = await actions(summary: 'Your location was sent.')
             .handle(command);
+        // "Stop" means stop talking: saying something would not be stopping.
+        if (outcome.stopSpeaking) continue;
         expect(outcome.spoken.trim(), isNotEmpty, reason: '$command');
       }
     });
@@ -157,10 +159,32 @@ void main() {
   });
 
   group('cancel outside a countdown', () {
-    test('says there is nothing to cancel rather than doing nothing', () async {
+    test('stops the app talking, and says nothing over it', () async {
       final outcome = await actions().handle(VoiceCommand.cancel);
-      expect(outcome.spoken, contains('nothing to cancel'));
+      expect(outcome.stopSpeaking, isTrue);
       expect(outcome.route, isNull);
     });
+  });
+
+  group('hands-free, by voice', () {
+    test('switches it, and says which way', () async {
+      final set = <bool>[];
+      final a = VoiceActions(
+        location: const _Source(LocationAvailability.denied),
+        fetchFix: () async =>
+            (availability: LocationAvailability.denied, summary: null),
+        setHandsFree: (on) async => set.add(on),
+      );
+      expect((await a.handle(VoiceCommand.handsFreeOn)).spoken,
+          kHandsFreeOnSaid);
+      expect((await a.handle(VoiceCommand.handsFreeOff)).spoken,
+          kHandsFreeOffSaid);
+      expect(set, [true, false]);
+    });
+  });
+
+  test('who is here, away from Scan, opens it', () async {
+    final outcome = await actions().handle(VoiceCommand.whoIsHere);
+    expect(outcome.route, Routes.scan);
   });
 }

@@ -151,4 +151,84 @@ void main() {
       }
     });
   });
+
+  group('round 4: what testers said that did nothing', () {
+    test('one letter off a long keyword still counts', () {
+      expect(matchVoiceCommand('navigat for me'), VoiceCommand.navigate);
+      expect(matchVoiceCommand('asistance'), VoiceCommand.navigate);
+    });
+
+    test('asking where a place is asks the way there', () {
+      final p = parseVoiceCommand('where is the clinic');
+      expect(p?.command, VoiceCommand.navigateTo);
+      expect(p?.argument, 'the clinic');
+      expect(parseVoiceCommand('saan ang palengke')?.argument, 'palengke');
+      expect(parseVoiceCommand('find jollibee')?.argument, 'jollibee');
+      expect(matchVoiceCommand('where am i'), VoiceCommand.whereAmI);
+      expect(matchVoiceCommand('nasaan ako'), VoiceCommand.whereAmI);
+      expect(matchVoiceCommand('where'), isNull, reason: 'where, alone, is nothing');
+    });
+
+    test('Tagalog particles do not break a trigger', () {
+      final p = parseVoiceCommand('dalhin mo ako sa palengke');
+      expect(p?.command, VoiceCommand.navigateTo);
+      expect(p?.argument, 'palengke');
+      expect(matchVoiceCommand('tulungan mo nga ako'), VoiceCommand.help);
+    });
+
+    test('guardian alone is a button, not a call', () {
+      expect(matchVoiceCommand('guardian'), isNull);
+      expect(matchVoiceCommand('call my guardian'), VoiceCommand.callGuardian);
+    });
+
+    test('hands-free on and off, from anywhere', () {
+      expect(matchVoiceCommand('turn on hands-free'), VoiceCommand.handsFreeOn);
+      expect(matchVoiceCommand('turn off hands free voice'),
+          VoiceCommand.handsFreeOff);
+      expect(matchVoiceCommand('hands free off please'),
+          VoiceCommand.handsFreeOff);
+    });
+
+    test('friends, from the home screen', () {
+      expect(parseVoiceCommand('hello friend Sam')?.command,
+          VoiceCommand.rememberFriend);
+      expect(matchVoiceCommand('who is here'), VoiceCommand.whoIsHere);
+    });
+
+    test('everyday stop, back and who-is-here are whole phrases', () {
+      expect(matchVoiceCommand('stop'), VoiceCommand.cancel);
+      expect(matchVoiceCommand('never mind'), VoiceCommand.cancel);
+      expect(matchVoiceCommand('go back please'), VoiceCommand.back);
+      expect(matchVoiceCommand('take me back'), VoiceCommand.back);
+      expect(matchVoiceCommand('my back hurts'), isNull);
+      expect(matchVoiceCommand('who is here with me today'), isNull);
+    });
+
+    test('I am okay is its own command', () {
+      expect(matchVoiceCommand("I'm okay", only: kAfterCallCommands),
+          VoiceCommand.allClear);
+      expect(matchVoiceCommand('ayos lang po', only: kAfterCallCommands),
+          VoiceCommand.allClear);
+    });
+
+    test('something that sounds like a command attempt, and chatter', () {
+      expect(looksLikeCommandAttempt('navigat for me', allowed: kEverydayCommands),
+          isTrue);
+      expect(
+          looksLikeCommandAttempt('blah blah scan', allowed: kEverydayCommands),
+          isTrue);
+      expect(
+          looksLikeCommandAttempt('did you remember the bread',
+              allowed: kEverydayCommands),
+          isFalse);
+      expect(
+          looksLikeCommandAttempt('the weather is nice',
+              allowed: kEverydayCommands),
+          isFalse);
+      expect(
+          looksLikeCommandAttempt('saved plases',
+              allowed: const {}, labels: ['Saved places']),
+          isTrue);
+    });
+  });
 }

@@ -63,8 +63,10 @@ class FakeRecognizer implements SpeechRecognizer {
   Future<VoiceHearing> listen({
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
     void Function(String partial)? onPartial,
     bool Function(String partial)? settleOn,
+    void Function()? onListening,
   }) async {
     listens++;
     final held = hold;
@@ -95,8 +97,10 @@ class SessionRecognizer implements SpeechRecognizer {
   Future<VoiceHearing> listen({
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
     void Function(String partial)? onPartial,
     bool Function(String partial)? settleOn,
+    void Function()? onListening,
   }) {
     final session = Completer<VoiceHearing>();
     sessions.add(session);
@@ -130,8 +134,10 @@ class PartialRecognizer implements SpeechRecognizer {
   Future<VoiceHearing> listen({
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
     void Function(String partial)? onPartial,
     bool Function(String partial)? settleOn,
+    void Function()? onListening,
   }) {
     _settleOn = settleOn;
     final session = Completer<VoiceHearing>();
@@ -631,88 +637,189 @@ void main() {
   });
 
   group('dictation', () {
-    test('reads back what it heard, and keeps it on yes', () async {
-      final r = SessionRecognizer();
-      final speaker = RecordingSpeaker();
-      final c = controller(r, speaker);
+    late SessionRecognizer r;
+    late RecordingSpeaker speaker;
+    late VoiceController c;
 
+    setUp(() {
+      r = SessionRecognizer();
+      speaker = RecordingSpeaker();
+      c = controller(r, speaker);
+    });
+
+    Future<void> say(String words) async {
+      r.sessions.last.complete(Heard(words));
+      await pumpEventQueue();
+    }
+
+    Future<void> silence() async {
+      r.sessions.last.complete(const NotHeard(VoiceInputFailure.nothingHeard));
+      await pumpEventQueue();
+    }
+
+    test('reads back what it heard, and keeps it on done', () async {
       final kept =
           c.dictate(label: 'Phone number', shape: DictationShape.phone);
       await pumpEventQueue();
       expect(speaker.said.last, 'Say the phone number.');
 
-      r.sessions.last.complete(const Heard(
-          'zero nine one seven one two three four five six seven'));
-      await pumpEventQueue();
+      await say('zero nine one seven one two three four five six seven');
       expect(speaker.said.last,
-          'Phone number: 0 9 1, 7 1 2, 3 4 5, 6 7. Say yes to keep it, or say '
-          'it again.');
+          'Phone number: 0 9 1, 7 1 2, 3 4 5, 6 7. Say done to keep it, add '
+          'and more, delete last word, spell it, or say it again.');
 
-      r.sessions.last.complete(const Heard('yes'));
+      await say('done');
       expect(await kept, '09171234567');
       expect(speaker.said.last, 'Phone number kept.');
     });
 
+    test('"correct" and "tama" keep it; they are not the new value', () async {
+      for (final word in ['correct', 'tama', "yes that's right"]) {
+        final kept = c.dictate(label: 'Name', shape: DictationShape.name);
+        await pumpEventQueue();
+        await say('ana');
+        await say(word);
+        expect(await kept, 'Ana', reason: word);
+      }
+    });
+
     test('anything else is the answer said again, and is read back in turn',
         () async {
-      final r = SessionRecognizer();
-      final speaker = RecordingSpeaker();
-      final c = controller(r, speaker);
-
       final kept = c.dictate(label: 'Email address', shape: DictationShape.email);
       await pumpEventQueue();
-      r.sessions.last.complete(const Heard('ana at gmail dot com'));
-      await pumpEventQueue();
+      await say('ana at gmail dot com');
       // A "no" inside a longer answer is part of the answer.
-      r.sessions.last.complete(const Heard('no reply at gmail dot com'));
-      await pumpEventQueue();
-      expect(speaker.said.last, startsWith('Email address: n o r e p l y at gmail'));
-
-      r.sessions.last.complete(const Heard('okay'));
+      await say('no reply at gmail dot com');
+      expect(speaker.said.last,
+          startsWith('Email address: n o r e p l y at gmail'));
+      await say('okay');
       expect(await kept, 'noreply@gmail.com');
     });
 
-    test('no, or cancel, leaves the field as it was', () async {
-      final r = SessionRecognizer();
-      final speaker = RecordingSpeaker();
-      final c = controller(r, speaker);
+    test('add, delete last word, spell, and done', () async {
+      final kept = c.dictate(label: 'Email address', shape: DictationShape.email);
+      await pumpEventQueue();
+      await say('ana at yahoo');
+      await say('add dot com');
+      expect(speaker.said.last, startsWith('Email address: a n a at yahoo dot com.'));
+      await say('delete last word');
+      expect(speaker.said.last, startsWith('Email address: a n a at yahoo dot.'));
+      await say('spell it');
+      expect(speaker.said.last, contains('letter by letter'));
+      await say('c o m');
+      await say('done');
+      expect(await kept, 'ana@yahoo.com');
+    });
 
+    test('an address that is not complete is not kept', () async {
+      final kept = c.dictate(label: 'Email address', shape: DictationShape.email);
+      await pumpEventQueue();
+      await say('ana at yahoo');
+      expect(speaker.said.last, contains('not a complete email address yet'));
+      await say('done');
+      expect(speaker.said.last, startsWith('That is not a complete email address'));
+      await say('add dot com');
+      await say('done');
+      expect(await kept, 'ana@yahoo.com');
+    });
+
+    test('read back, clear, and no', () async {
       final kept = c.dictate(label: 'Name', shape: DictationShape.name);
       await pumpEventQueue();
-      r.sessions.last.complete(const Heard('ana'));
-      await pumpEventQueue();
-      r.sessions.last.complete(const Heard('no'));
+      await say('ana cruz');
+      await say('read it back');
+      expect(speaker.said.last, 'Name: Ana Cruz. Say done, or change it.');
+      await say('start over');
+      expect(speaker.said.last, 'Cleared. Say the name.');
+      await say('ben');
+      await say('no');
+      expect(speaker.said.last, 'Say the name again.');
+      await say('lea');
+      await say('done');
+      expect(await kept, 'Lea');
+    });
 
+    test('cancel leaves the field as it was', () async {
+      final kept = c.dictate(label: 'Name', shape: DictationShape.name);
+      await pumpEventQueue();
+      await say('ana');
+      await say('cancel');
       expect(await kept, isNull);
       expect(speaker.said.last, 'The name was left as it was.');
     });
 
-    test('silence leaves the field as it was', () async {
-      final r = SessionRecognizer();
-      final c = controller(r, RecordingSpeaker());
-
+    test('silence asks again, and three leave the field as it was', () async {
       final kept = c.dictate(label: 'Name');
       await pumpEventQueue();
-      r.sessions.last.complete(const NotHeard(VoiceInputFailure.nothingHeard));
+      await silence();
+      expect(speaker.said.last, startsWith('I did not hear anything.'));
+      await silence();
+      await silence();
       expect(await kept, isNull);
     });
 
-    test('never presses a button, or acts on a command', () async {
-      final r = SessionRecognizer();
-      final routes = <String>[];
-      final c = controller(r, RecordingSpeaker(), routes: routes);
-      var pressed = 0;
-      c.targets.register(VoiceTarget('Scan', () => pressed++));
+    test('what the field held is added to, and never lost to silence',
+        () async {
+      final kept = c.dictate(
+          label: 'Name', shape: DictationShape.name, initial: 'Ana');
+      await pumpEventQueue();
+      await silence();
+      expect(speaker.said.last, contains('Name: Ana.'));
+      await say('add cruz');
+      await say('done');
+      expect(await kept, 'Ana Cruz');
+    });
 
-      final kept = c.dictate(label: 'Place name');
+    test('a dictation window is long, and tells the recogniser so', () async {
+      final heard = <(Duration, ListenKind)>[];
+      final c2 = controller(_Recording(r, heard), speaker);
+      final kept = c2.dictate(label: 'Name');
       await pumpEventQueue();
-      r.sessions.last.complete(const Heard('scan'));
+      await say('ana');
+      await say('done');
+      await kept;
+      expect(heard.first, (kDictationWindow, ListenKind.dictation));
+    });
+
+    test('never presses a button, or acts on a command', () async {
+      final routes = <String>[];
+      final c2 = controller(r, speaker, routes: routes);
+      var pressed = 0;
+      c2.targets.register(VoiceTarget('Scan', () => pressed++));
+
+      final kept = c2.dictate(label: 'Place name');
       await pumpEventQueue();
-      r.sessions.last.complete(const Heard('yes'));
+      await say('scan');
+      await say('yes');
 
       expect(await kept, 'scan');
       expect(pressed, 0);
       expect(routes, isEmpty);
+    });
+
+    test('the microphone opening is felt, for a question the app asked',
+        () async {
+      var buzzes = 0;
+      final c2 = VoiceController(
+        recognizer: _Opening(r),
+        speaker: speaker,
+        actions: () =>
+            const VoiceActions(location: _NoLocation(), fetchFix: _noFix),
+        listeningCue: () => buzzes++,
+      );
+      final kept = c2.dictate(label: 'Name');
+      await pumpEventQueue();
+      expect(buzzes, 1);
+      await say('ana');
+      await say('done');
+      await kept;
+
+      // A hands-free window, opened again and again, does not buzz.
+      final listening = c2.listen(auto: true, quiet: true);
+      await pumpEventQueue();
+      await say('the weather');
+      await listening;
+      expect(buzzes, 2, reason: 'two prompts, no hands-free window');
     });
   });
 
@@ -1007,4 +1114,106 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
   });
+
+  group('round 4: hands-free answers', () {
+    test('"stop" on its own stops the app talking, and says nothing', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      final c = controller(r, speaker);
+      final listening = c.listen(auto: true, quiet: true);
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('stop'));
+      await listening;
+      expect(speaker.stops, greaterThan(0));
+      expect(speaker.said, isEmpty);
+    });
+
+    test('a near miss is answered once in 20 seconds, and not for the same '
+        'words twice', () async {
+      final r = SessionRecognizer();
+      final speaker = RecordingSpeaker();
+      var now = DateTime(2026, 9, 18, 10);
+      final c = VoiceController(
+        recognizer: r,
+        speaker: speaker,
+        actions: () =>
+            const VoiceActions(location: _NoLocation(), fetchFix: _noFix),
+        now: () => now,
+      );
+
+      Future<void> hear(String words) async {
+        final listening = c.listen(auto: true, quiet: true);
+        await pumpEventQueue();
+        r.sessions.last.complete(Heard(words));
+        await listening;
+      }
+
+      await hear('arround here');
+      expect(speaker.said.single, startsWith('I heard "arround here"'));
+
+      now = now.add(const Duration(seconds: 5));
+      await hear('arround me');
+      expect(speaker.said, hasLength(1), reason: 'within 20 seconds');
+
+      now = now.add(const Duration(seconds: 30));
+      await hear('arround here');
+      await hear('did you remember the bread');
+      expect(speaker.said, hasLength(1),
+          reason: 'the same words again, then chatter');
+
+      await hear('arround me');
+      expect(speaker.said, hasLength(2));
+    });
+  });
+}
+
+/// Passes everything to [inner], noting each window's length and kind.
+class _Recording implements SpeechRecognizer {
+  _Recording(this.inner, this.heard);
+  final SpeechRecognizer inner;
+  final List<(Duration, ListenKind)> heard;
+
+  @override
+  Future<RecognizerReadiness> prepare() => inner.prepare();
+
+  @override
+  Future<VoiceHearing> listen({
+    Duration listenFor = kListenWindow,
+    Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
+    void Function(String partial)? onPartial,
+    bool Function(String partial)? settleOn,
+    void Function()? onListening,
+  }) {
+    heard.add((listenFor, kind));
+    return inner.listen(listenFor: listenFor, pauseFor: pauseFor);
+  }
+
+  @override
+  Future<void> cancel() => inner.cancel();
+}
+
+/// Says the microphone is open as soon as it is asked to open.
+class _Opening implements SpeechRecognizer {
+  _Opening(this.inner);
+  final SpeechRecognizer inner;
+
+  @override
+  Future<RecognizerReadiness> prepare() => inner.prepare();
+
+  @override
+  Future<VoiceHearing> listen({
+    Duration listenFor = kListenWindow,
+    Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
+    void Function(String partial)? onPartial,
+    bool Function(String partial)? settleOn,
+    void Function()? onListening,
+  }) {
+    onListening?.call();
+    return inner.listen(listenFor: listenFor, pauseFor: pauseFor);
+  }
+
+  @override
+  Future<void> cancel() => inner.cancel();
 }

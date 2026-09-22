@@ -11,6 +11,7 @@ import 'package:impairgency/core/voice/speech_recognizer.dart';
 import 'package:impairgency/data/text_reader.dart';
 import 'package:impairgency/vi/screens/dashboard_screen.dart';
 import 'package:impairgency/vi/screens/read_text_screen.dart';
+import 'package:impairgency/vi/voice_controller.dart' show kHandsFreeListening;
 import 'package:impairgency/vi/widgets/vi_button.dart';
 import 'package:impairgency/vi/widgets/vi_button_group.dart';
 
@@ -260,7 +261,8 @@ void main() {
     testWidgets('"basahin" reads what is in front of the camera',
         (tester) async {
       await open(tester);
-      expect(speaker.said.first, contains('say read'));
+      expect(speaker.said.first, anyOf(contains('say read'), kHandsFreeListening));
+      expect(speaker.said.join(' '), contains('say read'));
       expect(mic.open, isTrue, reason: 'listening without a tap');
 
       await hear(tester, 'basahin');

@@ -6,7 +6,12 @@ import '../core/voice/voice_commands.dart';
 
 /// What a spoken command does: something to say, and somewhere to go.
 class VoiceOutcome {
-  const VoiceOutcome({required this.spoken, this.route, this.repeatLast = false});
+  const VoiceOutcome({
+    required this.spoken,
+    this.route,
+    this.repeatLast = false,
+    this.stopSpeaking = false,
+  });
 
   final String spoken;
 
@@ -19,7 +24,16 @@ class VoiceOutcome {
   /// the empty string" are different things and a test caught me conflating
   /// them. Only the speaker knows what was said last.
   final bool repeatLast;
+
+  /// Stop the app talking, and say nothing in its place: "stop", said while
+  /// the app reads a long answer.
+  final bool stopSpeaking;
 }
+
+/// Said when hands-free is turned on or off by voice.
+const String kHandsFreeOnSaid = 'Hands-free voice is on. Just speak.';
+const String kHandsFreeOffSaid =
+    'Hands-free voice is off. Tap to speak before each command.';
 
 /// Handlers for the six functions §2.C names.
 ///
@@ -38,6 +52,7 @@ class VoiceActions {
     this.goTo,
     this.rememberFriend,
     this.forgetFriend,
+    this.setHandsFree,
   });
 
   final LocationSource location;
@@ -61,6 +76,9 @@ class VoiceActions {
   /// "Forget Sam": asks, then deletes Sam's saved face.
   final Future<VoiceOutcome> Function(String name)? forgetFriend;
 
+  /// "Turn on hands-free": the same switch as in Settings.
+  final Future<void> Function(bool on)? setHandsFree;
+
   /// What [command] does. [argument] is the place or name that came with it.
   Future<VoiceOutcome> handle(VoiceCommand command, {String? argument}) async =>
       switch (command) {
@@ -75,8 +93,10 @@ class VoiceActions {
         VoiceCommand.whereAmI => _whereAmI(),
         VoiceCommand.callGuardian => _callGuardian(),
         VoiceCommand.connectDevice => _connectDevice(),
+        // Said on its own, on an ordinary screen: stop talking. Screens with
+        // something to cancel - the SOS countdown - hear it themselves.
         VoiceCommand.cancel =>
-          const VoiceOutcome(spoken: 'There is nothing to cancel.'),
+          const VoiceOutcome(spoken: '', stopSpeaking: true),
         VoiceCommand.repeat => const VoiceOutcome(
             spoken: kNothingToRepeat, repeatLast: true),
         VoiceCommand.navigateTo => _goTo(argument),
@@ -102,9 +122,9 @@ class VoiceActions {
               'Say hello friend, and then their name.'),
         VoiceCommand.forgetFriend when forgetFriend != null =>
           _withName(argument, forgetFriend!, 'Say forget, and then their name.'),
-        VoiceCommand.rememberFriend ||
-        VoiceCommand.forgetFriend ||
-        VoiceCommand.whoIsHere =>
+        VoiceCommand.whoIsHere => const VoiceOutcome(
+            spoken: 'Opening scan, to see who is here.', route: Routes.scan),
+        VoiceCommand.rememberFriend || VoiceCommand.forgetFriend =>
           const VoiceOutcome(
               spoken: 'People are recognised on the scan screen. Say scan to '
                   'open it.'),
@@ -116,7 +136,20 @@ class VoiceActions {
         // The SOS receipt hears this itself.
         VoiceCommand.allClear => const VoiceOutcome(
             spoken: 'There is no emergency to clear.'),
+        VoiceCommand.handsFreeOn => _handsFree(true),
+        VoiceCommand.handsFreeOff => _handsFree(false),
       };
+
+  Future<VoiceOutcome> _handsFree(bool on) async {
+    final set = setHandsFree;
+    if (set == null) {
+      return const VoiceOutcome(
+          spoken: 'Hands-free voice is changed in settings.',
+          route: Routes.settings);
+    }
+    await set(on);
+    return VoiceOutcome(spoken: on ? kHandsFreeOnSaid : kHandsFreeOffSaid);
+  }
 
   Future<VoiceOutcome> _withName(String? name,
       Future<VoiceOutcome> Function(String name) handler, String ask) async {

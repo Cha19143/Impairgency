@@ -5,6 +5,8 @@
 /// `lib/vi/voice_controller.dart` and `lib/data/stt_speech_recognizer.dart`.
 library;
 
+import 'fuzzy.dart';
+
 /// The commands the app understands.
 ///
 /// The first six are the functions the requirements document names in §2.C:
@@ -49,6 +51,10 @@ enum VoiceCommand {
   /// "I am okay", after an SOS call: the emergency is over, and the
   /// guardian is told so.
   allClear,
+
+  /// Hands-free listening on or off, from any screen.
+  handsFreeOn,
+  handsFreeOff,
 }
 
 /// Words and phrases that map to each command.
@@ -82,6 +88,7 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
     'sandali',
     'hindi',
     'huwag',
+    'never mind',
   ],
   // Not one of the six functions either. It exists because someone who missed
   // a spoken warning has no way to see it again - "repeat" is the only route
@@ -122,6 +129,18 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
     'directions to',
     'walk me to',
     'go to',
+    // Asking where a place is, is asking the way to it. "Where am I" is
+    // another command, and "where" alone is nothing.
+    'where is',
+    'find',
+    'search for',
+    'look for',
+    'hanapin',
+    'hanapin ang',
+    'nasaan ang',
+    'saan ang',
+    'saan ang daan papunta sa',
+    'samahan ako sa',
     // "Take me home" - the example the app itself gives. Not "take me back",
     // which is the way to the main screen; see [_notPlaces].
     'take me',
@@ -134,7 +153,17 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
   VoiceCommand.next: ['next', 'next line', 'sunod', 'susunod'],
   VoiceCommand.pause: ['pause', 'stop reading', 'hinto', 'tigil', 'stop'],
   VoiceCommand.resume: ['continue', 'resume', 'keep reading', 'ituloy', 'tuloy'],
-  VoiceCommand.back: ['back', 'go back', 'home', 'go home', 'bumalik', 'balik'],
+  VoiceCommand.back: [
+    'back',
+    'go back',
+    'take me back',
+    'home',
+    'go home',
+    'main screen',
+    'go to the main screen',
+    'bumalik',
+    'balik',
+  ],
   VoiceCommand.stopDirections: [
     'stop directions',
     'stop navigation',
@@ -142,7 +171,18 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
     'end directions',
   ],
   VoiceCommand.savePlace: ['save this place', 'save place', 'save it'],
-  VoiceCommand.whereAmI: ['where', 'location', 'nasaan', 'saan', 'lokasyon'],
+  // Not "where" on its own: "where is the clinic" is the way there.
+  VoiceCommand.whereAmI: [
+    'where am i',
+    'where are we',
+    'my location',
+    'location',
+    'nasaan ako',
+    'nasaan tayo',
+    'nasaan',
+    'saan ako',
+    'lokasyon',
+  ],
   // Not "guardian" on its own: that is the name of a Settings button, and
   // saying it to press the button started an emergency alert.
   VoiceCommand.callGuardian: [
@@ -215,6 +255,27 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
     'ayos lang',
     'ayos na',
   ],
+  // "Hands-free" reaches the parser as "hands free".
+  VoiceCommand.handsFreeOn: [
+    'turn on hands free',
+    'turn on hands free voice',
+    'turn hands free on',
+    'hands free on',
+    'hands free voice on',
+    'start hands free',
+    'enable hands free',
+    'buksan ang hands free',
+  ],
+  VoiceCommand.handsFreeOff: [
+    'turn off hands free',
+    'turn off hands free voice',
+    'turn hands free off',
+    'hands free off',
+    'hands free voice off',
+    'stop hands free',
+    'disable hands free',
+    'patayin ang hands free',
+  ],
 };
 
 /// Commands whose trigger must start the phrase and be followed by what they
@@ -234,22 +295,43 @@ const Map<VoiceCommand, String> kArgumentHints = {
 
 /// Commands offered on ordinary screens.
 ///
-/// [VoiceCommand.cancel] is excluded on purpose. 'hindi' is an everyday
-/// Filipino word and 'stop' is an everyday English one; listening for them
-/// everywhere would hijack normal speech. Screens that can actually be
-/// cancelled - the SOS countdown, chiefly - opt in with [only].
+/// [VoiceCommand.cancel] - which stops the app talking - is here, but only
+/// said on its own: 'hindi' is an everyday Filipino word and 'stop' an
+/// everyday English one, and heard in the middle of a sentence they are
+/// that sentence. See [kWholePhraseCommands].
+///
+/// Friends are here so "hello friend Sam" works from the home screen: it
+/// opens Scan to meet them.
 const Set<VoiceCommand> kEverydayCommands = {
   VoiceCommand.help,
+  VoiceCommand.cancel,
   VoiceCommand.repeat,
   VoiceCommand.scan,
   VoiceCommand.navigate,
   VoiceCommand.navigateTo,
   VoiceCommand.read,
+  VoiceCommand.back,
   VoiceCommand.whereAmI,
   VoiceCommand.callGuardian,
   VoiceCommand.connectDevice,
   VoiceCommand.whatCanISay,
   VoiceCommand.fillIn,
+  VoiceCommand.rememberFriend,
+  VoiceCommand.forgetFriend,
+  VoiceCommand.whoIsHere,
+  VoiceCommand.handsFreeOn,
+  VoiceCommand.handsFreeOff,
+};
+
+/// Commands heard only as the whole of what was said, fillers aside. Each
+/// is made of words people say all the time - "stop", "back", "who is" - and
+/// the microphone is open while they talk.
+const Set<VoiceCommand> kWholePhraseCommands = {
+  VoiceCommand.cancel,
+  VoiceCommand.back,
+  VoiceCommand.whoIsHere,
+  VoiceCommand.handsFreeOn,
+  VoiceCommand.handsFreeOff,
 };
 
 /// Only the ways to stop something already in progress.
@@ -356,6 +438,7 @@ class ParsedCommand {
 const List<String> _leadingFillers = [
   'i would like to',
   'i want to',
+  'i said',
   'can you',
   'could you',
   'would you',
@@ -365,8 +448,37 @@ const List<String> _leadingFillers = [
   'hey',
   'um',
   'uh',
+  'pwede bang',
+  'pwede',
+  'gusto kong',
+  'gusto ko',
+  'paki',
 ];
-const Set<String> _trailingFillers = {'please', 'po', 'naman', 'now', 'thanks'};
+const Set<String> _trailingFillers = {
+  'please',
+  'po',
+  'naman',
+  'now',
+  'thanks',
+  'thank you',
+  'na',
+  'salamat',
+  'for me',
+};
+
+/// Tagalog particles that soften or stress a request without changing it:
+/// "dalhin *mo* ako sa palengke", "tulungan *mo nga* ako". Matched past, so a
+/// trigger with none of them still starts the phrase.
+const Set<String> kParticles = {
+  'mo',
+  'po',
+  'ho',
+  'nga',
+  'naman',
+  'niyo',
+  'muna',
+  'lang',
+};
 
 /// The most words a help phrase may have in a window the app opened by
 /// itself. "Help", "help me", "tulong po" - not "I need help finding the
@@ -406,9 +518,22 @@ const Set<String> kNegations = {
 /// only in a phrase of at most that many words, with no negation in it. A tap
 /// on the microphone leaves it null - someone who pressed the button and said
 /// help meant it.
+///
+/// [wholePhrase] names commands heard only as all of what was said, fillers
+/// and particles aside. Left null it is [kWholePhraseCommands] for the
+/// everyday vocabulary - so "my back hurts" is not "back" - and nothing for a
+/// vocabulary a screen chose itself.
+///
+/// A word of five letters or more one edit from a keyword's counts as it
+/// ([wordsAlike]), except the first word of a place or name command's
+/// trigger, which is how the argument is found.
 ParsedCommand? parseVoiceCommand(String transcript,
-    {Set<VoiceCommand>? only, int? helpMaxWords}) {
+    {Set<VoiceCommand>? only,
+    int? helpMaxWords,
+    Set<VoiceCommand>? wholePhrase}) {
   final allowed = only ?? kEverydayCommands;
+  final whole =
+      wholePhrase ?? (only == null ? kWholePhraseCommands : const {});
   final words = spokenWords(transcript);
   if (words.isEmpty) return null;
 
@@ -443,8 +568,17 @@ ParsedCommand? parseVoiceCommand(String transcript,
     end--;
   }
 
-  for (final at in starts) {
-    final core = words.sublist(at, end);
+  // With the particles out, for the triggers - "dalhin mo ako sa" is
+  // "dalhin ako sa" - and for the whole phrase.
+  final plainCore = [
+    for (final w in words.sublist(start, end))
+      if (!kParticles.contains(w)) w,
+  ];
+
+  for (final core in [
+    for (final at in starts) words.sublist(at, end),
+    if (plainCore.length != end - start) plainCore,
+  ]) {
     for (final command in kArgumentCommands) {
       if (!allowed.contains(command)) continue;
       final triggers = [...kVoiceKeywords[command]!]
@@ -464,6 +598,10 @@ ParsedCommand? parseVoiceCommand(String transcript,
   }
 
   // Longest phrase first, so "stop directions" is not heard as "stop".
+  final plain = [
+    for (final w in words)
+      if (!kParticles.contains(w)) w,
+  ];
   ParsedCommand? best;
   var bestLength = 0;
   for (final entry in kVoiceKeywords.entries) {
@@ -474,9 +612,14 @@ ParsedCommand? parseVoiceCommand(String transcript,
         command == VoiceCommand.help) {
       continue;
     }
+    final onlyWhole = whole.contains(command);
     for (final phrase in entry.value) {
       final p = phrase.split(' ');
-      if (p.length > bestLength && _contains(words, p)) {
+      if (p.length <= bestLength) continue;
+      final found = onlyWhole
+          ? _same(words.sublist(start, end), p) || _same(plainCore, p)
+          : _contains(words, p) || _contains(plain, p);
+      if (found) {
         best = ParsedCommand(command, heard: transcript);
         bestLength = p.length;
       }
@@ -510,12 +653,18 @@ bool _shortHelp(List<String> words, int maxWords) {
 }
 
 /// [parseVoiceCommand], for callers that only want the command.
-VoiceCommand? matchVoiceCommand(String transcript, {Set<VoiceCommand>? only}) =>
-    parseVoiceCommand(transcript, only: only)?.command;
+VoiceCommand? matchVoiceCommand(String transcript,
+        {Set<VoiceCommand>? only, Set<VoiceCommand>? wholePhrase}) =>
+    parseVoiceCommand(transcript, only: only, wholePhrase: wholePhrase)
+        ?.command;
 
+/// Whether [words] begins with [prefix]. Its first word exactly - that is
+/// where a trigger is told from the words before it - the rest alike.
 bool _startsWith(List<String> words, List<String> prefix) {
   for (var i = 0; i < prefix.length; i++) {
-    if (words[i] != prefix[i]) return false;
+    if (i == 0 ? words[i] != prefix[i] : !wordsAlike(words[i], prefix[i])) {
+      return false;
+    }
   }
   return true;
 }
@@ -524,7 +673,7 @@ bool _contains(List<String> words, List<String> phrase) {
   for (var i = 0; i + phrase.length <= words.length; i++) {
     var all = true;
     for (var j = 0; j < phrase.length; j++) {
-      if (words[i + j] != phrase[j]) {
+      if (!wordsAlike(words[i + j], phrase[j])) {
         all = false;
         break;
       }
@@ -533,6 +682,39 @@ bool _contains(List<String> words, List<String> phrase) {
   }
   return false;
 }
+
+bool _same(List<String> words, List<String> phrase) =>
+    words.length == phrase.length && _contains(words, phrase);
+
+/// Whether [transcript], heard and not understood, looks like someone
+/// trying a command rather than talking: a few words, one of them a
+/// command's (or nearly), a button's, or "tap".
+///
+/// Hands-free hears every conversation in the room. Answering each with
+/// "I did not understand" would be a sentence every few seconds; answering
+/// none left someone who half-said a command with silence and no idea why.
+bool looksLikeCommandAttempt(
+  String transcript, {
+  required Set<VoiceCommand> allowed,
+  Iterable<String> labels = const [],
+}) {
+  final words = spokenWords(transcript);
+  if (words.isEmpty || words.length > 4) return false;
+  final phrases = [
+    for (final command in allowed) ...?kVoiceKeywords[command],
+    ...labels.map((l) => spokenWords(l).join(' ')),
+  ];
+  return words.any((w) =>
+      !_notEvidence.contains(w) && w.length >= 3 && nearKeyword(w, phrases) ||
+      const {'tap', 'press', 'open', 'pindutin', 'buksan'}.contains(w));
+}
+
+/// Words inside command phrases that say nothing about a command on their
+/// own: "the" is in "go to the main screen", and in every other sentence.
+const Set<String> _notEvidence = {
+  'the', 'and', 'for', 'you', 'are', 'what', 'who', 'this', 'that', 'with',
+  'ako', 'ang', 'mga', 'turn', 'call', 'take', 'hands', 'free', 'voice',
+};
 
 /// What follows "take me" that is not somewhere to walk to - including the
 /// "to" of a "take me to" that stopped there.
@@ -617,4 +799,6 @@ const Map<VoiceCommand, String> kCommandDescriptions = {
   VoiceCommand.no: 'Answer no',
   VoiceCommand.fillIn: 'Answer the questions on this screen by voice',
   VoiceCommand.allClear: 'After an emergency call, say you are okay',
+  VoiceCommand.handsFreeOn: 'Listen without a tap before each command',
+  VoiceCommand.handsFreeOff: 'Only listen after you tap',
 };

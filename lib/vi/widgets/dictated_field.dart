@@ -91,6 +91,8 @@ class DictatedFieldState extends State<DictatedField> {
         label: widget.label,
         shape: widget.shape,
         prompt: widget.prompt,
+        // What is typed already: added to, or kept if nothing is heard.
+        initial: widget.controller.text,
       );
       if (value != null && mounted) {
         widget.controller.value = TextEditingValue(
@@ -113,12 +115,24 @@ class DictatedFieldState extends State<DictatedField> {
       children: [
         widget.field,
         const SizedBox(height: 6),
-        ViButton(
-          label: 'Say the ${widget.label.toLowerCase()}',
-          detail: _listening ? 'Listening for it now' : null,
-          icon: Icons.mic_none_outlined,
-          kind: ViButtonKind.quiet,
-          onPressed: widget.enabled && !_listening ? () => dictate() : null,
+        ListenableBuilder(
+          listenable: _voice!,
+          builder: (context, _) {
+            // What the recogniser is hearing, as it hears it, so a sighted
+            // helper can see what went wrong.
+            final heard = _listening ? _voice!.transcript?.trim() : null;
+            return ViButton(
+              label: 'Say the ${widget.label.toLowerCase()}',
+              detail: !_listening
+                  ? null
+                  : heard == null || heard.isEmpty
+                      ? 'Listening for it now'
+                      : 'Heard: $heard',
+              icon: Icons.mic_none_outlined,
+              kind: ViButtonKind.quiet,
+              onPressed: widget.enabled && !_listening ? () => dictate() : null,
+            );
+          },
         ),
       ],
     );

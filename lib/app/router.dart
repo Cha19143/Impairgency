@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -272,10 +273,12 @@ class AppSession extends ChangeNotifier {
           goTo: goTo,
           rememberFriend: rememberFriend,
           forgetFriend: forgetFriend,
+          setHandsFree: setHandsFree,
         ),
         onNavigate: (route) => navigate?.call(route),
         screenReaderOn: () => WidgetsBinding
             .instance.platformDispatcher.accessibilityFeatures.accessibleNavigation,
+        listeningCue: HapticFeedback.mediumImpact,
       )
         ..handsFree = _handsFree
         ..setForeground(_foreground)
