@@ -172,11 +172,13 @@ def main():
         print(f'negatives from image labels: {wanted}', flush=True)
         with_stairs = {r['ImageID'] for r in lines(VAL_BOXES)
                        if r['LabelName'] == stairs}
-        picked = []
+        # A dict, not a list: a floor photograph carries "Floor", "Flooring"
+        # and "Tile flooring" at once, and is still one negative.
+        picked = {}
         for r in lines(VAL_LABELS):
             if (r['LabelName'] in wanted and r['Confidence'] == '1'
                     and r['ImageID'] not in with_stairs):
-                picked.append(r['ImageID'])
+                picked[r['ImageID']] = True
                 if len(picked) >= args.negative_limit:
                     break
 
