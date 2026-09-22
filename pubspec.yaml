@@ -57,8 +57,9 @@ dependencies:
   # enterprise licence. See docs/VISION.md.
   #
   # The same interpreter runs the two face models for recognising friends,
-  # which are not in the repository: see docs/VISION.md, "Faces". Without them
-  # the app runs and says recognition is not available.
+  # both in assets/models/ with their hashes and licence terms in
+  # docs/VISION.md, "Faces". A build without them still runs, and says
+  # recognition is not available.
   camera: ^0.12.0
   tflite_flutter: ^0.11.0
   image: ^4.2.0
@@ -108,5 +109,12 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Each model named, not the folder: the 66 MB MiDaS depth model sits in
+  # assets/models/ for the depth device check (git-ignored), and a folder
+  # entry put it in every tester APK. tool/build_depth_check.sh adds it for
+  # that one build.
   assets:
-    - assets/models/
+    - assets/models/yolo11n.tflite
+    - assets/models/labels.txt
+    - assets/models/face_detection_short_range.tflite
+    - assets/models/mobilefacenet.tflite
