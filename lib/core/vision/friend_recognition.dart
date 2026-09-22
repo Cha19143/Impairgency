@@ -20,8 +20,20 @@ const String kFacesOffPhrase = 'Recognising people is turned off. You can '
     'using.';
 
 /// Said when this phone, or this build, cannot recognise anyone.
-const String kFacesUnavailablePhrase =
-    'Recognising people is not available on this phone yet.';
+/// Said when recognition is on but cannot run yet, or at all - by why.
+const String kFacesStartingPhrase =
+    'The camera is still starting. Say it again in a moment.';
+const String kFacesModelsMissingPhrase = 'The face models did not load on '
+    'this phone, so people cannot be recognised.';
+const String kFacesNoCameraPhrase =
+    'The camera is not working, so people cannot be recognised.';
+
+/// Asked when someone says "hello friend" with recognition turned off.
+const String kTurnOnFacesQuestion =
+    'Recognising people is turned off. Turn it on now? Say yes.';
+
+/// A view of a face, counted out loud while it is taken down: "One." ...
+const List<String> _counted = ['One.', 'Two.', 'Three.', 'Four.', 'Five.'];
 
 /// Hints while taking a face down are not repeated more often than this.
 const Duration kEnrollmentHintGap = Duration(milliseconds: 2500);
@@ -102,8 +114,10 @@ class FriendRecognition {
   void _enrol(EnrollmentSession session, List<FaceObservation> faces) {
     final step = session.add(faces, _now());
     switch (step) {
-      case EnrollmentProgress():
-        break;
+      case EnrollmentProgress(:final taken):
+        // Counted out loud, so the person holding the phone knows it is
+        // working and how far there is to go.
+        if (taken >= 1 && taken <= _counted.length) say(_counted[taken - 1]);
       case EnrollmentHint(:final problem):
         final now = _now();
         final last = _lastHint;
@@ -112,6 +126,7 @@ class FriendRecognition {
           say(enrollmentProblemPhrase(problem, name: _enrolling));
         }
       case EnrollmentDone(:final embeddings):
+        say(_counted.last);
         final name = _enrolling ?? 'Friend';
         final completer = _enrolled;
         _finishEnrolment();
@@ -163,11 +178,66 @@ class FriendRecognition {
     return '${match.name} is forgotten.';
   }
 
+  /// "Rename Sam to Samuel". Returns what to say.
+  Future<String> rename(String from, String to) async {
+    final old = normaliseFriendName(from);
+    final name = normaliseFriendName(to);
+    if (old == null || name == null) {
+      return 'Say rename, their name, to, and the new name.';
+    }
+    final match = _friends
+        .where((f) => f.name.toLowerCase() == old.toLowerCase())
+        .firstOrNull;
+    if (match == null) return 'There is no one saved called $old.';
+    if (_friends.any((f) =>
+        f.id != match.id && f.name.toLowerCase() == name.toLowerCase())) {
+      return 'Someone is already saved as $name.';
+    }
+    _friends = [
+      for (final f in _friends)
+        f.id == match.id
+            ? Friend(
+                id: f.id,
+                name: name,
+                embeddings: f.embeddings,
+                savedAt: f.savedAt)
+            : f,
+    ];
+    await store.save(owner, _friends);
+    return '${match.name} is now $name.';
+  }
+
+  /// Who is saved, said: "You have saved 2 people: Sam and Ana."
+  String list() => friendsListPhrase(_friends);
+
   Future<void> remove(Friend friend) async {
     _friends = [for (final f in _friends) if (f.id != friend.id) f];
     _announcer.forget(friend.id);
     await store.save(owner, _friends);
   }
+}
+
+/// Who is saved, said.
+String friendsListPhrase(List<Friend> friends) {
+  if (friends.isEmpty) {
+    return 'No one is saved yet. Say hello friend, and their name, with them '
+        'in front of the phone.';
+  }
+  final names = friends.map((f) => f.name).toList();
+  final said = names.length == 1
+      ? names.single
+      : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
+  return names.length == 1
+      ? 'You have saved one person: $said.'
+      : 'You have saved ${names.length} people: $said.';
+}
+
+/// "sam to samuel", "sam as samuel", "sam into samuel": the old name and the
+/// new, or null.
+(String, String)? renameParts(String argument) {
+  final m = RegExp(r'^(.+?)\s+(?:to|as|into|na)\s+(.+)$', caseSensitive: false)
+      .firstMatch(argument.trim());
+  return m == null ? null : (m.group(1)!, m.group(2)!);
 }
 
 /// What to say when taking a face down has ended.

@@ -273,6 +273,9 @@ class AppSession extends ChangeNotifier {
           rememberFriend: rememberFriend,
           forgetFriend: forgetFriend,
           setHandsFree: setHandsFree,
+          listFriends: listFriends,
+          renameFriend: renameFriend,
+          forgetAllFriends: forgetAllFriends,
         ),
         onNavigate: (route) => navigate?.call(route),
         screenReaderOn: () => WidgetsBinding
@@ -445,10 +448,69 @@ class AppSession extends ChangeNotifier {
       return const VoiceOutcome(
           spoken: 'Say hello friend, and then their name.');
     }
-    if (!facesConsented) return const VoiceOutcome(spoken: kFacesOffPhrase);
+    if (!facesConsented) {
+      // Asked, rather than sent to Settings: the friend is standing there.
+      final answer = await _voice?.ask(kTurnOnFacesQuestion);
+      if (answer?.command != VoiceCommand.yes) {
+        return const VoiceOutcome(spoken: 'Recognising people stays off.');
+      }
+      await turnOnFaces();
+    }
     _pendingFriend = friend;
     return VoiceOutcome(
         spoken: 'Opening scan, to meet $friend.', route: Routes.scan);
+  }
+
+  /// "Recognise people I know", switched on - by voice, from "hello friend"
+  /// - the same way the consent centre does it.
+  Future<void> turnOnFaces() async {
+    final values = {..._state.consent, 'faces': true};
+    try {
+      await onboarding.saveConsent(values);
+    } catch (e) {
+      // Offline: kept on the phone now, and on the account when it can be.
+      debugPrint('Consent not saved to the account yet: $e');
+    }
+    await rememberConsent(values);
+  }
+
+  /// The friends saved on this phone, as recognition sees them.
+  Future<FriendRecognition> _savedFriends() async {
+    final recognition =
+        FriendRecognition(store: friendStore, owner: faceOwner, say: (_) {});
+    await recognition.load();
+    return recognition;
+  }
+
+  /// "Who do I know", from anywhere.
+  Future<VoiceOutcome> listFriends() async =>
+      VoiceOutcome(spoken: (await _savedFriends()).list());
+
+  /// "Rename Sam to Samuel", from anywhere.
+  Future<VoiceOutcome> renameFriend(String argument) async {
+    final parts = renameParts(argument);
+    if (parts == null) {
+      return const VoiceOutcome(
+          spoken: 'Say rename, their name, to, and the new name.');
+    }
+    return VoiceOutcome(
+        spoken: await (await _savedFriends()).rename(parts.$1, parts.$2));
+  }
+
+  /// "Forget everyone", from anywhere: asked first.
+  Future<VoiceOutcome> forgetAllFriends() async {
+    final saved = (await _savedFriends()).friends;
+    if (saved.isEmpty) {
+      return const VoiceOutcome(spoken: 'No one is saved, so nothing changed.');
+    }
+    final answer = await _voice?.ask('Forget everyone saved? All '
+        '${saved.length} faces will be deleted from this phone. Say yes to '
+        'forget them.');
+    if (answer?.command != VoiceCommand.yes) {
+      return const VoiceOutcome(spoken: 'Nothing was deleted.');
+    }
+    await _forgetFaces(quietly: true);
+    return const VoiceOutcome(spoken: 'Everyone is forgotten.');
   }
 
   /// "Forget Sam", from anywhere: asked, then deleted.
@@ -1425,6 +1487,11 @@ GoRouter createRouter(AppSession session) {
               onForgetEveryone: () async {
                 await session.friendStore.deleteAll(session.faceOwner);
                 await reload();
+              },
+              onRename: (friend, name) async {
+                final said = await session.renameFriend('${friend.name} to $name');
+                await reload();
+                return said.spoken;
               },
               onBack: () => appNavigate(context, Routes.settings),
             ),

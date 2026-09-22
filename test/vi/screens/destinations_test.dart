@@ -329,13 +329,15 @@ void main() {
   });
 
   group('stairs on the scan screen', () {
-    const sure =
-        StairsReading(confidence: 0.9, treads: 6, spacingRegularity: 0.95);
-    const unsure =
-        StairsReading(confidence: 0.5, treads: 4, spacingRegularity: 0.8);
+    // From their own model, as detections - see core/vision/stairs.dart.
+    const near = Detection(
+        label: kStairsLabel, score: 0.8, centerX: 0.5, extent: 0.7);
+    const closeLeft = Detection(
+        label: kStairsLabel, score: 0.8, centerX: 0.2, extent: 0.4);
+    tearDown(() => stairsMayStop = false);
 
-    testWidgets('a confident reading is a hazard, shown, and named to the guardian',
-        (tester) async {
+    testWidgets('named with where, told to the guardian, and kept behind '
+        'narration', (tester) async {
       final speaker = RecordingSpeaker();
       final scan = FakeScan();
       final named = <String>[];
@@ -347,19 +349,36 @@ void main() {
       )));
       await tester.pump();
 
-      scan.see(const [], stairs: sure);
+      scan.see(const [closeLeft]);
+      await tester.pump();
+      expect(speaker.said.last,
+          ('Stairs close, on your left', SpeechPriority.navigation));
+      expect(named, [kStairsLabel]);
+    });
+
+    testWidgets('once the gate is passed, stairs ahead are a Stop, said once',
+        (tester) async {
+      stairsMayStop = true;
+      final speaker = RecordingSpeaker();
+      final scan = FakeScan();
+      await tester.pumpWidget(host(ScanScreen(
+        speaker: speaker,
+        service: scan,
+        onBack: () {},
+      )));
+      await tester.pump();
+
+      scan.see(const [near]);
       await tester.pump();
       expect(speaker.said.last, (kStairsAhead, SpeechPriority.hazard));
       expect(find.text(kStairsAhead), findsOneWidget);
-      expect(named, ['stairs']);
 
-      // The next frame, still stairs: not said again straight away.
-      scan.see(const [], stairs: sure);
+      scan.see(const [near]);
       await tester.pump();
       expect(speaker.said.where((s) => s.$1 == kStairsAhead), hasLength(1));
     });
 
-    testWidgets('below the threshold, nothing about stairs is said',
+    testWidgets('a box too unsure to mention says nothing about stairs',
         (tester) async {
       final speaker = RecordingSpeaker();
       final scan = FakeScan();
@@ -370,10 +389,12 @@ void main() {
       )));
       await tester.pump();
 
-      scan.see(const [], stairs: unsure);
+      scan.see(const [
+        Detection(label: kStairsLabel, score: 0.2, centerX: 0.5, extent: 0.7),
+      ]);
       await tester.pump();
-      expect(speaker.said.map((s) => s.$1), isNot(contains(kStairsAhead)));
-      expect(find.text(kNoKnownObjects), findsOneWidget);
+      expect(speaker.said.map((s) => s.$1.toLowerCase()),
+          isNot(contains(contains('stairs'))));
     });
   });
 

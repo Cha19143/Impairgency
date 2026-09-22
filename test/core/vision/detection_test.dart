@@ -151,54 +151,62 @@ void main() {
   });
 
   group('stairs', () {
-    const sure =
-        StairsReading(confidence: 0.9, treads: 6, spacingRegularity: 0.95);
-    const unsure =
-        StairsReading(confidence: 0.4, treads: 4, spacingRegularity: 0.5);
+    // Stairs come from their own model, as detections like any other.
+    Detection stairs({double score = 0.8, double centerX = 0.5, double extent = 0.7}) =>
+        Detection(label: kStairsLabel, score: score, centerX: centerX, extent: extent);
 
-    test('a confident reading is said alone, as a hazard', () {
-      // Walking into a chair is a bruise; a missed step is a fall. A second
-      // object in the same sentence dilutes the one that matters.
-      final guidance = guidanceFor(
-          [at(label: 'chair', centerX: 0.5, extent: 0.4)],
-          stairs: sure);
+    tearDown(() => stairsMayStop = false);
+
+    test('until the gate is passed, stairs are named and never shouted', () {
+      final guidance = guidanceFor([stairs()]);
+      expect(guidance.phrase, 'Stairs very close, ahead');
+      expect(guidance.urgent, isFalse);
+      expect(guidance.label, kStairsLabel);
+    });
+
+    test('with it passed, stairs filling the view ahead are a Stop', () {
+      stairsMayStop = true;
+      final guidance = guidanceFor([stairs()]);
       expect(guidance.phrase, kStairsAhead);
       expect(guidance.urgent, isTrue);
-      expect(guidance.label, 'stairs');
     });
 
-    test('an object urgent in its own right is still named first', () {
-      // A zebra crossing reads as stairs to the banding heuristic. A car right
-      // in front of someone standing on one is a car.
-      final guidance = guidanceFor(
-          [at(label: 'car', centerX: 0.5, extent: 0.7)],
-          stairs: sure);
-      expect(guidance.phrase, 'Stop. car right in front of you');
+    test('a less sure box is only ever named', () {
+      stairsMayStop = true;
+      final guidance = guidanceFor([stairs(score: 0.45)]);
+      expect(guidance.urgent, isFalse);
+      expect(guidance.phrase, 'Stairs very close, ahead');
     });
 
-    test('an unsure reading says nothing about stairs', () {
-      expect(guidanceFor(const [], stairs: unsure).phrase, kNoKnownObjects);
-      expect(
-          guidanceFor([at(label: 'chair', extent: 0.4)], stairs: unsure).phrase,
-          isNot(contains('Stairs')));
+    test('close, and where', () {
+      expect(guidanceFor([stairs(extent: 0.4)]).phrase, 'Stairs ahead, close');
+      expect(guidanceFor([stairs(extent: 0.4, centerX: 0.15)]).phrase,
+          'Stairs close, on your left');
+      expect(guidanceFor([stairs(extent: 0.1, centerX: 0.9)]).phrase,
+          'Stairs on your right');
     });
 
-    test('never up or down: one camera cannot tell', () {
-      expect(kStairsAhead.toLowerCase(), isNot(contains('down')));
-      expect(kStairsAhead.toLowerCase(), isNot(contains(' up')));
+    test('stairs weigh as much as a car: a missed step is a fall', () {
+      expect(riskWeight(kStairsLabel), riskWeight('car'));
+      expect(canBeHazard(kStairsLabel), isTrue);
     });
 
-    test('repeated as a hazard is: not until it has had time to be heard', () {
-      final now = DateTime.utc(2026, 9, 16, 9);
-      bool again(Duration after) => shouldSpeak(
-            phrase: kStairsAhead,
-            urgent: true,
-            lastPhrase: kStairsAhead,
-            lastSpokenAt: now,
-            now: now.add(after),
-          );
-      expect(again(const Duration(seconds: 1)), isFalse);
-      expect(again(kHazardRepeat), isTrue);
+    test('stairs outrank a chair the same size', () {
+      final guidance = guidanceFor([
+        at(label: 'chair', centerX: 0.5, extent: 0.4),
+        stairs(extent: 0.4),
+      ]);
+      expect(guidance.label, kStairsLabel);
+    });
+
+    test('a car right in front is still named first', () {
+      stairsMayStop = true;
+      final guidance = guidanceFor([
+        at(label: 'car', centerX: 0.5, extent: 0.7),
+        stairs(extent: 0.4),
+      ]);
+      expect(guidance.label, 'car');
+      expect(guidance.urgent, isTrue);
     });
   });
 
@@ -374,10 +382,15 @@ void main() {
       expect(guidance.label, 'car');
     });
 
-    test('stairs outrank it', () {
-      const stairs =
-          StairsReading(confidence: 0.9, treads: 6, spacingRegularity: 0.95);
-      expect(guidanceFor(const [], stairs: stairs, depth: doorClose).phrase,
+    test('stairs sure enough to stop for outrank it', () {
+      stairsMayStop = true;
+      addTearDown(() => stairsMayStop = false);
+      expect(
+          guidanceFor(const [
+            Detection(
+                label: kStairsLabel, score: 0.8, centerX: 0.5, extent: 0.7),
+          ], depth: doorClose)
+              .phrase,
           kStairsAhead);
     });
 

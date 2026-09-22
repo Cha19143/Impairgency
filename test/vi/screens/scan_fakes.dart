@@ -6,7 +6,6 @@ import 'package:impairgency/core/navigation/route.dart';
 import 'package:impairgency/core/speech/speaker.dart';
 import 'package:impairgency/core/vision/depth.dart';
 import 'package:impairgency/core/vision/detection.dart';
-import 'package:impairgency/core/vision/stairs.dart';
 import 'package:impairgency/data/scan_service.dart';
 
 class RecordingSpeaker implements PrioritySpeaker {
@@ -33,14 +32,9 @@ class FakeScan extends ScanService {
 
   /// One frame from the camera: these objects, and this floor.
   void see(List<Detection> detections,
-          {StairsReading stairs = StairsReading.none,
-          DepthReading depth = DepthReading.none,
-          String? notice}) =>
+          {DepthReading depth = DepthReading.none, String? notice}) =>
       onFrame!(ScanFrame(
-          detections: detections,
-          stairs: stairs,
-          depth: depth,
-          notice: notice));
+          detections: detections, depth: depth, notice: notice));
   int starts = 0;
   @override
   Future<bool> loadModel() async => true;

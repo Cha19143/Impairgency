@@ -53,6 +53,9 @@ class VoiceActions {
     this.rememberFriend,
     this.forgetFriend,
     this.setHandsFree,
+    this.listFriends,
+    this.renameFriend,
+    this.forgetAllFriends,
   });
 
   final LocationSource location;
@@ -78,6 +81,12 @@ class VoiceActions {
 
   /// "Turn on hands-free": the same switch as in Settings.
   final Future<void> Function(bool on)? setHandsFree;
+
+  /// "Who do I know", "rename Sam to Samuel", "forget everyone" - from any
+  /// screen, on the friends saved on this phone.
+  final Future<VoiceOutcome> Function()? listFriends;
+  final Future<VoiceOutcome> Function(String argument)? renameFriend;
+  final Future<VoiceOutcome> Function()? forgetAllFriends;
 
   /// What [command] does. [argument] is the place or name that came with it.
   Future<VoiceOutcome> handle(VoiceCommand command, {String? argument}) async =>
@@ -138,6 +147,18 @@ class VoiceActions {
             spoken: 'There is no emergency to clear.'),
         VoiceCommand.handsFreeOn => _handsFree(true),
         VoiceCommand.handsFreeOff => _handsFree(false),
+        VoiceCommand.listFriends when listFriends != null => listFriends!(),
+        VoiceCommand.renameFriend when renameFriend != null =>
+          _withName(argument, renameFriend!,
+              'Say rename, their name, to, and the new name.'),
+        VoiceCommand.forgetAllFriends when forgetAllFriends != null =>
+          forgetAllFriends!(),
+        VoiceCommand.listFriends ||
+        VoiceCommand.renameFriend ||
+        VoiceCommand.forgetAllFriends =>
+          const VoiceOutcome(
+              spoken: 'Saved friends are listed in Settings, under People I '
+                  'know.'),
       };
 
   Future<VoiceOutcome> _handsFree(bool on) async {

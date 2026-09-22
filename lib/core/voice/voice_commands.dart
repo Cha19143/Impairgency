@@ -55,6 +55,15 @@ enum VoiceCommand {
   /// Hands-free listening on or off, from any screen.
   handsFreeOn,
   handsFreeOff,
+
+  /// "Who do I know": the friends saved on this phone.
+  listFriends,
+
+  /// "Rename Sam to Samuel".
+  renameFriend,
+
+  /// "Forget everyone", asked first.
+  forgetAllFriends,
 }
 
 /// Words and phrases that map to each command.
@@ -266,6 +275,26 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
     'enable hands free',
     'buksan ang hands free',
   ],
+  VoiceCommand.listFriends: [
+    'who do i know',
+    'who are my friends',
+    'list my friends',
+    'my friends',
+    'sino ang kakilala ko',
+    'sino ang mga kaibigan ko',
+  ],
+  VoiceCommand.renameFriend: [
+    'rename',
+    'change the name of',
+    'palitan ang pangalan ni',
+  ],
+  // Reached through "forget" with everyone after it, as well as said whole.
+  VoiceCommand.forgetAllFriends: [
+    'forget everyone',
+    'forget everybody',
+    'forget all my friends',
+    'kalimutan lahat',
+  ],
   VoiceCommand.handsFreeOff: [
     'turn off hands free',
     'turn off hands free voice',
@@ -284,6 +313,17 @@ const Set<VoiceCommand> kArgumentCommands = {
   VoiceCommand.navigateTo,
   VoiceCommand.rememberFriend,
   VoiceCommand.forgetFriend,
+  VoiceCommand.renameFriend,
+};
+
+/// What "forget" can be followed by that is everyone rather than a name.
+const Set<String> _everyone = {
+  'everyone',
+  'everybody',
+  'all',
+  'all my friends',
+  'all of them',
+  'lahat',
 };
 
 /// What goes after an argument command's trigger, for "What can I say".
@@ -291,6 +331,7 @@ const Map<VoiceCommand, String> kArgumentHints = {
   VoiceCommand.navigateTo: 'a place',
   VoiceCommand.rememberFriend: 'their name',
   VoiceCommand.forgetFriend: 'their name',
+  VoiceCommand.renameFriend: 'their name, to, and the new name',
 };
 
 /// Commands offered on ordinary screens.
@@ -321,6 +362,9 @@ const Set<VoiceCommand> kEverydayCommands = {
   VoiceCommand.whoIsHere,
   VoiceCommand.handsFreeOn,
   VoiceCommand.handsFreeOff,
+  VoiceCommand.listFriends,
+  VoiceCommand.renameFriend,
+  VoiceCommand.forgetAllFriends,
 };
 
 /// Commands heard only as the whole of what was said, fillers aside. Each
@@ -367,6 +411,9 @@ const Set<VoiceCommand> kScanCommands = {
   VoiceCommand.rememberFriend,
   VoiceCommand.forgetFriend,
   VoiceCommand.whoIsHere,
+  VoiceCommand.listFriends,
+  VoiceCommand.renameFriend,
+  VoiceCommand.forgetAllFriends,
 };
 
 /// What the journey screen listens for: Scan's words, whose "stop
@@ -591,6 +638,12 @@ ParsedCommand? parseVoiceCommand(String transcript,
               _notPlaces.contains(argument)) {
             continue;
           }
+          if (command == VoiceCommand.forgetFriend &&
+              _everyone.contains(argument)) {
+            if (!allowed.contains(VoiceCommand.forgetAllFriends)) continue;
+            return ParsedCommand(VoiceCommand.forgetAllFriends,
+                heard: transcript);
+          }
           return ParsedCommand(command, argument: argument, heard: transcript);
         }
       }
@@ -801,4 +854,7 @@ const Map<VoiceCommand, String> kCommandDescriptions = {
   VoiceCommand.allClear: 'After an emergency call, say you are okay',
   VoiceCommand.handsFreeOn: 'Listen without a tap before each command',
   VoiceCommand.handsFreeOff: 'Only listen after you tap',
+  VoiceCommand.listFriends: 'Hear who is saved as a friend',
+  VoiceCommand.renameFriend: 'Change a saved friend\'s name',
+  VoiceCommand.forgetAllFriends: 'Forget every saved friend, after a yes',
 };

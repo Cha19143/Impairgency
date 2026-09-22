@@ -194,8 +194,9 @@ String? normaliseFriendName(String raw) {
 /// Samples of one face taken for saving.
 const int kEnrollmentSamples = 5;
 
-/// Within this long, or it starts again.
-const Duration kEnrollmentWindow = Duration(seconds: 6);
+/// Within this long, or it starts again. Ten seconds: at about 0.7 s a view,
+/// six left no room for a face that turned away once.
+const Duration kEnrollmentWindow = Duration(seconds: 10);
 
 /// Smaller than this across the frame, a face is too far away to learn.
 const double kEnrollmentMinWidth = 0.12;

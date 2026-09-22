@@ -13,7 +13,8 @@ library;
 /// A multiplier on a detection's size-and-centrality risk. Anything not
 /// listed counts as 1.0.
 const Map<String, double> kClassRisk = {
-  // Moves fast, hits hard.
+  // Moves fast, hits hard - or, for stairs, is a fall.
+  'stairs': 1.6,
   'car': 1.6,
   'truck': 1.6,
   'bus': 1.6,

@@ -4,6 +4,11 @@
     tool/eval_detector.py --fetch          # first run: builds the set (~850 images)
     tool/eval_detector.py                  # thereafter
 
+    tool/eval_detector.py --stairs --fetch --negatives ~/Pictures/floors
+                                           # the stairs model: recall on Open
+                                           # Images "Stairs", and how often it
+                                           # fires on floors and crossings
+
 Why this exists. "The model works" was, for a while, one photograph of a bus.
 That is enough to prove a pipeline is wired up and nothing at all about whether
 somebody walking down a corridor gets told about the chair. This runs the
@@ -58,6 +63,10 @@ PAIRS = {
 BANDS = [('very close (>0.55)', 0.55), ('close (0.30-0.55)', 0.30),
          ('far (<0.30)', 0.0)]
 
+# The scores the stairs model is measured at: kStairsSoft, kStairsHard, and
+# either side of the hard one.
+STAIRS_SCORES = [0.35, 0.45, 0.55, 0.65]
+
 
 def band_of(w, h):
     e = max(w, h)
@@ -67,9 +76,10 @@ def band_of(w, h):
     return BANDS[-1][0]
 
 
-def build(per_class):
-    os.makedirs(CACHE, exist_ok=True)
-    ann = os.path.join(CACHE, 'validation-annotations-bbox.csv')
+def build(per_class, pairs=PAIRS, cache=None):
+    cache = cache or CACHE
+    os.makedirs(cache, exist_ok=True)
+    ann = os.path.join(cache, 'validation-annotations-bbox.csv')
     if not os.path.exists(ann):
         print('fetching annotations...', flush=True)
         urllib.request.urlretrieve(OI, ann)
@@ -77,14 +87,14 @@ def build(per_class):
     rows = collections.defaultdict(list)
     with open(ann) as f:
         for r in csv.DictReader(f):
-            if r['LabelName'] not in PAIRS:
+            if r['LabelName'] not in pairs:
                 continue
             # A crowd in one box is not an object, and a painting of a dog is
             # not a dog in the room.
             if r['IsGroupOf'] == '1' or r['IsDepiction'] == '1':
                 continue
             rows[r['ImageID']].append((
-                PAIRS[r['LabelName']], float(r['XMin']), float(r['YMin']),
+                pairs[r['LabelName']], float(r['XMin']), float(r['YMin']),
                 float(r['XMax']), float(r['YMax'])))
 
     chosen, seen = {}, collections.Counter()
@@ -95,7 +105,7 @@ def build(per_class):
         for c in {c for c, *_ in boxes}:
             seen[c] += 1
 
-    d = os.path.join(CACHE, 'images')
+    d = os.path.join(cache, 'images')
     os.makedirs(d, exist_ok=True)
 
     def fetch(image_id):
@@ -114,14 +124,14 @@ def build(per_class):
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
         got = sum(pool.map(fetch, chosen))
 
-    with open(os.path.join(CACHE, 'ground-truth.csv'), 'w', newline='') as f:
+    with open(os.path.join(cache, 'ground-truth.csv'), 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow(['ImageID', 'label', 'xmin', 'ymin', 'xmax', 'ymax'])
         for image_id, boxes in chosen.items():
             if os.path.exists(os.path.join(d, image_id + '.jpg')):
                 for b in boxes:
                     w.writerow([image_id, *b])
-    print(f'{got} images ready in {CACHE}')
+    print(f'{got} images ready in {cache}')
 
 
 def iou(a, b):
@@ -134,36 +144,10 @@ def iou(a, b):
     return 0.0 if un <= 0 else ov / un
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--fetch', action='store_true',
-                    help='build the evaluation set first (needs network)')
-    ap.add_argument('--per-class', type=int, default=60)
-    ap.add_argument('--model', default=os.path.join(ROOT, 'assets/models/yolo11n.tflite'))
-    ap.add_argument('--labels', default=os.path.join(ROOT, 'assets/models/labels.txt'))
-    # Defaults mirror lib/core/vision/detection.dart and yolo.dart. Change them
-    # here to ask what a different threshold would have done, then change them
-    # there if the answer is better.
-    ap.add_argument('--min-score', type=float, default=0.35)
-    ap.add_argument('--nms-iou', type=float, default=0.45)
-    ap.add_argument('--max-boxes', type=int, default=20)
-    ap.add_argument('--hit-iou', type=float, default=0.5)
-    # What the camera actually hands over. ResolutionPreset.low is 320x240 on
-    # Android, so the frame reaching the model is 320 pixels on its long side
-    # whatever the model's input is - evaluating on 1024px photographs measures
-    # a detector the app does not have. 0 disables the simulation.
-    ap.add_argument('--camera-frame', type=int, default=320,
-                    help='longest side the camera delivers; 0 for the '
-                         'full-resolution photograph')
-    args = ap.parse_args()
-
-    if args.fetch:
-        build(args.per_class)
-
-    gt_path = os.path.join(CACHE, 'ground-truth.csv')
-    if not os.path.exists(gt_path):
-        sys.exit(f'No evaluation set at {CACHE}. Run with --fetch first.')
-
+def load_detector(model, names, args):
+    """The app's pipeline, as a function: a PIL image in, the boxes the app
+    would act on out, as (score, name, left, top, right, bottom) in fractions
+    of the image. Returns it with the model's input side."""
     import numpy as np
     from PIL import Image
     try:
@@ -171,8 +155,7 @@ def main():
     except ImportError:
         from tensorflow.lite.python.interpreter import Interpreter
 
-    names = [l.strip() for l in open(args.labels) if l.strip()]
-    it = Interpreter(model_path=args.model, num_threads=os.cpu_count() or 4)
+    it = Interpreter(model_path=model, num_threads=os.cpu_count() or 4)
     it.allocate_tensors()
     inp, out = it.get_input_details()[0], it.get_output_details()[0]
     nchw = inp['shape'][1] == 3
@@ -198,7 +181,6 @@ def main():
                       np.transpose(x, (2, 0, 1))[None] if nchw else x[None])
         it.invoke()
         o = it.get_tensor(out['index'])[0]
-        anchors = o.shape[1]
         box, cls = o[:4], o[4:]
         conf, best = cls.max(0), cls.argmax(0)
 
@@ -218,6 +200,132 @@ def main():
         return [(s, names[i], (l*side-px)/dw, (t*side-py)/dh,
                  (r*side-px)/dw, (b*side-py)/dh)
                 for s, i, l, t, r, b in kept]
+
+    return detect, side
+
+
+def stairs_main(args):
+    """Recall on Open Images' "Stairs" boxes, by size, and how often the model
+    fires on photographs with no stairs in them - at each score it might
+    speak at. The gate for letting it say "Stop" (lib/core/vision/stairs.dart):
+    close-or-nearer recall of at least 70%, and at most 5% of negatives
+    firing, at kStairsHard."""
+    from PIL import Image
+    cache = os.path.join(ROOT, 'build', 'stairs-eval')
+    if args.fetch:
+        import urllib.request as ur, io as _io
+        mid = None
+        url = 'https://storage.googleapis.com/openimages/v7/oidv7-class-descriptions-boxable.csv'
+        with ur.urlopen(url) as resp:
+            for row in csv.reader(_io.TextIOWrapper(resp, encoding='utf-8')):
+                if len(row) >= 2 and row[1].strip().lower() == 'stairs':
+                    mid = row[0]
+        if mid is None:
+            sys.exit('Open Images has no class called "Stairs".')
+        print(f'Open Images class "Stairs" is {mid}')
+        build(args.per_class, pairs={mid: 'stairs'}, cache=cache)
+
+    gt_path = os.path.join(cache, 'ground-truth.csv')
+    if not os.path.exists(gt_path):
+        sys.exit(f'No stairs evaluation set at {cache}. Run with --fetch.')
+    lowest = min(STAIRS_SCORES)
+    args.min_score = lowest
+    detect, side = load_detector(args.model, ['stairs'], args)
+
+    gt = collections.defaultdict(list)
+    for r in csv.DictReader(open(gt_path)):
+        gt[r['ImageID']].append((float(r['xmin']), float(r['ymin']),
+                                 float(r['xmax']), float(r['ymax'])))
+
+    found = {t: collections.Counter() for t in STAIRS_SCORES}
+    total = collections.Counter()
+    for image_id, boxes in sorted(gt.items()):
+        path = os.path.join(cache, 'images', image_id + '.jpg')
+        if not os.path.exists(path):
+            continue
+        dets = detect(Image.open(path))
+        for b in boxes:
+            band = band_of(b[2]-b[0], b[3]-b[1])
+            total[band] += 1
+            for t in STAIRS_SCORES:
+                if any(d[0] >= t and iou(b, d[2:]) >= args.hit_iou
+                       for d in dets):
+                    found[t][band] += 1
+
+    negatives = [os.path.join(folder, n)
+                 for folder in args.negatives
+                 for n in sorted(os.listdir(folder))
+                 if n.lower().endswith(('.jpg', '.jpeg', '.png'))]
+    fired = collections.Counter()
+    for path in negatives:
+        dets = detect(Image.open(path))
+        for t in STAIRS_SCORES:
+            # A false alarm the app would act on: stairs close or nearer.
+            if any(d[0] >= t and max(d[4]-d[2], d[5]-d[3]) > 0.30
+                   for d in dets):
+                fired[t] += 1
+
+    near = [n for n, _ in BANDS[:2]]
+    near_total = sum(total[n] for n in near)
+    print(f'\n{os.path.basename(args.model)}   input {side}   '
+          f'{sum(total.values())} stairs boxes, {len(negatives)} negatives')
+    print(f'{"score >=":>9s} {"close+ recall":>14s} {"all recall":>11s} '
+          f'{"negatives firing":>17s}')
+    for t in STAIRS_SCORES:
+        near_found = sum(found[t][n] for n in near)
+        all_found = sum(found[t].values())
+        neg = (f'{fired[t]}/{len(negatives)} {fired[t]/len(negatives):4.0%}'
+               if negatives else 'no negatives')
+        print(f'{t:9.2f} {near_found/max(near_total,1):13.0%} '
+              f'{all_found/max(sum(total.values()),1):10.0%} {neg:>17s}')
+    print('\nGate for "Stop": close+ recall >= 70% and negatives <= 5% at '
+          'kStairsHard (0.55).')
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--fetch', action='store_true',
+                    help='build the evaluation set first (needs network)')
+    ap.add_argument('--per-class', type=int, default=60)
+    ap.add_argument('--model', default=os.path.join(ROOT, 'assets/models/yolo11n.tflite'))
+    ap.add_argument('--labels', default=os.path.join(ROOT, 'assets/models/labels.txt'))
+    # Defaults mirror lib/core/vision/detection.dart and yolo.dart. Change them
+    # here to ask what a different threshold would have done, then change them
+    # there if the answer is better.
+    ap.add_argument('--min-score', type=float, default=0.35)
+    ap.add_argument('--nms-iou', type=float, default=0.45)
+    ap.add_argument('--max-boxes', type=int, default=20)
+    ap.add_argument('--hit-iou', type=float, default=0.5)
+    # What the camera actually hands over. ResolutionPreset.low is 320x240 on
+    # Android, so the frame reaching the model is 320 pixels on its long side
+    # whatever the model's input is - evaluating on 1024px photographs measures
+    # a detector the app does not have. 0 disables the simulation.
+    ap.add_argument('--camera-frame', type=int, default=320,
+                    help='longest side the camera delivers; 0 for the '
+                         'full-resolution photograph')
+    ap.add_argument('--stairs', action='store_true',
+                    help='measure the stairs model instead of the COCO one')
+    ap.add_argument('--negatives', action='append', default=[],
+                    help='with --stairs: a folder of photographs with no '
+                         'stairs - tiled floors, rugs, crossings; repeatable')
+    args = ap.parse_args()
+
+    if args.stairs:
+        if args.model.endswith('yolo11n.tflite'):
+            args.model = os.path.join(ROOT, 'assets/models/yolo11n_stairs.tflite')
+        stairs_main(args)
+        return
+
+    if args.fetch:
+        build(args.per_class)
+
+    gt_path = os.path.join(CACHE, 'ground-truth.csv')
+    if not os.path.exists(gt_path):
+        sys.exit(f'No evaluation set at {CACHE}. Run with --fetch first.')
+
+    from PIL import Image
+    names = [l.strip() for l in open(args.labels) if l.strip()]
+    detect, side = load_detector(args.model, names, args)
 
     gt = collections.defaultdict(list)
     for r in csv.DictReader(open(gt_path)):

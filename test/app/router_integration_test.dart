@@ -24,7 +24,6 @@ import 'package:impairgency/core/safety/safety_notice.dart';
 import 'package:impairgency/core/session_store.dart';
 import 'package:impairgency/core/speech/speaker.dart';
 import 'package:impairgency/core/vision/faces.dart';
-import 'package:impairgency/core/vision/friend_recognition.dart';
 import 'package:impairgency/core/voice/speech_recognizer.dart';
 import 'package:impairgency/data/account_status_repository.dart';
 import 'package:impairgency/data/admin_repository.dart';
@@ -294,7 +293,9 @@ void main() {
         friendStore: MemoryStore(),
       );
       await session.load();
-      expect((await session.rememberFriend('sam')).spoken, kFacesOffPhrase);
+      // No answer to "Turn it on now?": nothing changes.
+      expect((await session.rememberFriend('sam')).spoken,
+          'Recognising people stays off.');
       expect(session.takePendingFriend(), isNull);
 
       await session.rememberConsent({'faces': true});
@@ -304,6 +305,26 @@ void main() {
       expect(session.takePendingFriend(), isNull, reason: 'met once');
       expect(session.friendRecognition(), isNotNull);
     });
+  });
+
+  test('"hello friend Sam" with recognition off asks, and a yes turns it on',
+      () async {
+    // It used to send the user to Settings, with the friend standing there.
+    final mic = OpenWindows();
+    final session = AppSession(
+      store: InMemorySessionStore(acknowledged: true),
+      friendStore: MemoryStore(),
+      recognizer: mic,
+    );
+    await session.load();
+    session.voice; // the microphone, as the app makes it at start
+    final going = session.rememberFriend('sam');
+    await pumpEventQueue();
+    mic.say(const Heard('yes'));
+    final outcome = await going;
+    expect(outcome.route, Routes.scan);
+    expect(session.facesConsented, isTrue);
+    expect(session.takePendingFriend(), 'Sam');
   });
 
   group('by voice', () {
