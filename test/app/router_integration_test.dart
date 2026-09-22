@@ -681,8 +681,7 @@ class _Places implements PlaceSearchService {
   MapServiceFailure? failure;
 
   @override
-  Future<List<PlaceCandidate>> search(String query,
-      {required RoutePoint near}) async {
+  Future<List<PlaceCandidate>> search(String query, {RoutePoint? near}) async {
     this.near = near;
     final failure = this.failure;
     if (failure != null) throw MapServiceException(failure);

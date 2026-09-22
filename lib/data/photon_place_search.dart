@@ -18,14 +18,19 @@ class PhotonPlaceSearch implements PlaceSearchService {
   final OsmHttp _http;
   final String base;
 
+  /// Ten, not five: the nearest of five was often out of reach, and those
+  /// further than [kSearchRadiusMetres] are dropped afterwards. In English,
+  /// so names are said the way the voice can say them.
   @override
-  Future<List<PlaceCandidate>> search(String query,
-      {required RoutePoint near}) async {
+  Future<List<PlaceCandidate>> search(String query, {RoutePoint? near}) async {
     final uri = Uri.parse('$base/api').replace(queryParameters: {
       'q': query.trim(),
-      'lat': near.latitude.toStringAsFixed(4),
-      'lon': near.longitude.toStringAsFixed(4),
-      'limit': '5',
+      if (near != null) ...{
+        'lat': near.latitude.toStringAsFixed(4),
+        'lon': near.longitude.toStringAsFixed(4),
+      },
+      'limit': '10',
+      'lang': 'en',
     });
     return parsePhoton(await _http.getJson(uri, cache: true));
   }

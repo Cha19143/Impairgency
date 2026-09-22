@@ -102,7 +102,6 @@ import '../vi/voice_controller.dart';
 import '../vi/widgets/place_search_panel.dart';
 import '../vi/widgets/vi_button.dart';
 import '../vi/widgets/vi_screen.dart';
-import '../vi/widgets/voice_scope_host.dart';
 import 'routes.dart';
 import 'theme.dart';
 
@@ -487,23 +486,22 @@ class AppSession extends ChangeNotifier {
       return const PlaceSearchResult(
           problem: 'Searching for places is not available here.');
     }
+    // Without a position the search still runs - indoors, where a fix
+    // takes minutes, it used to refuse outright - and says what that means.
     final source = location;
     final availability = await source.requestPermission();
-    if (availability != LocationAvailability.ready) {
-      return PlaceSearchResult(
-          problem: 'To search nearby I need your location. '
-              '${permissionGuidance(availability)}');
-    }
-    final fix = await bestEffortFix(source, timeout: const Duration(seconds: 6));
-    if (fix == null) {
-      return const PlaceSearchResult(
-          problem: 'I could not get your position, so I cannot search nearby. '
-              'Saved places still work.');
-    }
-    final here = RoutePoint(fix.latitude, fix.longitude);
+    final fix = availability == LocationAvailability.ready
+        ? await bestEffortFix(source, timeout: const Duration(seconds: 6))
+        : null;
+    final here = fix == null ? null : RoutePoint(fix.latitude, fix.longitude);
+    final note = searchNote(fix, now: DateTime.now());
     try {
       final found = await search.search(query, near: here);
-      return PlaceSearchResult(found: nearbyCandidates(found, here), from: here);
+      return PlaceSearchResult(
+        found: here == null ? found : nearbyCandidates(found, here),
+        from: here,
+        note: note,
+      );
     } on MapServiceException catch (e) {
       return PlaceSearchResult(
         problem: switch (e.failure) {
@@ -1358,35 +1356,21 @@ GoRouter createRouter(AppSession session) {
           path: Routes.assist,
           builder: (context, _) => AdminFreeFuture<List<Destination>>(
             load: () => session.places.list(session.state.uid ?? ''),
-            builder: (_, places) => VoiceScopeHost(
+            // The screen listens for itself: a saved place's name, and -
+            // once a search has run - "number two" or a result's name.
+            builder: (_, places) => SmartAssistanceScreen(
+              speaker: session.speaker,
               voice: session.voice,
-              scope: VoiceScope(
-                commands: () => kAssistCommands,
-                // A saved place's name said on its own - "home", "the
-                // clinic" - is the answer to this screen's question.
-                onWords: (words) async {
-                  final place = savedPlaceNamed(words, places);
-                  if (place == null) return false;
-                  await session.speaker.speak('Directions to ${place.label}.');
-                  await session.setDestination(place);
-                  if (context.mounted) appNavigate(context, Routes.journey);
-                  return true;
-                },
-              ),
-              child: SmartAssistanceScreen(
-                speaker: session.speaker,
-                voice: session.voice,
-                search: session.placeSearch == null
-                    ? null
-                    : session.searchPlaces,
-                places: places,
-                onGo: (place) async {
-                  await session.setDestination(place);
-                  if (context.mounted) appNavigate(context, Routes.journey);
-                },
-                onManagePlaces: () => appNavigate(context, Routes.savedPlaces),
-                onBack: () => appNavigate(context, Routes.home),
-              ),
+              search: session.placeSearch == null
+                  ? null
+                  : session.searchPlaces,
+              places: places,
+              onGo: (place) async {
+                await session.setDestination(place);
+                if (context.mounted) appNavigate(context, Routes.journey);
+              },
+              onManagePlaces: () => appNavigate(context, Routes.savedPlaces),
+              onBack: () => appNavigate(context, Routes.home),
             ),
           ),
         ),

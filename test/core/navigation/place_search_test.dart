@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:impairgency/core/location/location_fix.dart';
 import 'package:impairgency/core/navigation/destination.dart';
 import 'package:impairgency/core/navigation/map_services.dart';
 import 'package:impairgency/core/navigation/place_search.dart';
@@ -122,6 +123,26 @@ void main() {
         throwsA(isA<MapServiceException>().having(
             (e) => e.failure, 'failure', MapServiceFailure.unavailable)),
       );
+    });
+  });
+
+  group('what a search says about the position it used', () {
+    final now = DateTime.utc(2026, 9, 18, 10);
+    LocationFix at(Duration ago) => LocationFix(
+        latitude: 14.79, longitude: 120.92, accuracyMetres: 10, at: now.subtract(ago));
+
+    test('none at all: results may be far', () {
+      expect(searchNote(null, now: now),
+          'Searching without your position, so results may be far.');
+    });
+
+    test('an old one is said to be old', () {
+      expect(searchNote(at(const Duration(minutes: 5)), now: now),
+          'Using where you were 5 minutes ago.');
+    });
+
+    test('a fresh one needs no note', () {
+      expect(searchNote(at(const Duration(seconds: 20)), now: now), isNull);
     });
   });
 }

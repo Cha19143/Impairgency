@@ -97,10 +97,13 @@ List<int> matchSpokenTargets(String words, List<String> labels,
 
 /// Which of [labels] an answer to "Did you mean A, or B?" picks, by index.
 ///
-/// A label named as it would be anywhere else; failing that, the one label
-/// the answer's words all belong to - "work", for "Call Mum at work" - or the
-/// first, second or third said by position.
+/// A position said - "the second", "number two" - first: two branches of
+/// one shop share a name, and only the position tells them apart. Then a
+/// label named as it would be anywhere else; failing that, the one label the
+/// answer's words all belong to - "work", for "Call Mum at work".
 List<int> matchChoice(String words, List<String> labels) {
+  final position = choiceByNumber(words, labels.length);
+  if (position != null) return [position];
   final named = matchSpokenTargets(words, labels);
   if (named.isNotEmpty) return named;
   final said = identifyingWords(words);
@@ -114,11 +117,36 @@ List<int> matchChoice(String words, List<String> labels) {
   ];
 }
 
+/// The position [words] names among [count] choices, or null: "second",
+/// "the second one", "number two", "two", "ikalawa". Only when that is all
+/// that was said, so "the one near the market" is not the first.
+int? choiceByNumber(String words, int count) {
+  var said = spokenWords(words);
+  while (said.isNotEmpty && const {'the', 'number', 'yung', 'ang', 'pang'}
+      .contains(said.first)) {
+    said = said.sublist(1);
+  }
+  if (said.length == 2 && const {'one', 'po', 'please'}.contains(said.last)) {
+    said = said.sublist(0, 1);
+  }
+  if (said.length != 1) return null;
+  final word = said.single;
+  for (final (index, names) in _ordinals.indexed) {
+    if (index >= count) break;
+    if (names.contains(word) || _cardinals[index] == word) return index;
+  }
+  return null;
+}
+
 const List<Set<String>> _ordinals = [
   {'first', '1st', 'una', 'unang'},
   {'second', '2nd', 'ikalawa', 'pangalawa'},
   {'third', '3rd', 'ikatlo', 'pangatlo'},
+  {'fourth', '4th', 'ikaapat', 'pangapat'},
+  {'fifth', '5th', 'ikalima', 'panglima'},
 ];
+
+const List<String> _cardinals = ['one', 'two', 'three', 'four', 'five'];
 
 bool _same(List<String> a, List<String> b) {
   if (a.length != b.length) return false;

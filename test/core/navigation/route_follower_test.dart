@@ -58,8 +58,12 @@ void main() {
     return said;
   }
 
+  /// What was said about turns, without the "keep going" lines between.
+  List<String> turns(List<String> said) =>
+      said.where((s) => !s.startsWith('Keep going.')).toList();
+
   test('each turn is said ahead of it and at it, once each', () {
-    final said = walk(a, east: 118, heading: 90);
+    final said = turns(walk(a, east: 118, heading: 90));
     expect(said, [
       'Walk straight ahead along Rizal Street.',
       'In about 50 metres, turn left onto Mabini Street.',
@@ -72,7 +76,7 @@ void main() {
   test('a turn close behind the last rides along with it, and is said again',
       () {
     walk(a, east: 118, heading: 90);
-    final said = walk(b, north: 78, heading: 0, startSecond: 60);
+    final said = turns(walk(b, north: 78, heading: 0, startSecond: 60));
     expect(said, [
       'In about 50 metres, turn right.',
       'Now, turn right, then turn left.',
@@ -94,11 +98,34 @@ void main() {
     expect(follower.update(at(e, heading: 0)).say, isNull);
   });
 
-  test('a vague reading moves nothing and says nothing', () {
+  test('a vague reading moves nothing, and is said to be vague once', () {
     follower.update(at(a, heading: 90));
     final vague = follower.update(at(moved(a, east: 110), accuracy: 80));
-    expect(vague.say, isNull);
+    expect(vague.say, kPoorFixPhrase);
     expect(follower.along, closeTo(0, 1));
+    expect(
+        follower.update(at(moved(a, east: 110), accuracy: 80, seconds: 5)).say,
+        isNull);
+  });
+
+  test('a long stretch is not silence: "keep going", now and then', () {
+    // Nothing was said between turns. On the first 118 metres that is a
+    // start sentence, then nothing until 50 metres before the corner.
+    final said = walk(a, east: 118, heading: 90);
+    final progress = said.where((s) => s.startsWith('Keep going.')).toList();
+    expect(progress, isNotEmpty);
+    expect(progress.first, startsWith('Keep going. Turn left onto Mabini '
+        'Street in about'));
+    expect(progress.length, lessThanOrEqualTo(2),
+        reason: 'every 30 metres or 20 seconds, not every reading');
+  });
+
+  test('standing still is not a lost position, with readings coming', () {
+    follower.update(at(a, heading: 90));
+    for (var s = 5; s <= 60; s += 5) {
+      follower.update(at(a, seconds: s, accuracy: 70));
+    }
+    expect(follower.tick().say, isNull);
   });
 
   group('leaving the route', () {

@@ -195,14 +195,20 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
   /// before is stale. Drops pending narration and cuts it off if it is in
   /// progress — but never a hazard, which is about the street rather than
   /// the screen.
+  ///
+  /// Nor a direction. The map screen's own opening words, or any prompt,
+  /// used to drop the turns queued behind them - which is how a walk could
+  /// go by without a single "turn left" heard.
   void _replaceInformational() {
+    bool kept(SpeechPriority p) =>
+        p == SpeechPriority.hazard || p == SpeechPriority.navigation;
     _pending.removeWhere((r) {
-      if (r.priority == SpeechPriority.hazard) return false;
+      if (kept(r.priority)) return false;
       r.finish();
       return true;
     });
     final current = _current;
-    if (current != null && current.priority != SpeechPriority.hazard) {
+    if (current != null && !kept(current.priority)) {
       unawaited(_engine.stop());
     }
   }

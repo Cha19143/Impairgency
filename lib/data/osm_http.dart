@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/navigation/map_services.dart';
+import 'crash_reporting.dart';
 
 /// Who is asking. Both services ask that an app name itself and give a way to
 /// reach whoever runs it; the project's site is that, and it names no person.
@@ -54,6 +55,20 @@ class OsmHttp {
   /// "NoRoute" with a 400.
   Future<Object?> getJson(Uri uri,
       {bool cache = false, bool errorBody = false}) async {
+    try {
+      return await _getJson(uri, cache: cache, errorBody: errorBody);
+    } on MapServiceException catch (e, stack) {
+      // Reported, not only said: a 403 or a 429 from a network in the
+      // Philippines was invisible from here, and "the search is not working"
+      // on a tester's phone could not be told from a bug.
+      debugPrint('OSM ${uri.host} failed: ${e.failure} ${e.detail ?? ''}');
+      crashRecorder.handled(e, stack, reason: 'OSM ${uri.host}');
+      rethrow;
+    }
+  }
+
+  Future<Object?> _getJson(Uri uri,
+      {required bool cache, required bool errorBody}) async {
     final now = _now();
     if (cache) {
       final hit = _cache[uri];

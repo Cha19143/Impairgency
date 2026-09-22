@@ -49,9 +49,9 @@ abstract interface class RoutingService {
 
 /// Places by name, and the name of a place.
 abstract interface class PlaceSearchService {
-  /// Places matching [query], the nearest to [near] favoured. Throws
-  /// [MapServiceException].
-  Future<List<PlaceCandidate>> search(String query, {required RoutePoint near});
+  /// Places matching [query], the nearest to [near] favoured when there is a
+  /// [near]. Throws [MapServiceException].
+  Future<List<PlaceCandidate>> search(String query, {RoutePoint? near});
 
   /// What is at [point] - a street, a building - or null if nothing is known.
   /// Throws [MapServiceException].

@@ -148,16 +148,30 @@ void main() {
   });
 
   group('place search', () {
-    test('searches near the person, five at most', () async {
+    test('searches near the person, ten at most, in English', () async {
       final search = PhotonPlaceSearch(
           http: osm((_) async => json(map.photonJollibee)));
       final found = await search.search(' Jollibee ', near: map.a);
       final uri = requests.single.url;
       expect(uri.host, 'photon.komoot.io');
       expect(uri.path, '/api');
-      expect(uri.queryParameters,
-          {'q': 'Jollibee', 'lat': '14.8400', 'lon': '120.8100', 'limit': '5'});
+      expect(uri.queryParameters, {
+        'q': 'Jollibee',
+        'lat': '14.8400',
+        'lon': '120.8100',
+        'limit': '10',
+        'lang': 'en',
+      });
       expect(found, hasLength(3));
+    });
+
+    test('without a position, searches anyway', () async {
+      final search = PhotonPlaceSearch(
+          http: osm((_) async => json(map.photonJollibee)));
+      await search.search('Jollibee');
+      final params = requests.single.url.queryParameters;
+      expect(params.containsKey('lat'), isFalse);
+      expect(params['q'], 'Jollibee');
     });
 
     test('what is here', () async {

@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
+import '../../core/location/course_tracker.dart';
 import '../../core/location/location_fix.dart';
 import '../../core/navigation/destination.dart';
 import '../../core/navigation/journey_guide.dart';
@@ -51,6 +52,12 @@ typedef JourneyMapBuilder = Widget Function(JourneyMapState state);
 /// map is for someone with some sight, and for whoever is walking beside them
 /// - and the obstacle and people warnings carry on underneath, from the same
 /// [SurroundingsWatch] Scan uses, with the camera in a corner.
+/// Said when readings stop coming, or come as errors, while walking.
+const String kPositionTroublePhrase = 'I am not getting your position right '
+    'now. Check that location is on.';
+const String kPositionEndedPhrase = 'Directions stopped: I no longer get your '
+    'position. Check location permission.';
+
 class JourneyScreen extends StatefulWidget {
   const JourneyScreen({
     super.key,
@@ -122,6 +129,8 @@ class _JourneyScreenState extends State<JourneyScreen> {
   String? _direction;
   bool _stopped = false;
   bool _arrived = false;
+  bool _positionTroubleSaid = false;
+  final _course = CourseTracker();
   VoiceScopeHandle? _voiceScope;
 
   @override
@@ -175,10 +184,18 @@ class _JourneyScreenState extends State<JourneyScreen> {
         ? 'Directions need your location, and it is off.'
         : guide.status;
     if (positions == null) return;
-    _positions = positions.listen(_onFix, onError: (_) {}, onDone: () {
-      if (mounted && !_stopped) {
-        setState(() => _direction = 'Directions stopped: no position.');
-      }
+    _positions = positions.listen(_onFix, onError: (_) {
+      // Location switched off, or the permission taken away, mid-walk.
+      // Once: the stream may keep erroring.
+      if (!mounted || _stopped || _positionTroubleSaid) return;
+      _positionTroubleSaid = true;
+      widget.speaker.announce(kPositionTroublePhrase,
+          priority: SpeechPriority.navigation);
+    }, onDone: () {
+      if (!mounted || _stopped) return;
+      setState(() => _direction = 'Directions stopped: no position.');
+      widget.speaker.announce(kPositionEndedPhrase,
+          priority: SpeechPriority.navigation);
     });
     if (widget.routing != null) {
       _ticker =
@@ -195,9 +212,11 @@ class _JourneyScreenState extends State<JourneyScreen> {
     _guide = null;
   }
 
-  void _onFix(LocationFix fix) {
+  void _onFix(LocationFix raw) {
     final guide = _guide;
     if (guide == null || !mounted) return;
+    _positionTroubleSaid = false;
+    final fix = _course.withCourse(raw);
     guide.update(fix);
     widget.onFix?.call(fix);
     if (guide.mode == JourneyMode.arrived && !_arrived) {

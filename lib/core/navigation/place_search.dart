@@ -7,6 +7,8 @@
 /// every wording is tested without a map.
 library;
 
+import '../location/location_fix.dart';
+import '../location/location_policy.dart' show describeAge;
 import '../places/geo.dart';
 import 'destination.dart';
 import 'guidance.dart';
@@ -205,6 +207,22 @@ List<PlaceCandidate> nearbyCandidates(
             kSearchRadiusMetres)
           c,
     ];
+
+/// A position older than this is said to be old when a search uses it.
+const Duration kStaleSearchFix = Duration(minutes: 2);
+
+/// What to say before a search's results about the position it used: none
+/// at all, or one some minutes old. Null for a fresh one.
+String? searchNote(LocationFix? fix, {required DateTime now}) {
+  if (fix == null) {
+    return 'Searching without your position, so results may be far.';
+  }
+  final age = now.difference(fix.at);
+  if (age > kStaleSearchFix) {
+    return 'Using where you were ${describeAge(age)}.';
+  }
+  return null;
+}
 
 /// "Jollibee, MacArthur Highway, Malolos, about 850 metres away."
 String describeCandidate(PlaceCandidate candidate, {RoutePoint? from}) {

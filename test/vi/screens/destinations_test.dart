@@ -64,14 +64,70 @@ void main() {
       await tester.ensureVisible(find.text('Search'));
       await tester.tap(find.text('Search'));
       await tester.pumpAndSettle();
-      expect(speaker.said.last.$1, '2 places found for jollibee.');
+      // Each place read out, numbered, so nobody has to find the buttons.
+      expect(speaker.said.last.$1,
+          startsWith('2 places found for jollibee. First, Jollibee, Paseo del '
+              'Congreso'));
+      expect(speaker.said.last.$1, contains('Second, Jollibee, MacArthur Highway'));
+      expect(speaker.said.last.$1, endsWith('Say the number or the name.'));
       expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
 
+      // The results are the screen's buttons now, first; the saved places
+      // wait behind "Back to saved places".
+      expect(find.text('Home'), findsNothing);
       final second = find.textContaining('MacArthur Highway');
       await tester.ensureVisible(second);
       await tester.tap(second);
       expect(chosen?.id, 'search-N3333');
       expect(chosen?.label, 'Jollibee');
+
+      await tester.ensureVisible(find.text('Back to saved places'));
+      await tester.tap(find.text('Back to saved places'));
+      await tester.pumpAndSettle();
+      expect(find.text('Home'), findsOneWidget);
+    });
+
+    testWidgets('"number two" chooses the second place found', (tester) async {
+      // Two branches share a name; only the position tells them apart.
+      Destination? chosen;
+      final mic = OpenWindows();
+      final speaker = RecordingSpeaker();
+      final voice = voiceControllerFor(mic, Recording());
+      await tester.pumpWidget(host(SmartAssistanceScreen(
+        speaker: speaker,
+        voice: voice,
+        places: const [home],
+        onGo: (p) => chosen = p,
+        onManagePlaces: () {},
+        onBack: () {},
+        search: (query) async => PlaceSearchResult(
+          found: nearbyCandidates(parsePhoton(map.photonJollibee), map.a),
+          from: map.a,
+        ),
+      )));
+      await tester.enterText(find.byType(TextField), 'jollibee');
+      await tester.ensureVisible(find.text('Search'));
+      await tester.tap(find.text('Search'));
+      await tester.pumpAndSettle();
+
+      // Both are called Jollibee: the name alone asks for a number.
+      var listening = voice.listen();
+      await tester.pump();
+      mic.say(const Heard('jollibee'));
+      await tester.pump();
+      await tester.pump();
+      await listening;
+      expect(chosen, isNull);
+      expect(speaker.said.last.$1,
+          '2 places are called Jollibee: numbers 1 and 2. Say the number.');
+
+      listening = voice.listen();
+      await tester.pump();
+      mic.say(const Heard('number two'));
+      await tester.pump();
+      await tester.pump();
+      await listening;
+      expect(chosen?.id, 'search-N3333');
     });
 
     testWidgets('a search that cannot run says why', (tester) async {

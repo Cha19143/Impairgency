@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/destination.dart';
+import '../../core/navigation/place_search.dart';
 import '../../core/speech/speaker.dart';
+import '../../core/voice/spoken_targets.dart';
+import '../../core/voice/voice_commands.dart';
 import '../voice_controller.dart';
 import '../widgets/place_search_panel.dart';
 import '../widgets/vi_button.dart';
@@ -53,6 +56,66 @@ class SmartAssistanceScreen extends StatefulWidget {
 
 class _SmartAssistanceScreenState extends State<SmartAssistanceScreen> {
   final _searchPanel = GlobalKey<PlaceSearchPanelState>();
+  VoiceScopeHandle? _scope;
+
+  /// What the last search found. While there is something, it is what the
+  /// screen offers: the places found, first, as its main buttons.
+  PlaceSearchResult? _results;
+
+  List<PlaceCandidate> get _found =>
+      _results?.found.take(kSpokenResults).toList() ?? const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _scope = widget.voice?.attach(VoiceScope(
+      commands: () => kAssistCommands,
+      onWords: _onWords,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _scope?.detach();
+    super.dispose();
+  }
+
+  /// A saved place's name said on its own - "home", "the clinic" - is the
+  /// answer to this screen's question. After a search, so is a place found:
+  /// by its position - "number two", "the second" - since two branches
+  /// share a name, or by its name when only one has it.
+  Future<bool> _onWords(String words) async {
+    final found = _found;
+    if (found.isNotEmpty) {
+      final labels = [for (final c in found) c.label];
+      final byNumber = choiceByNumber(words, found.length);
+      final picked = byNumber != null
+          ? [byNumber]
+          : matchSpokenTargets(words, labels, exactOnly: true);
+      if (picked.length == 1) {
+        await _go(found[picked.single].toDestination());
+        return true;
+      }
+      if (picked.length > 1) {
+        // Two branches with one name: a button's name cannot choose between
+        // them, so the answer is their numbers.
+        final numbers = [for (final i in picked) '${i + 1}'];
+        await widget.speaker.speak('${picked.length} places are called '
+            '${labels[picked.first]}: numbers ${numbers.join(' and ')}. Say '
+            'the number.');
+        return true;
+      }
+    }
+    final place = savedPlaceNamed(words, widget.places);
+    if (place == null) return false;
+    await _go(place);
+    return true;
+  }
+
+  Future<void> _go(Destination place) async {
+    await widget.speaker.speak('Directions to ${place.label}.');
+    widget.onGo(place);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,51 +167,72 @@ class _SmartAssistanceScreenState extends State<SmartAssistanceScreen> {
                     search: search,
                     onChoose: onGo,
                     onResult: speaker.speak,
+                    onResults: (result) => setState(() => _results = result),
                   ),
               ],
             ),
-      actions: [
-        // First, because a place nobody has saved is the one most likely to
-        // need asking for.
-        if (search != null)
-          ViButton(
-            label: 'Somewhere else',
-            detail: 'Search by name, or say take me to, and a place',
-            icon: Icons.search,
-            onPressed: () => _searchPanel.currentState?.ask(),
-          ),
-        for (final place in ordered)
-          ViButton(
-            label: place.label,
-            detail: 'Start directions to ${place.label}',
-            icon: _iconFor(place.kind),
-            kind: place.kind == DestinationKind.other
-                ? ViButtonKind.secondary
-                : ViButtonKind.primary,
-            onPressed: () => onGo(place),
-          ),
-        for (final kind in missing)
-          ViButton(
-            label: '${kDestinationKindLabels[kind]} is not saved yet',
-            detail: 'Tap to save where you are now as '
-                '${kDestinationKindLabels[kind]}',
-            icon: _iconFor(kind),
-            kind: ViButtonKind.quiet,
-            onPressed: onManagePlaces,
-          ),
-        ViButton(
-          label: 'Saved places',
-          detail: 'Add, rename or remove',
-          icon: Icons.edit_location_alt_outlined,
-          kind: ViButtonKind.secondary,
-          onPressed: onManagePlaces,
-        ),
-        ViButton(
-          label: 'Back',
-          kind: ViButtonKind.quiet,
-          onPressed: onBack,
-        ),
-      ],
+      actions: _found.isNotEmpty
+          ? [
+              // What was found is the answer, so it comes first - numbered,
+              // as it was read out.
+              for (final (i, place) in _found.indexed)
+                ViButton(
+                  label: place.label,
+                  detail: '${i + 1}. '
+                      '${describeCandidate(place, from: _results!.from)}',
+                  icon: Icons.place_outlined,
+                  onPressed: () => onGo(place.toDestination()),
+                ),
+              ViButton(
+                label: 'Back to saved places',
+                detail: 'Search again, or choose a saved place',
+                icon: Icons.bookmarks_outlined,
+                kind: ViButtonKind.secondary,
+                onPressed: () => setState(() => _results = null),
+              ),
+            ]
+          : [
+              // First, because a place nobody has saved is the one most
+              // likely to need asking for.
+              if (search != null)
+                ViButton(
+                  label: 'Somewhere else',
+                  detail: 'Search by name, or say take me to, and a place',
+                  icon: Icons.search,
+                  onPressed: () => _searchPanel.currentState?.ask(),
+                ),
+              for (final place in ordered)
+                ViButton(
+                  label: place.label,
+                  detail: 'Start directions to ${place.label}',
+                  icon: _iconFor(place.kind),
+                  kind: place.kind == DestinationKind.other
+                      ? ViButtonKind.secondary
+                      : ViButtonKind.primary,
+                  onPressed: () => onGo(place),
+                ),
+              for (final kind in missing)
+                ViButton(
+                  label: '${kDestinationKindLabels[kind]} is not saved yet',
+                  detail: 'Tap to save where you are now as '
+                      '${kDestinationKindLabels[kind]}',
+                  icon: _iconFor(kind),
+                  kind: ViButtonKind.quiet,
+                  onPressed: onManagePlaces,
+                ),
+              ViButton(
+                label: 'Saved places',
+                detail: 'Add, rename or remove',
+                icon: Icons.edit_location_alt_outlined,
+                kind: ViButtonKind.secondary,
+                onPressed: onManagePlaces,
+              ),
+              ViButton(
+                label: 'Back',
+                kind: ViButtonKind.quiet,
+                onPressed: onBack,
+              ),
+            ],
     );
   }
 

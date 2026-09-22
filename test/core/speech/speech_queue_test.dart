@@ -106,9 +106,11 @@ void main() {
   });
 
   group('clearing narration', () {
-    test('drops information and navigation, never a hazard', () async {
+    test('drops information, never a hazard or a direction', () async {
       // What leaving a screen and opening the microphone both do. stop() used
-      // to be called instead, and it dropped the hazard too.
+      // to be called instead, and it dropped the hazard too. Directions went
+      // with the information, so the map screen's opening words dropped the
+      // turns queued behind them.
       unawaited(queue.announce('Stop. car on your left',
           priority: SpeechPriority.hazard));
       await settle();
@@ -123,7 +125,18 @@ void main() {
 
       expect(engine.cutOff, isEmpty, reason: 'the hazard being said goes on');
       expect(engine.speaking, 'Stop. car on your left');
-      expect(queue.pending, isEmpty);
+      expect(queue.pending, ['In fifty metres, turn right.']);
+    });
+
+    test('a prompt does not drop the turn waiting behind it', () async {
+      unawaited(queue.speak('Guidance ready. Heading for Home.'));
+      await settle();
+      unawaited(queue.announce('Now, turn left.',
+          priority: SpeechPriority.navigation));
+      unawaited(queue.speak('Say scan, or help.'));
+      await settle();
+      expect([engine.speaking, ...queue.pending], contains('Now, turn left.'));
+      expect(engine.cutOff, isNot(contains('Now, turn left.')));
     });
 
     test('cuts off narration in progress', () async {

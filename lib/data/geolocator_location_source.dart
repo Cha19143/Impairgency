@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:geolocator/geolocator.dart';
 
 import '../core/location/location_fix.dart';
@@ -12,29 +14,29 @@ import '../core/location/location_source.dart';
 class GeolocatorLocationSource implements LocationSource {
   const GeolocatorLocationSource();
 
-  LocationFix _toFix(Position p) => LocationFix(
-        latitude: p.latitude,
-        longitude: p.longitude,
-        accuracyMetres: p.accuracy,
-        at: p.timestamp,
-        headingDegrees: p.heading,
-        speedMetresPerSecond: p.speed,
-      );
+  LocationFix _toFix(Position p) => fixFromPosition(p);
 
   /// Readings as the user moves, for turn-by-turn guidance.
   ///
-  /// Every couple of metres rather than every reading: guidance changes with
-  /// position, not with time, and a stationary user does not need a stream
-  /// of identical fixes. Never throws for a refused permission - the stream
-  /// simply ends, and the screen says guidance is off.
+  /// Every reading, every two seconds on Android. It used to be only after
+  /// two metres of movement, so someone standing still got no readings, and
+  /// after thirty seconds was told their position was lost. Errors reach the
+  /// screen, which says them; a refused permission ends the stream before it
+  /// starts.
   Stream<LocationFix> positions() async* {
     if (await availability() != LocationAvailability.ready) return;
-    yield* Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.best,
-        distanceFilter: 2,
-      ),
-    ).map(_toFix).handleError((_) {});
+    final settings = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? AndroidSettings(
+            accuracy: LocationAccuracy.best,
+            distanceFilter: 0,
+            intervalDuration: const Duration(seconds: 2),
+          )
+        : const LocationSettings(
+            accuracy: LocationAccuracy.best,
+            distanceFilter: 0,
+          );
+    yield* Geolocator.getPositionStream(locationSettings: settings)
+        .map(_toFix);
   }
 
   LocationAvailability _map(LocationPermission permission) =>
@@ -125,3 +127,14 @@ Future<LocationFix?> bestEffortFix(
   if (fresh != null) return fresh;
   return source.lastKnownFix();
 }
+
+/// [p] as the app's own reading. A course or a speed the platform did not
+/// report is null, not 0.0: a missing heading used to arrive as due north.
+LocationFix fixFromPosition(Position p) => LocationFix(
+      latitude: p.latitude,
+      longitude: p.longitude,
+      accuracyMetres: p.accuracy,
+      at: p.timestamp,
+      headingDegrees: p.hasHeading ? p.heading : null,
+      speedMetresPerSecond: p.hasSpeed ? p.speed : null,
+    );

@@ -63,6 +63,12 @@ const Duration kLostPosition = Duration(seconds: 30);
 /// this.
 const Duration kWrongWayRepeat = Duration(seconds: 30);
 
+/// Between turns, how long a stretch goes without a word - or how far,
+/// [kProgressMetres], whichever is first. Nothing was said between turns,
+/// and on a long street that was a minute of silence.
+const Duration kNavigationRepeat = Duration(seconds: 20);
+const double kProgressMetres = 30;
+
 class RouteGuidance {
   const RouteGuidance({
     required this.status,
@@ -139,6 +145,11 @@ class RouteFollower {
 
   DateTime? _lastReadingAt;
   bool _lostSaid = false;
+  bool _poorSaid = false;
+
+  /// When, and where along, something was last said.
+  DateTime? _spokeAt;
+  double? _spokeAlong;
 
   String _status = 'Starting directions…';
 
@@ -150,7 +161,14 @@ class RouteFollower {
   RouteGuidance update(LocationFix fix) {
     if (_arrived) return RouteGuidance(status: _status, arrived: true);
     if (fix.accuracyMetres > kPoorFixMetres) {
-      return RouteGuidance(status: _status);
+      // A reading, if a vague one: the position is not lost, and saying so
+      // to someone standing still under a roof was wrong. That it is too
+      // vague is said once.
+      _lastReadingAt = _now();
+      _lostSaid = false;
+      if (_poorSaid) return RouteGuidance(status: _status);
+      _poorSaid = true;
+      return RouteGuidance(status: _status, say: kPoorFixPhrase);
     }
     _lastReadingAt = _now();
     _lostSaid = false;
@@ -254,6 +272,7 @@ class RouteFollower {
         final upcoming = route.steps[_next];
         _status = nextStatus(upcoming, math.max(0, _manoeuvreAt[_next] - along),
             to: to);
+        _spoke(along);
         return RouteGuidance(status: _status, say: said.join(' '));
       }
     }
@@ -264,8 +283,34 @@ class RouteFollower {
       said.add(upcomingPhrase(step, distance, to: to));
     }
     _status = nextStatus(step, math.max(0, distance), to: to);
+    // Not within a stretch of the turn's own warning, which is about to be
+    // said anyway.
+    if (said.isEmpty &&
+        distance > kUpcomingMetres + kProgressMetres &&
+        _progressDue(along)) {
+      said.add(progressPhrase(step, distance, to: to));
+    }
+    if (said.isNotEmpty) _spoke(along);
     return RouteGuidance(
         status: _status, say: said.isEmpty ? null : said.join(' '));
+  }
+
+  void _spoke(double along) {
+    _spokeAt = _now();
+    _spokeAlong = along;
+  }
+
+  /// Whether the stretch since anything was last said is long enough, in
+  /// time or in metres, for "keep going".
+  bool _progressDue(double along) {
+    final at = _spokeAt;
+    final from = _spokeAlong;
+    if (at == null || from == null) {
+      _spoke(along);
+      return false;
+    }
+    return _now().difference(at) >= kNavigationRepeat ||
+        along - from >= kProgressMetres;
   }
 
   /// Time passing with no reading: under a roof, in a tunnel, a phone in a
