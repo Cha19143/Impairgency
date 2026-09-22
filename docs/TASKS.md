@@ -33,7 +33,8 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
 | Tester feedback round 2 — September 15 | `███████████░` | 36 / 38 |
 | Tester feedback round 3 — September 16 | `██████████░░` | 26 / 30 |
-| **Overall** | | **167 / 173  (97%)** |
+| Tester feedback round 4 — September 18 | `█████████░░░` | 26 / 36 |
+| **Overall** | | **193 / 209  (92%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -629,6 +630,133 @@ is behind it. The docs say so.
 - [x] The consent switches, the settings icon, and the rename, remove and
       move-up icons are pressable by name too
 
+## Tester feedback round 4 — September 18
+
+The fourth list, from the Sept 16 build (`impairgency-8c4014a-release`) and
+the dashboard deployed from it. Worked in the order asked: SOS and admin,
+then voice, navigation, scan. Decided with Dex on 2026-09-23: train a stairs
+class now; hands-free stays opt-in on iOS this round; command matching stays
+on the phone (near misses and synonyms, no language-model service); session
+summaries are written this round.
+
+**SOS** — §2.A.5
+
+- [x] "Cancel" and "stop" acted late: the hint "Say cancel, or touch the
+      screen anywhere, to stop this" had both words mid-sentence, so a
+      partial "cancel" waited for the phrase to end - past the three
+      seconds. The hint is now "Say cancel." and "Or touch the screen
+      anywhere.", and both words act on the first partial
+- [x] The record is written before the dialler opens, under an id chosen
+      then, with status active - a phone dropped mid-call lost it
+- [x] After the call: the receipt says "If you are all right now, say: I am
+      okay", listens for it (and "cancel", "ayos lang", "false alarm"; help
+      calls again) when it appears and again on coming back from the dialler,
+      and has an I'm okay button. The record is resolved by the user - not
+      cancelled - and the guardian's phone replaces "needs help" with "says
+      they are okay"; the card turns green
+- [x] False alarms: with hands-free on, help is a phrase of three words at
+      most with no negation; a button named exactly beats help in its name
+      ("Emergency contacts"); bare "guardian" is a Settings button, not a
+      call; with a screen reader on, the labels it reads are not the user
+- [x] What the app tells the user to say is no longer deleted as its own
+      echo - "I am okay", "fill in", "create account"
+- [ ] On a phone: say "stop" and "cancel" over the countdown; fire an SOS,
+      hang up, say "I am okay"; the guardian's phone and the dashboard row
+- [ ] ~~Cancel with the volume buttons~~ — Android only, and untestable in
+      widget tests. Revisit if testers ask
+- [ ] ~~Hear "stop" during the call, or end it from the app~~ — the phone
+      call owns the microphone on both platforms, and iOS lets no app end a
+      call. See [`SCOPE.md`](SCOPE.md)
+
+**Admin** — §1.1–§1.4
+
+- [x] Emergencies reach the dashboard: System health lists every SOS of the
+      last 30 days - when, who, where with a map link, who was called, and
+      active, cancelled or resolved - and an administrator can mark one
+      resolved. The tiles count the records themselves
+- [x] Rules: an administrator may change `resolvedAt`, `resolvedBy` and
+      `status` on an SOS record and nothing else; nobody moves one onto
+      another user. Six rules tests
+- [x] Overview says why journeys are blank - recorded only with history on -
+      instead of blanking the emergencies with them; active users counts
+      anyone who shared a position
+- [x] The Firebase console links open in a new tab
+- [x] Journeys are recorded, and summarised for the dashboard: a session is
+      a journey from choosing a destination to arriving, stopping, signing
+      out or ten minutes away; fixes, directions, obstacles, stairs and SOS
+      stages share its id. Only with history consent; only a saved place's
+      own name goes in a summary
+- [x] Browser tests: SOS rows, Mark resolved through the real rules, and
+      both kinds of empty Overview
+- [ ] Deploy the rules, indexes and hosting (after Dex confirms), and check
+      `firebase firestore:indexes` lists both `sos_events` indexes
+- [ ] On the emulator: a journey with history on writes a summary; with it
+      off, nothing
+
+**Voice** — §2.C
+
+- [x] Near misses: one edit off a keyword of five letters or more counts -
+      not for cancel words, where/there/here, or a short keyword
+- [x] Tagalog particles ("dalhin mo ako sa") and more fillers are passed
+      over; "where is", "saan ang", "find", "hanapin" ask the way; "where"
+      alone is nothing
+- [x] Everyday words now include stop (the app stops talking), back,
+      friends, who is here, and hands-free on and off - stop, back, who is
+      here and hands-free only as the whole phrase
+- [x] Hands-free: a failing microphone is tried again on the next screen; a
+      refused one is explained again on coming back; the first window says
+      "Hands-free listening is on. Just speak."; 100 ms between windows; a
+      near miss gets "I heard …, you can say …" at most every 20 seconds
+- [x] Dictation: six seconds to start, 2.5 s pauses, 20 s windows, the
+      platform's dictation mode, a buzz when the microphone opens. Replies
+      are edits first - done, cancel, no, clear, delete last word, read back,
+      spell it, add … - and an email that is not complete is not kept
+- [x] Addresses as people say them: "my email is", "at the rate",
+      "under score", "dotcom", "twenty two", "jay dee ee ex", accents folded
+- [ ] iOS: try `onDevice: true`, then default hands-free on after the first
+      permission grant
+- [ ] A listening tone as well as the buzz: needs an audio asset
+- [ ] On a phone: the voice-only checklists in [`DEMO.md`](DEMO.md)
+
+**Smart assistance** — §2.C, §2.A.7
+
+- [x] Search results are the screen's buttons, first and numbered, and all
+      of them are read out; "number two", "the second", "ikalawa" choose one;
+      two branches with one name ask for the number
+- [x] Search without a position: it runs anyway and says so, or says how old
+      the position is; ten results, in English; map-service failures are
+      reported to Crashlytics
+- [x] Turns are no longer dropped by the next thing said; "Keep going. Turn
+      left in about 120 metres." between turns; a vague position said once;
+      standing still is not "lost"; a course nobody reported is not due
+      north, and one is worked out from the walk; a position stream that
+      stops is said
+- [ ] On a phone, outside: a walked route - turns, progress, arrival - and
+      standing still for 40 seconds
+
+**Scan** — §2.A.3, §2.A.6
+
+- [x] The banding heuristic is retired. Stairs come from a second,
+      single-class YOLO11n run every 500 ms beside the COCO model, as
+      detections: weighted with the cars, named with where, told to the
+      guardian, kept on the journey. "Stop" for stairs waits for the gate
+- [x] Tools: `fetch_stairs.py` (Open Images "Stairs", floors as negatives),
+      `train_stairs.sh`, `eval_detector.py --stairs`
+- [ ] Fetch the data and train the model (asks first: Open Images, and
+      Ultralytics' `yolo11n.pt`), check its shapes, record its hash
+- [ ] Measure it: close recall and floors firing per score, into
+      [`VISION.md`](VISION.md). "Stop" on only if close recall ≥ 70% and ≤ 5%
+      of negatives fire at 0.55
+- [x] "Hello friend Sam" from the home screen; with recognition off it asks
+      to turn it on; the real reason when it cannot run
+- [x] Ten seconds to take a face down, counted aloud
+- [x] "Who do I know", "rename Sam to Samuel" (and a Rename button),
+      "forget everyone" after a yes
+- [x] Each bundled model is named in `pubspec.yaml`, so MiDaS never ships to
+      testers; `tool/build_depth_check.sh` adds it for that one build
+- [ ] On a phone: meet a friend from the home screen; a staircase, a tiled
+      floor, a zebra crossing and a striped rug once the model is in
+
 ---
 
 ## Out of scope — do not build
@@ -644,7 +772,8 @@ the reason it was scoped out was wrong — argue that first, in writing.
 - [ ] ~~Video session recording~~ — §1.1 — substituted by the Phase 2 timeline
 
 Partial: **stairs detection** (§2.A.3). It is a fall risk. The floor-banding
-heuristic from PR #74 is ported onto the YOLO pipeline and wired into Scan, but
-off by default: it also fires on tiled floors and zebra crossings. Next is a
-device check against real stairs and real floors — see
+heuristic is retired; stairs now come from a trained single-class detector
+whose pipeline is built and tested, and whose model is being trained. Until
+the file is in a build the app says nothing about stairs, and until it has
+been measured it names them and never says "Stop" — see
 [`VISION.md`](VISION.md), "Stairs".

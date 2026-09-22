@@ -155,8 +155,8 @@ not run.
 - **Kerbs, glass doors, potholes and overhanging branches** are not among the
   classes and are not detected. The safety notice says so, and must keep
   saying so.
-- **Stairs** are not a COCO class either. A separate heuristic looks for them,
-  and is off by default: see "Stairs" below.
+- **Stairs** are not a COCO class either. A second, single-class model looks
+  for them: see "Stairs" below.
 - **Walls, doors and posts** are not classes. A separate depth model can
   warn about them, and is off by default: see "Depth" below.
 - **One camera has no depth.** Nearness is inferred from box size. A poster of
@@ -197,72 +197,109 @@ YOLO's output shape; everything else in the scan path is not.
 
 # Stairs
 
-A missed step is a fall, and YOLO11n has no class for stairs. So Scan can run a
-second, much simpler look at the floor: `core/vision/stairs.dart`, ported from
-PR #74, where it was written against the old SSD pipeline and never tried on a
-phone.
+A missed step is a fall, and YOLO11n's COCO classes have no stairs. Stairs
+come from a second detector: a single-class YOLO11n, trained here on Open
+Images' "Stairs" boxes, run beside the COCO model the way the face and depth
+models are. Its boxes join the frame's detections as `stairs`, so everything
+after that - ranking, "close" and "very close", the guardian's feed, the
+journey record - treats stairs as one more object.
 
-**It is off by default.** Builds switch it on with
-`--dart-define=STAIRS_WARNINGS=true`. The reason is measured, below.
+**The model is not trained yet.** The pipeline is built and tested against a
+fake; a build without `assets/models/yolo11n_stairs.tflite` runs exactly as
+before and says nothing about stairs.
 
-## What it looks for
+## Why not the heuristic
 
-Regular horizontal banding in the lower part of the frame. That is what the
-nosings of a flight look like to one camera. Four or more edges must be found.
-They must be spaced regularly *in ratio*, so a flight is still regular after
-perspective shrinks the far treads, and they must cross most of the width. The
-result is a confidence from 0 to 1. It is not a probability: nothing here was
-calibrated against labelled photographs.
+Round 1 ported a floor-banding heuristic from PR #74: regular horizontal edges
+low in the frame. It was never tried on real photographs, and on its own
+synthetic ones a floor of 30 cm tiles scored **0.86** and a zebra crossing
+**0.75**, both over its 0.6 threshold - seen from above, a flight of stairs is
+a row of evenly receding edges, and so is a tiled floor. It stayed off in
+every tester build, and is gone; its history is in PR #74.
+
+## The data
+
+`tool/fetch_stairs.py` builds an Ultralytics dataset under
+`build/stairs-data/` (git-ignored):
+
+- **Positives**: Open Images train images with boxes for the class named
+  "Stairs" in Open Images' own class list. The class id is looked up by name
+  when the script runs and printed - record it here when it is. Crowds of
+  stairs in one box and pictures of stairs are left out.
+- **Negatives**, with empty label files: photographs of tiled floors, rugs,
+  corridors and zebra crossings taken on the phones the app runs on
+  (`--negatives`), and Open Images validation images with a chosen
+  image-level label and no Stairs box (`--negative-label`).
+- **Licences**: Open Images annotations are CC BY 4.0 and its images are
+  listed as CC BY 2.0, as for the evaluation set above. `SOURCES.txt` lists
+  every image with its id, for the attribution.
+
+Open Images labels no direction, so the model learns "stairs", never up or
+down.
+
+## Training
+
+`tool/train_stairs.sh`: `yolo detect train model=yolo11n.pt data=stairs.yaml
+imgsz=416 epochs=60 batch=32` - about one to two hours on a Colab T4, longer
+on the Mac's GPU - then the same export as the COCO model, LiteRT with float16
+weights and a planar input. The script checks the shapes with
+`tool/tflite_shapes.py` and refuses anything other than `[1, 3, 416, 416]` in
+and `[1, 5, anchors]` out, which is what `StairsDetector.load` checks too. The
+weights start from Ultralytics' `yolo11n.pt` and inherit its AGPL-3.0, as the
+COCO model does.
+
+| | |
+|---|---|
+| File | `assets/models/yolo11n_stairs.tflite` - *not yet* |
+| Open Images class | *recorded when fetched* |
+| Images | *positives, negatives* |
+| SHA-256 | *recorded when exported* |
 
 ## How it runs
 
-- **The grid.** The brightness grid is 300 by 300: the grid its thresholds and
-  tests were tuned at, since tread spacing is measured in grid rows.
-  `fillStairsGrid` fills it from the camera's brightness plane through
-  `YuvFrame.lumaAt`, turned upright. Only the part the search reads is sampled:
-  the lower 55% of the frame, 15% in from each side.
-- **When.** In `ScanService`, inside the same busy window as YOLO and the face
-  pass, so closing the screen waits for it. At most every 500 ms, on the
-  isolate that draws the screen.
-- **Between searches.** A frame carries the last reading for up to a second,
-  so the status and the speech do not flip between "stairs" and "clear".
-- **With the objects.** The reading travels with that frame's objects as one
-  `ScanFrame`.
+- `lib/data/stairs_detector_io.dart`: its own interpreter, on its own isolate
+  when it can be. `load()` returns null when the file is missing or its shape
+  is wrong, so the rest carries on.
+- In `ScanService`, inside the same busy window as YOLO and the face pass,
+  at most every 500 ms. A frame between runs carries the last stairs found for
+  up to a second, so what is said does not flip frame by frame.
+- The frame is letterboxed to 416 with the same grey padding and planar
+  layout as the COCO model (`fillLetterboxed` in `core/vision/stairs.dart`),
+  and boxes are mapped back out of the letterbox before anything reads them.
 
 ## What it says
 
-*"Stop. Stairs ahead."*: never up or down, which one camera cannot tell apart.
-It goes through `guidanceFor` and `shouldSpeak`:
-- It is urgent, so it comes at hazard priority with a buzz, and repeats only
-  after `kHazardRepeat`.
-- It is said alone, ahead of any object, except an object urgent in its own
-  right: a car right in front is named as a car.
-- Below 0.6 it says nothing.
-- The guardian's feed shows "Obstacle: stairs", as for any urgent warning, and
-  only with activity consent.
+- Below **0.35** (`kStairsSoft`), nothing.
+- Otherwise named, with where: *"Stairs on your right"*, *"Stairs ahead,
+  close"*, *"Stairs close, on your left"*. At navigation priority, so the next
+  description does not drop it; told to the guardian as "Obstacle: stairs" and
+  kept on the journey record whenever said.
+- *"Stop. Stairs ahead."* - hazard priority, with a buzz - only for stairs
+  filling the view ahead at **0.55** or more (`kStairsHard`), **and only in a
+  build with `--dart-define=STAIRS_STOP=true`**. Until the gate below is
+  passed, stairs are named and never shouted: a "Stop" for every tiled floor
+  teaches someone to ignore "Stop".
+- Weighted with the cars (1.6) when choosing what to say first.
+- Never up or down, and never in metres - nothing here estimates a distance.
+- `--dart-define=STAIRS_WARNINGS=false` switches stairs off for a device
+  check of everything else.
 
-## Why it is off: what it cannot tell apart
+## The gate
 
-Seen from above, a flight is a row of evenly receding edges, and so is a tiled
-floor. In its own tests (`test/core/vision/stairs_test.dart`, "what banding
-cannot tell apart, measured"), a floor of 30 cm tiles scores **0.86** and a
-zebra crossing **0.75**. Both are over the threshold, so both would be
-announced as stairs. Escalators and striped rugs are the same kind of case.
+`tool/eval_detector.py --stairs --fetch --negatives <folder>` runs the model
+through the app's own pipeline on Open Images validation "Stairs" boxes and on
+the negatives, at 0.35, 0.45, 0.55 and 0.65:
 
-A warning that says "Stop" on every tiled floor in a mall or a hospital teaches
-someone to ignore "Stop". That is exactly what `kUrgentScore` exists to
-prevent for objects, and the next "Stop" may be a car.
+| score ≥ | close+ recall | all recall | negatives firing |
+|---|---|---|---|
+| *to be measured* | | | |
 
-## Before turning it on
-
-Build with the flag and hold the phone as users do. Go:
-- down and up real flights, indoors and out, in daylight and under lights;
-- across tiled floors, a zebra crossing, an escalator and a striped rug.
-
-Note each time it spoke and each time it should have. Turn it on by default
-only if it warns on stairs from far enough away to stop, and stays quiet on
-floors. If floors still trigger it, it needs more than banding before it
-speaks: the phone's tilt, or a trained class.
+**"Stop" is turned on only if**, at 0.55, stairs close or nearer are found at
+least **70%** of the time and at most **5%** of the negatives fire (a stairs
+box close or nearer). Otherwise the model ships named-only, and the table says
+why. Then, on a phone: real flights up and down, indoors and out; a tiled
+floor, a zebra crossing, an escalator and a striped rug - every miss and every
+false alarm noted here.
 
 ---
 
@@ -326,8 +363,9 @@ It is 0 to 1 and not a probability: nothing here was calibrated.
 
 ## What it says
 
-Through `guidanceFor`, in this order: an object urgent in its own right; stairs;
-then, if no object big enough (over 30% of the frame) was named on that side:
+Through `guidanceFor`, in this order: an object urgent in its own right -
+stairs among them, once they may be a "Stop"; then, if no object big enough
+(over 30% of the frame) was named on that side:
 
 - *"Stop. Something right in front of you."* — ahead, and near (0.8 of the
   frame's range or more): hazard priority, a buzz, and the guardian's feed shows
