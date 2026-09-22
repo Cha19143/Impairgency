@@ -76,6 +76,44 @@ void main() {
       expect(find.text('Stop directions to Home'), findsOneWidget);
     });
 
+    testWidgets('each fix and direction goes to the journey record; '
+        'arriving is said once', (tester) async {
+      // The journey's summary is what the dashboard counts, and nothing
+      // recorded one.
+      final positions = StreamController<LocationFix>();
+      addTearDown(positions.close);
+      final fixes = <LocationFix>[];
+      final said = <String>[];
+      var arrivals = 0;
+
+      await tester.pumpWidget(host(JourneyScreen(
+        speaker: RecordingSpeaker(),
+        service: FakeScan(),
+        mapBuilder: drawMap,
+        destination: home,
+        positions: positions.stream,
+        onFix: fixes.add,
+        onGuidance: said.add,
+        onArrived: () => arrivals++,
+        onStop: () {},
+        onBack: () {},
+      )));
+      await tester.pump();
+
+      positions.add(fix(14.788, heading: 90));
+      await tester.pump();
+      expect(fixes, hasLength(1));
+      expect(said, isNotEmpty);
+      expect(arrivals, 0);
+
+      positions.add(fix(14.79));
+      await tester.pump();
+      positions.add(fix(14.79));
+      await tester.pump();
+      expect(arrivals, 1);
+      expect(fixes, hasLength(3));
+    });
+
     testWidgets('stop directions hands over to the router, once',
         (tester) async {
       // Scan used to stay put and forget the destination itself, because a

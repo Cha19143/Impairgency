@@ -7,7 +7,7 @@
 // the real rules.
 
 import { expect, test } from '@playwright/test';
-import { ADMIN, EXPECTED, clearSessions, seedSessions } from './seed.js';
+import { ADMIN, EXPECTED, clearSessions, clearSos, seedSessions, seedSos } from './seed.js';
 import { open, screen, signIn } from './helpers/app.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -45,10 +45,10 @@ test('the detections panel counts, and says that counting is not accuracy', asyn
   ).toBeVisible();
 });
 
-test('an empty database says so, instead of showing zeroes that read as measurements', async ({ page }) => {
-  // The highest-value test here. AdminPage draws an empty state precisely so a
-  // dashboard with no data cannot be mistaken for a dashboard reporting zero,
-  // and only a run against the real query proves which one appears.
+test('with no journeys, the page says why instead of showing zeroes', async ({ page }) => {
+  // Journeys are recorded only for users with history on. Before, an empty
+  // session_summaries collection blanked the whole page - including the
+  // emergencies, which never came from there.
   //
   // The database is emptied before signing in rather than after: a reload would
   // be the obvious way to refetch, but this build does not keep a signed-in
@@ -58,11 +58,31 @@ test('an empty database says so, instead of showing zeroes that read as measurem
     await clearSessions();
     await signInAsAdmin(page);
 
-    await expect(screen(page).getByText('No sessions yet')).toBeVisible();
+    await expect(
+      screen(page).getByText('No journeys recorded in this period.', { exact: false }),
+    ).toBeVisible();
+    await expect(screen(page).getByText(`SOS incidents: ${EXPECTED.sosIncidents}`)).toBeVisible();
+    await expect(screen(page).getByText('Positioning quality: 0%')).toHaveCount(0);
+  } finally {
+    await seedSessions();
+  }
+});
+
+test('an empty database says so, instead of showing zeroes that read as measurements', async ({ page }) => {
+  // AdminPage draws an empty state precisely so a dashboard with no data
+  // cannot be mistaken for a dashboard reporting zero, and only a run against
+  // the real query proves which one appears.
+  try {
+    await clearSessions();
+    await clearSos();
+    await signInAsAdmin(page);
+
+    await expect(screen(page).getByText('Nothing recorded in the last 30 days')).toBeVisible();
     await expect(screen(page).getByText('Active users: 0')).toHaveCount(0);
     await expect(screen(page).getByText('Positioning quality: 0%')).toHaveCount(0);
   } finally {
     // Leave the emulator as the other specs expect to find it.
     await seedSessions();
+    await seedSos();
   }
 });

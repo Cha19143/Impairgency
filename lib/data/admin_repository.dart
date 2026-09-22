@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/admin/admin_user.dart';
+import '../core/admin/sos_record.dart';
 import '../core/places/session_summary.dart';
 import '../core/profile/impairment.dart';
 
 export '../core/admin/admin_user.dart';
+export '../core/admin/sos_record.dart';
 
 /// Reads for the web dashboard.
 ///
@@ -48,16 +50,77 @@ class AdminRepository {
   static const Duration rosterTimeout = Duration(seconds: 8);
 
   /// §1.3's five metrics, over [period].
+  ///
+  /// Emergencies are counted from the SOS records, which every signed-in
+  /// phone writes. Journeys are only summarised for users with history on,
+  /// so a user who shared a position in the period counts as active too.
   Future<UsageOverview> overview({Duration period = defaultPeriod}) async {
     final from = DateTime.now().subtract(period);
-    final snap = await _db
-        .collection('session_summaries')
-        .where('startedAt', isGreaterThan: Timestamp.fromDate(from))
-        .orderBy('startedAt', descending: true)
-        .limit(2000)
-        .get();
-    return overviewOf(snap.docs.map(_toSummary).toList());
+    final results = await Future.wait([
+      _db
+          .collection('session_summaries')
+          .where('startedAt', isGreaterThan: Timestamp.fromDate(from))
+          .orderBy('startedAt', descending: true)
+          .limit(2000)
+          .get(),
+      sosEvents(period: period),
+      _sharedPositionSince(from),
+    ]);
+    final summaries = (results[0] as QuerySnapshot<Map<String, dynamic>>)
+        .docs
+        .map(_toSummary)
+        .toList();
+    return overviewOf(
+      summaries,
+      sosIncidents: sosIncidentsIn(results[1] as List<SosRecord>),
+      alsoActive: results[2] as Set<String>,
+    );
   }
+
+  /// Users whose phone shared a position since [from]. Only the time is
+  /// read off the position; the dashboard shows no one's whereabouts.
+  Future<Set<String>> _sharedPositionSince(DateTime from) async {
+    final snap = await _db.collection('users').limit(500).get();
+    return {
+      for (final doc in snap.docs)
+        if (_toDate((doc.data()['lastFix'] as Map?)?['at'])?.isAfter(from) ??
+            false)
+          doc.id,
+    };
+  }
+
+  /// Every SOS in [period], newest first.
+  ///
+  /// Ordered on `at` alone, which needs no composite index. The rules let
+  /// only an administrator read other people's.
+  Future<List<SosRecord>> sosEvents({
+    Duration period = defaultPeriod,
+    int limit = 200,
+  }) async {
+    final from = DateTime.now().subtract(period);
+    final snap = await _db
+        .collection('sos_events')
+        .where('at', isGreaterThan: Timestamp.fromDate(from))
+        .orderBy('at', descending: true)
+        .limit(limit)
+        .get();
+    return [
+      for (final doc in snap.docs)
+        SosRecord.fromJson(doc.id, doc.data(), toDate: _toDate),
+    ];
+  }
+
+  /// Marks an SOS as over, by [adminUid]. The rules allow an administrator
+  /// to change these three fields and nothing else on someone's emergency.
+  Future<void> resolveSos(String id, {required String adminUid}) =>
+      _db.collection('sos_events').doc(id).update({
+        'resolvedAt': FieldValue.serverTimestamp(),
+        'resolvedBy': adminUid,
+        'status': 'resolved',
+      });
+
+  static DateTime? _toDate(Object? value) =>
+      value is Timestamp ? value.toDate() : null;
 
   /// Recent sessions, newest first — the list a reviewer picks from.
   Future<List<SessionSummary>> recentSessions({int limit = 50}) async {

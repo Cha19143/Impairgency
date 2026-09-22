@@ -128,14 +128,24 @@ class UsageOverview {
       'need someone to label what was actually in each scene.';
 }
 
-UsageOverview overviewOf(List<SessionSummary> summaries) {
+/// [summaries] over one period.
+///
+/// Journeys are recorded only for users with history turned on, so two
+/// numbers come from elsewhere when they are known: [sosIncidents], counted
+/// from the SOS records themselves, and [alsoActive], the users who shared a
+/// position in the period without a recorded journey.
+UsageOverview overviewOf(
+  List<SessionSummary> summaries, {
+  int? sosIncidents,
+  Set<String> alsoActive = const {},
+}) {
   if (summaries.isEmpty) {
-    return const UsageOverview(
-      activeUsers: 0,
+    return UsageOverview(
+      activeUsers: alsoActive.length,
       sessions: 0,
-      sosIncidents: 0,
-      frequentPlaceLabels: [],
-      detectionCounts: [],
+      sosIncidents: sosIncidents ?? 0,
+      frequentPlaceLabels: const [],
+      detectionCounts: const [],
       medianDiscardedFraction: 0,
     );
   }
@@ -160,9 +170,9 @@ UsageOverview overviewOf(List<SessionSummary> summaries) {
   final discards = summaries.map((s) => s.discardedFraction).toList()..sort();
 
   return UsageOverview(
-    activeUsers: summaries.map((s) => s.userId).toSet().length,
+    activeUsers: {...summaries.map((s) => s.userId), ...alsoActive}.length,
     sessions: summaries.length,
-    sosIncidents: sos,
+    sosIncidents: sosIncidents ?? sos,
     frequentPlaceLabels: _ranked(labels).map((e) => (label: e.$1, count: e.$2)).toList(),
     detectionCounts: _ranked(detections).map((e) => (kind: e.$1, count: e.$2)).toList(),
     medianDiscardedFraction: discards[discards.length ~/ 2],

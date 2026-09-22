@@ -64,6 +64,9 @@ class JourneyScreen extends StatefulWidget {
     this.voice,
     this.friends,
     this.onObstacle,
+    this.onFix,
+    this.onGuidance,
+    this.onArrived,
     this.mapBuilder,
   });
 
@@ -87,6 +90,16 @@ class JourneyScreen extends StatefulWidget {
   final VoiceController? voice;
   final FriendRecognition? friends;
   final void Function(String label)? onObstacle;
+
+  /// Each position the directions used, for the journey's record.
+  final void Function(LocationFix fix)? onFix;
+
+  /// Each direction said, for the journey's record.
+  final void Function(String sentence)? onGuidance;
+
+  /// The destination was reached. Called once.
+  final VoidCallback? onArrived;
+
   final JourneyMapBuilder? mapBuilder;
 
   @override
@@ -108,6 +121,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
   LocationFix? _fix;
   String? _direction;
   bool _stopped = false;
+  bool _arrived = false;
   VoiceScopeHandle? _voiceScope;
 
   @override
@@ -147,8 +161,10 @@ class _JourneyScreenState extends State<JourneyScreen> {
       routing: widget.routing,
       // Navigation, not hazard: it waits for a warning to finish and never
       // cuts one off. The queue holds that rule.
-      say: (sentence) => widget.speaker
-          .announce(sentence, priority: SpeechPriority.navigation),
+      say: (sentence) {
+        widget.onGuidance?.call(sentence);
+        widget.speaker.announce(sentence, priority: SpeechPriority.navigation);
+      },
       onChanged: () {
         if (mounted && _guide != null) {
           setState(() => _direction = _guide!.status);
@@ -171,6 +187,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
   }
 
   void _endDirections() {
+    _arrived = false;
     _positions?.cancel();
     _positions = null;
     _ticker?.cancel();
@@ -182,6 +199,11 @@ class _JourneyScreenState extends State<JourneyScreen> {
     final guide = _guide;
     if (guide == null || !mounted) return;
     guide.update(fix);
+    widget.onFix?.call(fix);
+    if (guide.mode == JourneyMode.arrived && !_arrived) {
+      _arrived = true;
+      widget.onArrived?.call();
+    }
     setState(() {
       _fix = fix;
       _direction = guide.status;

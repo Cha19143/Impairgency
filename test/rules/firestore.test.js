@@ -17,9 +17,13 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
+  collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -718,6 +722,90 @@ describe('session summaries — the admin-readable aggregate', () => {
     await grantHistory();
     await setDoc(doc(as(VI), 'session_summaries', 'sum1'), summary());
     await assertSucceeds(deleteDoc(doc(as(VI), 'session_summaries', 'sum1')));
+  });
+});
+
+describe('SOS records', () => {
+  const event = (extra = {}) => ({
+    userId: VI,
+    cancelled: false,
+    status: 'active',
+    locationSummary: 'Your location was sent.',
+    lat: 14.79,
+    lng: 120.92,
+    at: serverTimestamp(),
+    ...extra,
+  });
+  const seed = () =>
+    env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'sos_events', 'e1'), event());
+    });
+
+  it('are written by their owner, under an id chosen before the call', async () => {
+    await assertSucceeds(setDoc(doc(as(VI), 'sos_events', 'e1'), event()));
+    await assertFails(
+      setDoc(doc(as(STRANGER), 'sos_events', 'e2'), event()),
+    );
+  });
+
+  it('are read by the owner, a paired guardian and an admin - nobody else', async () => {
+    await seed();
+    await makeAdmin();
+    await assertSucceeds(getDoc(doc(as(VI), 'sos_events', 'e1')));
+    await assertSucceeds(getDoc(doc(as(GUARDIAN), 'sos_events', 'e1')));
+    await assertSucceeds(getDoc(doc(asAdmin(), 'sos_events', 'e1')));
+    await assertFails(getDoc(doc(as(STRANGER), 'sos_events', 'e1')));
+  });
+
+  it('the dashboard can list every one, newest first', async () => {
+    await seed();
+    await makeAdmin();
+    await assertSucceeds(
+      getDocs(query(collection(asAdmin(), 'sos_events'), orderBy('at', 'desc'))),
+    );
+    await assertFails(
+      getDocs(query(collection(as(STRANGER), 'sos_events'), orderBy('at', 'desc'))),
+    );
+  });
+
+  it('the owner marks one resolved after the call', async () => {
+    await seed();
+    await assertSucceeds(
+      updateDoc(doc(as(VI), 'sos_events', 'e1'), {
+        status: 'resolved',
+        resolvedBy: 'user',
+        resolvedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('an admin marks one resolved, and changes nothing else', async () => {
+    await seed();
+    await makeAdmin();
+    await assertSucceeds(
+      updateDoc(doc(asAdmin(), 'sos_events', 'e1'), {
+        status: 'resolved',
+        resolvedBy: ADMIN,
+        resolvedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(asAdmin(), 'sos_events', 'e1'), { lat: 0 }),
+    );
+    await assertFails(
+      updateDoc(doc(asAdmin(), 'sos_events', 'e1'), { userId: STRANGER }),
+    );
+  });
+
+  it('nobody moves one onto someone else, or deletes it', async () => {
+    await seed();
+    await assertFails(
+      updateDoc(doc(as(VI), 'sos_events', 'e1'), { userId: STRANGER }),
+    );
+    await assertFails(
+      updateDoc(doc(as(GUARDIAN), 'sos_events', 'e1'), { status: 'resolved' }),
+    );
+    await assertFails(deleteDoc(doc(as(VI), 'sos_events', 'e1')));
   });
 });
 

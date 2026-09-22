@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/contacts/emergency_contact.dart';
+import '../../core/places/session_event.dart';
 import '../../core/sos/sos_countdown.dart';
 import '../../core/sos/sos_receipt.dart';
 import '../../core/speech/speaker.dart';
@@ -30,6 +31,7 @@ class SosFlow extends StatefulWidget {
     this.speaker = const SilentSpeaker(),
     this.voice,
     this.voiceController,
+    this.onEvent,
   });
 
   final SosEngine engine;
@@ -52,11 +54,21 @@ class SosFlow extends StatefulWidget {
   /// stream the countdown listens to, and the countdown opens it.
   final VoiceController? voiceController;
 
+  /// Armed, sent, or cancelled - for the record of the journey under way,
+  /// if there is one.
+  final void Function(SessionEventKind kind)? onEvent;
+
   @override
   State<SosFlow> createState() => _SosFlowState();
 }
 
 class _SosFlowState extends State<SosFlow> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onEvent?.call(SessionEventKind.sosArmed);
+  }
+
   SosReceipt? _receipt;
   bool _running = false;
 
@@ -139,6 +151,9 @@ class _SosFlowState extends State<SosFlow> {
       onCommitted: _stopListening,
     );
     _stopListening();
+    widget.onEvent?.call(receipt.cancelled
+        ? SessionEventKind.sosCancelled
+        : SessionEventKind.sosFired);
     if (!mounted) return;
     if (receipt.cancelled) {
       await widget.speaker.speak(kCancelledAnnouncement);
@@ -185,6 +200,7 @@ class _SosFlowState extends State<SosFlow> {
 
   Future<void> _cancel() async {
     _stopListening();
+    widget.onEvent?.call(SessionEventKind.sosCancelled);
     await widget.engine.recordCancellation(widget.userId);
     if (mounted) widget.onFinished();
   }
