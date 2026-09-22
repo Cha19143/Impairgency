@@ -8,6 +8,8 @@ SosEvent event({
   Duration age = Duration.zero,
   bool cancelled = false,
   String? location,
+  Duration? resolvedAgo,
+  String resolvedBy = 'user',
 }) =>
     SosEvent(
       id: id,
@@ -15,6 +17,8 @@ SosEvent event({
       at: now.subtract(age),
       cancelled: cancelled,
       locationSummary: location,
+      resolvedAt: resolvedAgo == null ? null : now.subtract(resolvedAgo),
+      resolvedBy: resolvedAgo == null ? null : resolvedBy,
     );
 
 void main() {
@@ -116,6 +120,54 @@ void main() {
 
     test('carries the event id, so tapping it can open the right incident', () {
       expect(buildSosAlert(event(id: 'sos-77')).eventId, 'sos-77');
+    });
+  });
+
+  group('"I am okay" after the call', () {
+    // Not a cancellation - the call was made - so the guardian is told it is
+    // over, rather than shown the emergency as if it were still going on.
+    final over = event(age: const Duration(minutes: 5),
+        resolvedAgo: const Duration(minutes: 1));
+
+    test('a resolved SOS raises no emergency alert', () {
+      expect(shouldAlert(event: over, now: now, alreadyAlerted: const {}),
+          isFalse);
+    });
+
+    test('it raises the all-clear, once, while fresh', () {
+      expect(shouldAlertOkay(event: over, now: now, alreadyTold: const {}),
+          isTrue);
+      expect(shouldAlertOkay(event: over, now: now, alreadyTold: const {'e1'}),
+          isFalse);
+      expect(
+          shouldAlertOkay(
+              event: event(
+                  age: const Duration(hours: 2),
+                  resolvedAgo: const Duration(hours: 1)),
+              now: now,
+              alreadyTold: const {}),
+          isFalse);
+      expect(shouldAlertOkay(event: event(), now: now, alreadyTold: const {}),
+          isFalse, reason: 'not resolved');
+    });
+
+    test('names the person, when they called, and what to do if unsure', () {
+      final alert = buildOkAlert(over, name: 'Ana', now: now);
+      expect(alert.eventId, 'e1',
+          reason: 'replaces the emergency on the lock screen');
+      expect(alert.title, 'Ana says they are okay');
+      expect(alert.body,
+          'They called for help 5 minutes ago. Call them if you are not sure.');
+    });
+
+    test('an administrator marking it resolved is not the user saying so', () {
+      final byAdmin = event(
+          age: const Duration(minutes: 5),
+          resolvedAgo: const Duration(minutes: 1),
+          resolvedBy: 'admin-uid');
+      final alert = buildOkAlert(byAdmin, name: 'Ana', now: now);
+      expect(alert.title, "Ana's emergency was marked resolved");
+      expect(alert.body, contains('An administrator marked it resolved'));
     });
   });
 }

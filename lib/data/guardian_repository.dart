@@ -89,7 +89,9 @@ class GuardianRepository {
             contactNumber: base.contactNumber,
             sharesLocation: base.sharesLocation,
             fix: all.$1.$1,
-            lastSos: all.$1.$2,
+            lastSos: all.$1.$2?.at,
+            lastSosResolvedAt: all.$1.$2?.resolvedAt,
+            lastSosResolvedByUser: all.$1.$2?.resolvedByUser ?? false,
             sharesActivity: base.sharesActivity,
             activity: all.$2,
           ));
@@ -132,11 +134,11 @@ class GuardianRepository {
       .handleError((_) {}, test: (_) => true)
       .startWithNull();
 
-  Stream<DateTime?> _lastSos(String uid) => recentSosEvents(uid)
+  Stream<SosEvent?> _lastSos(String uid) => recentSosEvents(uid)
       .map((events) {
         final live = events.where((e) => !e.cancelled).toList()
           ..sort((a, b) => b.at.compareTo(a.at));
-        return live.isEmpty ? null : live.first.at;
+        return live.isEmpty ? null : live.first;
       })
       .handleError((_) {}, test: (_) => true)
       .startWithNull();
@@ -161,6 +163,8 @@ class GuardianRepository {
               at: (data['at'] as Timestamp?)?.toDate() ?? DateTime.now(),
               locationSummary: data['locationSummary'] as String?,
               cancelled: data['cancelled'] == true,
+              resolvedAt: (data['resolvedAt'] as Timestamp?)?.toDate(),
+              resolvedBy: data['resolvedBy'] as String?,
             );
           }).toList());
 

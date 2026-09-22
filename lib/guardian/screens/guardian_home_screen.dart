@@ -273,16 +273,26 @@ class _UserCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.emergency_outlined,
-                    color: AppColors.red, size: 24),
+                // Red while it may still be going on; green once they said
+                // they are okay.
+                Icon(
+                    user.lastSosResolvedAt == null
+                        ? Icons.emergency_outlined
+                        : Icons.verified_user_outlined,
+                    color: user.lastSosResolvedAt == null
+                        ? AppColors.red
+                        : AppColors.green,
+                    size: 24),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     sos,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.red),
+                        color: user.lastSosResolvedAt == null
+                            ? AppColors.red
+                            : AppColors.green),
                   ),
                 ),
               ],

@@ -101,7 +101,8 @@ void main() {
     await windows.hear(const Heard('clinic'));
     expect(names, ['clinic']);
 
-    await windows.hear(const Heard('tulong get me home'));
+    // Short, as help is in a window the app opened by itself.
+    await windows.hear(const Heard('tulong po'));
     expect(names, ['clinic'], reason: 'not asked');
     expect(c.lastCommand, VoiceCommand.help);
     expect(routes, [Routes.sos]);

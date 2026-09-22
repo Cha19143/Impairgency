@@ -113,6 +113,9 @@ class VoiceActions {
         // A screen with a form answers this itself, before it reaches here.
         VoiceCommand.fillIn => const VoiceOutcome(
             spoken: 'There is nothing to fill in on this screen.'),
+        // The SOS receipt hears this itself.
+        VoiceCommand.allClear => const VoiceOutcome(
+            spoken: 'There is no emergency to clear.'),
       };
 
   Future<VoiceOutcome> _withName(String? name,

@@ -20,6 +20,8 @@ class WatchedUser {
     this.sharesLocation = false,
     this.fix,
     this.lastSos,
+    this.lastSosResolvedAt,
+    this.lastSosResolvedByUser = false,
     this.sharesActivity = false,
     this.activity = const [],
   });
@@ -43,6 +45,12 @@ class WatchedUser {
 
   /// When they last fired an SOS that was not cancelled, if ever.
   final DateTime? lastSos;
+
+  /// When that SOS was said to be over, if it has been.
+  final DateTime? lastSosResolvedAt;
+
+  /// By them saying "I am okay", rather than by an administrator.
+  final bool lastSosResolvedByUser;
 
   /// `consent.activity`. Off means the rows below are refused and the card
   /// says so.
@@ -137,5 +145,11 @@ String? describeLastSos(WatchedUser user, {required DateTime now}) {
   if (at == null) return null;
   final age = now.difference(at);
   if (age > const Duration(hours: 24)) return null;
-  return 'Called for help ${describeAge(age)}.';
+  final resolved = user.lastSosResolvedAt;
+  if (resolved == null) return 'Called for help ${describeAge(age)}.';
+  final since = describeAge(now.difference(resolved));
+  return user.lastSosResolvedByUser
+      ? 'Called for help ${describeAge(age)}, then said they are okay $since.'
+      : 'Called for help ${describeAge(age)}. An administrator marked it '
+          'resolved $since.';
 }

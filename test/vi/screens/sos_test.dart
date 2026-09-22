@@ -194,10 +194,13 @@ void main() {
     await tester.pump();
 
     await tester.pump(const Duration(seconds: 1));
-    expect(engine.started, ['Calling Mum in 3.', kArmingHint],
+    expect(engine.started, ['Calling Mum in 3.', kArmingHintLines.first],
         reason: 'the hint is still being said, and is not cut off');
     expect(find.text('2'), findsOneWidget, reason: 'the screen still counts');
 
+    engine.finish();
+    await tester.pump();
+    expect(engine.started, ['Calling Mum in 3.', ...kArmingHintLines]);
     engine.finish();
     await tester.pump(const Duration(seconds: 1));
     expect(engine.started.last, 'Calling Mum in 1.');
@@ -213,6 +216,10 @@ void main() {
 
     late List<Uri> dialled;
     late List<Map<String, Object?>> written;
+    late Map<String, Map<String, Object?>> updated;
+
+    /// What the dialler does to the app: puts it behind the call.
+    void Function()? onDial;
     SosEngine engineFor(Speaker speaker) => SosEngine(
           speaker: speaker,
           location: const NoLocation(),
@@ -220,14 +227,19 @@ void main() {
           guardianBudget: const Duration(milliseconds: 50),
           dial: (uri) async {
             dialled.add(uri);
+            onDial?.call();
             return true;
           },
           writeEvent: (event) async => written.add(event),
+          updateEvent: (id, fields) async => updated[id] = fields,
+          newEventId: () => 'e1',
         );
 
     setUp(() {
       dialled = [];
       written = [];
+      updated = {};
+      onDial = null;
     });
 
     testWidgets('a window that heard only the countdown is reopened',
@@ -247,7 +259,7 @@ void main() {
       expect(mic.sessions, hasLength(1));
 
       mic.say(const Heard('calling mum in 3 say cancel or touch the screen '
-          'anywhere to stop this'));
+          'anywhere'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(mic.sessions, hasLength(2));
@@ -298,28 +310,133 @@ void main() {
       expect(mic.open, isFalse, reason: 'and not reopened');
     });
 
-    testWidgets('once the call is placed, the microphone is closed',
-        (tester) async {
+    testWidgets('during the call the microphone is closed; back from it, '
+        'the receipt listens for "I am okay"', (tester) async {
       // The dialler puts the app behind the call. A microphone reopened
-      // there would be listening to the phone call.
+      // there would be listening to the phone call. Back from it, there used
+      // to be no voice at all: the receipt had no microphone and no way to
+      // say the emergency was over.
       final mic = OpenWindows();
       final speaker = Recording();
+      final voice = voiceControllerFor(mic, speaker);
+      onDial = () {
+        voice.setForeground(false);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      };
+      var finished = false;
       await tester.pumpWidget(host(SosFlow(
         engine: engineFor(speaker),
         userId: 'u1',
         contacts: mum,
+        guardianCount: 1,
         speaker: speaker,
-        voiceController: voiceControllerFor(mic, speaker),
-        onFinished: () {},
+        voiceController: voice,
+        onFinished: () => finished = true,
       )));
       await tester.pump();
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(seconds: 1));
 
       expect(dialled, hasLength(1));
-      expect(mic.open, isFalse);
+      expect(written.single['eventId'], 'e1');
+      expect(mic.open, isFalse, reason: 'not during the call');
       await tester.pump(const Duration(seconds: 2));
-      expect(mic.open, isFalse, reason: 'and not reopened');
+      expect(mic.open, isFalse, reason: 'and not reopened behind it');
+
+      // The call ends; the app comes back.
+      voice.setForeground(true);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(speaker.said.last,
+          afterCallHint(guardianTold: true));
+      expect(mic.open, isTrue, reason: 'listening for "I am okay"');
+
+      mic.say(const Heard('i am okay'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(updated['e1'], {'status': 'resolved', 'resolvedBy': 'user'});
+      expect(speaker.said.last,
+          okayAnnouncement(LegOutcome.done, hasGuardian: true));
+      expect(finished, isTrue);
+    });
+
+    for (final said in ['cancel', 'ayos lang', "I'm okay"]) {
+      testWidgets('"$said" after the call is okay too', (tester) async {
+        final mic = OpenWindows();
+        final speaker = Recording();
+        var finished = false;
+        await tester.pumpWidget(host(SosFlow(
+          engine: engineFor(speaker),
+          userId: 'u1',
+          contacts: mum,
+          speaker: speaker,
+          voiceController: voiceControllerFor(mic, speaker),
+          onFinished: () => finished = true,
+        )));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+        expect(mic.open, isTrue);
+
+        mic.say(Heard(said));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(updated.keys, ['e1']);
+        expect(speaker.said.last, 'Okay. Nothing more will be sent.',
+            reason: 'no guardian to tell');
+        expect(finished, isTrue);
+      });
+    }
+
+    testWidgets('the I\'m okay button does the same', (tester) async {
+      final speaker = Recording();
+      var finished = false;
+      await tester.pumpWidget(host(SosFlow(
+        engine: engineFor(speaker),
+        userId: 'u1',
+        contacts: mum,
+        guardianCount: 2,
+        speaker: speaker,
+        voiceController: voiceControllerFor(OpenWindows(), speaker),
+        onFinished: () => finished = true,
+      )));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+
+      await tester.tap(find.text("I'm okay"));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(updated['e1']?['status'], 'resolved');
+      expect(speaker.said.last, contains('Your guardian will be told'));
+      expect(finished, isTrue);
+    });
+
+    testWidgets('with nobody signed in there is nothing to resolve',
+        (tester) async {
+      final speaker = Recording();
+      var finished = false;
+      await tester.pumpWidget(host(SosFlow(
+        engine: engineFor(speaker),
+        userId: null,
+        contacts: mum,
+        speaker: speaker,
+        voiceController: voiceControllerFor(OpenWindows(), speaker),
+        onFinished: () => finished = true,
+      )));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+
+      await tester.tap(find.text("I'm okay"));
+      await tester.pump();
+      expect(updated, isEmpty);
+      expect(speaker.said.last, 'Okay. Nothing more will be sent.');
+      expect(finished, isTrue);
     });
   });
 

@@ -45,6 +45,10 @@ enum VoiceCommand {
 
   /// Answer the questions on this screen by voice, one field at a time.
   fillIn,
+
+  /// "I am okay", after an SOS call: the emergency is over, and the
+  /// guardian is told so.
+  allClear,
 }
 
 /// Words and phrases that map to each command.
@@ -139,7 +143,19 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
   ],
   VoiceCommand.savePlace: ['save this place', 'save place', 'save it'],
   VoiceCommand.whereAmI: ['where', 'location', 'nasaan', 'saan', 'lokasyon'],
-  VoiceCommand.callGuardian: ['guardian', 'tawagan', 'bantay', 'caregiver'],
+  // Not "guardian" on its own: that is the name of a Settings button, and
+  // saying it to press the button started an emergency alert.
+  VoiceCommand.callGuardian: [
+    'call my guardian',
+    'call guardian',
+    'call the guardian',
+    'alert my guardian',
+    'tell my guardian',
+    'contact my guardian',
+    'call my caregiver',
+    'tawagan',
+    'bantay',
+  ],
   VoiceCommand.connectDevice: ['connect', 'pair', 'device', 'konekta'],
   VoiceCommand.whatCanISay: [
     'what can i say',
@@ -180,6 +196,24 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
     'dictate',
     'punan',
     'sagutan',
+  ],
+  // "I'm" reaches the parser as "im": the apostrophe goes, and the two
+  // single letters left are joined like a spelled-out word.
+  VoiceCommand.allClear: [
+    'i am okay',
+    'im okay',
+    'i am ok',
+    'im ok',
+    'i am fine',
+    'im fine',
+    'i am all right',
+    'im all right',
+    'all clear',
+    'false alarm',
+    'okay na ako',
+    'ok na ako',
+    'ayos lang',
+    'ayos na',
   ],
 };
 
@@ -222,6 +256,17 @@ const Set<VoiceCommand> kEverydayCommands = {
 const Set<VoiceCommand> kCancellationCommands = {
   VoiceCommand.cancel,
   VoiceCommand.help,
+};
+
+/// What the SOS receipt listens for, once the call is over: that the user
+/// is okay, or that they still need help. "cancel" is heard as okay too -
+/// it is what someone who has just been through the countdown will reach
+/// for.
+const Set<VoiceCommand> kAfterCallCommands = {
+  VoiceCommand.allClear,
+  VoiceCommand.cancel,
+  VoiceCommand.help,
+  VoiceCommand.repeat,
 };
 
 /// What Scan listens for. "back" is here but leaving asks first: it stops the
@@ -281,6 +326,7 @@ const Set<VoiceCommand> kAnswerCommands = {
 const Map<String, Set<VoiceCommand>> kScreenVocabularies = {
   'everyday': kEverydayCommands,
   'cancellation': kCancellationCommands,
+  'after call': kAfterCallCommands,
   'scan': kScanCommands,
   'journey': kJourneyCommands,
   'reading': kReadingCommands,
@@ -322,6 +368,24 @@ const List<String> _leadingFillers = [
 ];
 const Set<String> _trailingFillers = {'please', 'po', 'naman', 'now', 'thanks'};
 
+/// The most words a help phrase may have in a window the app opened by
+/// itself. "Help", "help me", "tulong po" - not "I need help finding the
+/// settings", heard across the room with hands-free on.
+const int kHandsFreeHelpWords = 3;
+
+/// Words that turn a help phrase into its opposite: "I don't need help".
+const Set<String> kNegations = {
+  'no',
+  'not',
+  'dont',
+  'don',
+  'never',
+  'hindi',
+  'huwag',
+  'wag',
+  'di',
+};
+
 /// Finds the command in a spoken phrase, or null if there isn't one.
 ///
 /// Matching is by whole word. It used to accept any word that *started* with
@@ -337,14 +401,20 @@ const Set<String> _trailingFillers = {'please', 'po', 'naman', 'now', 'thanks'};
 ///
 /// Pass [only] to restrict the vocabulary to what the current screen can act
 /// on. Defaults to [kEverydayCommands].
+///
+/// [helpMaxWords] is for windows the app opened by itself: help is then heard
+/// only in a phrase of at most that many words, with no negation in it. A tap
+/// on the microphone leaves it null - someone who pressed the button and said
+/// help meant it.
 ParsedCommand? parseVoiceCommand(String transcript,
-    {Set<VoiceCommand>? only}) {
+    {Set<VoiceCommand>? only, int? helpMaxWords}) {
   final allowed = only ?? kEverydayCommands;
   final words = spokenWords(transcript);
   if (words.isEmpty) return null;
 
   if (allowed.contains(VoiceCommand.help) &&
-      kVoiceKeywords[VoiceCommand.help]!.any(words.contains)) {
+      kVoiceKeywords[VoiceCommand.help]!.any(words.contains) &&
+      (helpMaxWords == null || _shortHelp(words, helpMaxWords))) {
     return ParsedCommand(VoiceCommand.help, heard: transcript);
   }
 
@@ -398,7 +468,10 @@ ParsedCommand? parseVoiceCommand(String transcript,
   var bestLength = 0;
   for (final entry in kVoiceKeywords.entries) {
     final command = entry.key;
-    if (!allowed.contains(command) || kArgumentCommands.contains(command)) {
+    // Help was decided above, with its own rules.
+    if (!allowed.contains(command) ||
+        kArgumentCommands.contains(command) ||
+        command == VoiceCommand.help) {
       continue;
     }
     for (final phrase in entry.value) {
@@ -410,6 +483,30 @@ ParsedCommand? parseVoiceCommand(String transcript,
     }
   }
   return best;
+}
+
+/// A help phrase short enough, and plain enough, to be a call for help.
+bool _shortHelp(List<String> words, int maxWords) {
+  if (words.any(kNegations.contains)) return false;
+  var start = 0;
+  var stripped = true;
+  while (stripped) {
+    stripped = false;
+    for (final filler in _leadingFillers) {
+      final f = filler.split(' ');
+      if (words.length - start > f.length &&
+          _startsWith(words.sublist(start), f)) {
+        start += f.length;
+        stripped = true;
+        break;
+      }
+    }
+  }
+  var end = words.length;
+  while (end > start + 1 && _trailingFillers.contains(words[end - 1])) {
+    end--;
+  }
+  return end - start <= maxWords;
 }
 
 /// [parseVoiceCommand], for callers that only want the command.
@@ -519,4 +616,5 @@ const Map<VoiceCommand, String> kCommandDescriptions = {
   VoiceCommand.yes: 'Answer yes',
   VoiceCommand.no: 'Answer no',
   VoiceCommand.fillIn: 'Answer the questions on this screen by voice',
+  VoiceCommand.allClear: 'After an emergency call, say you are okay',
 };

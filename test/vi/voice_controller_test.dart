@@ -290,7 +290,7 @@ void main() {
   group('a hot word on a partial result', () {
     final countdown = [
       for (var s = 3; s >= 0; s--) armingAnnouncement(s, contactName: 'Mum'),
-      kArmingHint,
+      ...kArmingHintLines,
     ];
 
     Future<ListenOutcome> listenForCancel(VoiceController c) => c.listen(
@@ -320,10 +320,33 @@ void main() {
       expect(heard, [VoiceCommand.cancel]);
     });
 
+    test('a partial cancel or stop settles at once', () async {
+      // The testers said "cancel" and "stop" and the call went ahead. The
+      // hint was one sentence with both words in the middle of it, so a
+      // partial "cancel" might still have been the app, and waited for the
+      // phrase to end - past the end of a three-second countdown. "Say
+      // cancel." ends on the word, and "stop" is not said at all.
+      for (final word in ['cancel', 'stop']) {
+        final r = PartialRecognizer();
+        final c = controller(r, RecordingSpeaker());
+        final heard = <VoiceCommand>[];
+        c.commands.listen(heard.add);
+
+        final listening = listenForCancel(c);
+        await pumpEventQueue();
+        r.partial(word);
+
+        expect(await listening, ListenOutcome.acted, reason: word);
+        await pumpEventQueue();
+        expect(heard, [VoiceCommand.cancel], reason: word);
+      }
+    });
+
     test('a partial ending in a word the app is saying waits for the phrase',
         () async {
-      // The microphone may have opened just after "say". Acting on "cancel"
-      // now could be acting on the app's own "say cancel, or touch...".
+      // "Or touch the screen anywhere." - a partial ending in "touch" may
+      // yet be that sentence. Not a command either way, but a cancel word
+      // in front of it must not be taken from the app.
       final r = PartialRecognizer();
       final c = controller(r, RecordingSpeaker());
       final heard = <VoiceCommand>[];
@@ -331,14 +354,14 @@ void main() {
 
       final listening = listenForCancel(c);
       await pumpEventQueue();
-      r.partial('cancel');
+      r.partial('say cancel or touch');
       await pumpEventQueue();
       expect(r.open, isTrue, reason: 'not settled on the partial');
 
-      r.finish('cancel');
+      r.finish('say cancel or touch the screen anywhere cancel');
       expect(await listening, ListenOutcome.acted);
       await pumpEventQueue();
-      expect(heard, [VoiceCommand.cancel], reason: 'said alone, it is the user');
+      expect(heard, [VoiceCommand.cancel], reason: 'the last word is the user');
     });
 
     test("the app's own sentence never settles a window", () async {
@@ -354,7 +377,7 @@ void main() {
       await pumpEventQueue();
       expect(r.open, isTrue);
 
-      r.finish('say cancel or touch the screen anywhere to stop this');
+      r.finish('say cancel or touch the screen anywhere');
       expect(await listening, ListenOutcome.nothingHeard);
       expect(heard, isEmpty);
     });
@@ -413,20 +436,117 @@ void main() {
       expect(c.lastCommand, isNull);
     });
 
-    test('help is help, whatever button shares the word', () async {
+    test('a button named exactly wins, even with help in its name',
+        () async {
+      // Saying the Settings button "Emergency contacts" started an SOS.
       final r = SessionRecognizer();
       final routes = <String>[];
       final c = controller(r, RecordingSpeaker(), routes: routes);
       var pressed = 0;
-      c.targets.register(VoiceTarget('Help me choose', () => pressed++));
+      c.targets.register(VoiceTarget('Emergency contacts', () => pressed++));
 
       final listening = c.listen();
       await pumpEventQueue();
-      r.sessions.last.complete(const Heard('help me choose'));
+      r.sessions.last.complete(const Heard('emergency contacts'));
       await listening;
 
+      expect(pressed, 1);
+      expect(routes, isEmpty);
+    });
+
+    test('help said on its own is help, whatever button shares the word',
+        () async {
+      final r = SessionRecognizer();
+      final routes = <String>[];
+      final c = controller(r, RecordingSpeaker(), routes: routes);
+      var pressed = 0;
+      c.targets
+        ..register(VoiceTarget('Help me choose', () => pressed++))
+        ..register(VoiceTarget('Help', () => pressed++));
+
+      for (final said in ['help', 'help me choose a place']) {
+        final listening = c.listen();
+        await pumpEventQueue();
+        r.sessions.last.complete(Heard(said));
+        await listening;
+      }
+
       expect(pressed, 0);
+      expect(routes, [Routes.sos, Routes.sos]);
+    });
+
+    test('in a window the app opened, help is a short phrase', () async {
+      // Hands-free heard "I need help finding the settings" from across the
+      // room and started an emergency.
+      final r = SessionRecognizer();
+      final routes = <String>[];
+      final c = controller(r, RecordingSpeaker(), routes: routes);
+
+      for (final said in [
+        'i need help finding the settings',
+        'i do not need help',
+        'hindi ko kailangan ng tulong',
+      ]) {
+        final listening = c.listen(auto: true, quiet: true);
+        await pumpEventQueue();
+        r.sessions.last.complete(Heard(said));
+        await listening;
+      }
+      expect(routes, isEmpty);
+
+      for (final said in ['help', 'help me', 'tulong po', 'please help me']) {
+        final listening = c.listen(auto: true, quiet: true);
+        await pumpEventQueue();
+        r.sessions.last.complete(Heard(said));
+        await listening;
+      }
+      expect(routes, List.filled(4, Routes.sos));
+    });
+
+    test('a tap is not held to that: pressing the button and saying help '
+        'means it', () async {
+      final r = SessionRecognizer();
+      final routes = <String>[];
+      final c = controller(r, RecordingSpeaker(), routes: routes);
+
+      final listening = c.listen();
+      await pumpEventQueue();
+      r.sessions.last.complete(const Heard('i need help finding the settings'));
+      await listening;
       expect(routes, [Routes.sos]);
+    });
+
+    test('with a screen reader on, labels it reads out are not the user',
+        () async {
+      final r = SessionRecognizer();
+      final routes = <String>[];
+      var reader = true;
+      final c = VoiceController(
+        recognizer: r,
+        speaker: RecordingSpeaker(),
+        actions: () =>
+            const VoiceActions(location: _NoLocation(), fetchFix: _noFix),
+        onNavigate: routes.add,
+        screenReaderOn: () => reader,
+        wait: (_) async {},
+      );
+      var pressed = 0;
+      c.targets.register(VoiceTarget('Emergency SOS', () => pressed++));
+
+      Future<void> hear(String said) async {
+        final listening = c.listen(auto: true, quiet: true);
+        await pumpEventQueue();
+        r.sessions.last.complete(Heard(said));
+        await listening;
+      }
+
+      await hear('emergency sos button');
+      expect(routes, isEmpty, reason: 'TalkBack reading the button');
+      expect(pressed, 0);
+
+      reader = false;
+      await hear('emergency sos');
+      expect(pressed, 1);
     });
 
     test('two buttons that both match are asked about', () async {

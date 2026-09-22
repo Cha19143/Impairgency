@@ -6,7 +6,7 @@ import 'package:impairgency/core/voice/voice_commands.dart';
 void main() {
   final countdown = [
     for (var s = 5; s >= 0; s--) armingAnnouncement(s, contactName: 'Mum'),
-    kArmingHint,
+    ...kArmingHintLines,
   ];
 
   VoiceCommand? heardDuringCountdown(String transcript) => matchVoiceCommand(
@@ -70,6 +70,69 @@ void main() {
     test('nothing heard, or nothing said, is nothing to wait for', () {
       expect(mayBeEchoStart('', [hint]), isFalse);
       expect(mayBeEchoStart('cancel', const []), isFalse);
+    });
+  });
+
+  group('what the app tells the user to say', () {
+    // "Say fill in" took "fill in" out of the user's own "fill in", because
+    // the app had just said it. Hands-free heard nothing; only a tap worked.
+    test('are the phrases after say', () {
+      expect(instructedPhrases('Say Create account when you are ready.'),
+          ['create account']);
+      expect(instructedPhrases('Say scan, read, take me to a place, or help.'),
+          ['scan', 'read', 'take me', 'help']);
+      expect(
+          instructedPhrases('If you are all right now, say: I am okay. Your '
+              'guardian will be told.'),
+          ['i am okay']);
+      expect(instructedPhrases('Or say fill in, to answer by voice.'),
+          ['fill in']);
+    });
+
+    test('do not run on past the end of the sentence', () {
+      expect(instructedPhrases('Say help. Then wait.'), ['help']);
+      expect(instructedPhrases('Say cancel, and your guardian will be told.'),
+          ['cancel']);
+    });
+
+    test('a sentence with no say has none', () {
+      expect(instructedPhrases('Or touch the screen anywhere.'), isEmpty);
+      expect(instructedPhrases(kCancelledAnnouncement), isEmpty);
+    });
+
+    test('said by the user, they are kept', () {
+      expect(withoutEcho('fill in', ['Say fill in to answer by voice.']),
+          'fill in');
+      expect(
+          withoutEcho('create account',
+              ['Say Create account when you are ready.']),
+          'create account');
+      expect(
+          withoutEcho('take me home',
+              ['Say scan, read, take me to a place, or help.']),
+          'take me home');
+      expect(
+          withoutEcho('i am okay',
+              ['If you are all right now, say: I am okay. Your guardian will '
+                  'be told.']),
+          'i am okay');
+    });
+
+    test("the app's own sentence heard back is still taken out", () {
+      expect(
+          withoutEcho('say create account when you are ready',
+              ['Say Create account when you are ready.']),
+          '');
+      expect(
+          withoutEcho('say scan read take me to a place or help',
+              ['Say scan, read, take me to a place, or help.']),
+          '');
+      expect(
+          withoutEcho('say i am okay your guardian will be told',
+              ['If you are all right now, say: I am okay. Your guardian will '
+                  'be told.']),
+          '');
+      expect(withoutEcho('say cancel', kArmingHintLines), '');
     });
   });
 }

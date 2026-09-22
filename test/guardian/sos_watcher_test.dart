@@ -10,12 +10,15 @@ final now = DateTime.utc(2026, 9, 3, 12, 0);
 SosEvent event(String id,
         {Duration age = Duration.zero,
         String user = 'vi-1',
-        bool cancelled = false}) =>
+        bool cancelled = false,
+        Duration? resolvedAgo}) =>
     SosEvent(
       id: id,
       userId: user,
       at: now.subtract(age),
       cancelled: cancelled,
+      resolvedAt: resolvedAgo == null ? null : now.subtract(resolvedAgo),
+      resolvedBy: resolvedAgo == null ? null : 'user',
     );
 
 void main() {
@@ -115,5 +118,34 @@ void main() {
     await emit([event('e1')]);
 
     expect(presenter.shown, isEmpty);
+  });
+
+  test('"I am okay" after the call is shown once, and only once', () async {
+    await watcher.start(events.stream);
+    await emit([event('e1', age: const Duration(minutes: 2))]);
+    await emit([
+      event('e1',
+          age: const Duration(minutes: 2), resolvedAgo: Duration.zero),
+    ]);
+    // Firestore sends the whole set again on every change.
+    await emit([
+      event('e1',
+          age: const Duration(minutes: 2), resolvedAgo: Duration.zero),
+    ]);
+
+    expect(presenter.shown.map((a) => a.title),
+        ['Bob Doe needs help', 'Bob Doe says they are okay']);
+  });
+
+  test('an emergency already over when first seen raises only the all-clear',
+      () async {
+    await watcher.start(events.stream);
+    await emit([
+      event('e1',
+          age: const Duration(minutes: 3),
+          resolvedAgo: const Duration(minutes: 1)),
+    ]);
+    expect(presenter.shown.map((a) => a.title),
+        ['Bob Doe says they are okay']);
   });
 }

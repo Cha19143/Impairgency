@@ -33,6 +33,9 @@ class SosWatcher {
   /// cannot grow it without limit.
   final _alerted = <String>{};
 
+  /// Ids whose all-clear has been shown.
+  final _okayed = <String>{};
+
   StreamSubscription<List<SosEvent>>? _subscription;
 
   Future<void> start(Stream<List<SosEvent>> events) async {
@@ -45,9 +48,18 @@ class SosWatcher {
     // shown and therefore the one on top.
     final ordered = [...events]..sort((a, b) => a.at.compareTo(b.at));
     for (final event in ordered) {
+      final at = now();
+      if (shouldAlertOkay(event: event, now: at, alreadyTold: _okayed)) {
+        _okayed.add(event.id);
+        // Its emergency needs no alert of its own any more.
+        _alerted.add(event.id);
+        await presenter.show(
+            buildOkAlert(event, name: nameOf(event.userId), now: at));
+        continue;
+      }
       if (!shouldAlert(
         event: event,
-        now: now(),
+        now: at,
         alreadyAlerted: _alerted,
       )) {
         continue;
@@ -55,16 +67,17 @@ class SosWatcher {
       _alerted.add(event.id);
       await presenter.show(buildSosAlert(event, name: nameOf(event.userId)));
     }
-    _prune();
+    _prune(_alerted);
+    _prune(_okayed);
   }
 
   /// Keeps the seen-set from growing forever. Well above any plausible number
   /// of emergencies in one session, and small enough to be free.
-  void _prune() {
+  static void _prune(Set<String> seen) {
     const limit = 200;
-    if (_alerted.length <= limit) return;
-    final excess = _alerted.length - limit;
-    _alerted.removeAll(_alerted.take(excess).toList());
+    if (seen.length <= limit) return;
+    final excess = seen.length - limit;
+    seen.removeAll(seen.take(excess).toList());
   }
 
   Future<void> stop() async {

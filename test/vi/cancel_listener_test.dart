@@ -12,7 +12,7 @@ Future<void> soon(Duration _) => Future<void>.delayed(Duration.zero);
 void main() {
   final countdown = [
     for (var s = 3; s >= 0; s--) armingAnnouncement(s, contactName: 'Mum'),
-    kArmingHint,
+    ...kArmingHintLines,
   ];
 
   test('a window that heard only the app is opened again', () async {
@@ -29,7 +29,7 @@ void main() {
     expect(mic.sessions, hasLength(1));
 
     await mic.hear(const Heard('calling mum in 3 say cancel or touch the '
-        'screen anywhere to stop this'));
+        'screen anywhere'));
     expect(mic.sessions, hasLength(2));
     expect(mic.open, isTrue, reason: 'still listening');
 

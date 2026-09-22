@@ -125,6 +125,7 @@ class VoiceController extends ChangeNotifier {
     required this.speaker,
     required this.actions,
     this.onNavigate,
+    this.screenReaderOn,
     Future<void> Function(Duration delay)? wait,
     DateTime Function()? now,
   })  : _wait = wait ?? ((delay) => Future<void>.delayed(delay)),
@@ -144,6 +145,11 @@ class VoiceController extends ChangeNotifier {
 
   /// Where to go when a command has somewhere to go. Set by the router.
   void Function(String route)? onNavigate;
+
+  /// Whether TalkBack or VoiceOver is on. A screen reader reads the buttons
+  /// aloud - "Emergency SOS, button" - and a microphone left open hears it,
+  /// so while one is on, the labels on screen are the app's own voice too.
+  final bool Function()? screenReaderOn;
 
   final Future<void> Function(Duration delay) _wait;
   final DateTime Function() _now;
@@ -590,6 +596,11 @@ class VoiceController extends ChangeNotifier {
     final scope = _active;
     final vocabulary = only ?? scope?.commands?.call() ?? kEverydayCommands;
 
+    // In a window the app opened itself, help is a short phrase said on its
+    // own: with hands-free on, "I need help finding the settings" across the
+    // room started an emergency.
+    final helpLimit = auto ? kHandsFreeHelpWords : null;
+
     final readiness = await recognizer.prepare();
     if (attempt != _attempt) return ListenOutcome.cancelled;
     if (readiness != RecognizerReadiness.ready) {
@@ -622,6 +633,12 @@ class VoiceController extends ChangeNotifier {
           if (!silenceSpeaker)
             ...?_activity
                 ?.spokenSince(opened.subtract(const Duration(seconds: 2))),
+          // A single-word label read out is left alone: said by the person,
+          // it has to press its button.
+          if (auto && (screenReaderOn?.call() ?? false))
+            for (final target in targets.current)
+              if (spokenWords(target.label).length >= kEchoMinRun)
+                target.label,
         ];
 
     final hearing = await recognizer.listen(
@@ -639,7 +656,7 @@ class VoiceController extends ChangeNotifier {
               final said = saidSoFar();
               return !mayBeEchoStart(partial, said) &&
                   parseVoiceCommand(withoutEcho(partial, said),
-                          only: vocabulary) !=
+                          only: vocabulary, helpMaxWords: helpLimit) !=
                       null;
             },
     );
@@ -688,20 +705,31 @@ class VoiceController extends ChangeNotifier {
           return ListenOutcome.notUnderstood;
         }
 
+        // A button named exactly outranks help heard somewhere in its name:
+        // "Emergency contacts" on Settings is the contacts screen, and saying
+        // it used to start an SOS. "Help" said on its own is still help.
+        final exact = dispatch
+            ? targets.matches(meant, exactOnly: true)
+            : const <VoiceTarget>[];
+
         // A screen's own reading of the words never gets in the way of help.
         final onWords = scope?.onWords;
         final help = vocabulary.contains(VoiceCommand.help) &&
-            parseVoiceCommand(meant, only: const {VoiceCommand.help}) != null;
+            parseVoiceCommand(meant,
+                    only: const {VoiceCommand.help},
+                    helpMaxWords: helpLimit) !=
+                null &&
+            (exact.isEmpty || isOnlyCommandPhrase(meant, VoiceCommand.help));
         if (dispatch && onWords != null && !help && await onWords(meant)) {
           if (attempt == _attempt) _set(VoicePhase.idle);
           return ListenOutcome.acted;
         }
 
-        final parsed = parseVoiceCommand(meant, only: vocabulary);
+        final parsed = parseVoiceCommand(meant,
+            only: vocabulary, helpMaxWords: helpLimit);
         if (dispatch &&
             !help &&
             (parsed == null || !isOnlyCommandPhrase(meant, parsed.command))) {
-          final exact = targets.matches(meant, exactOnly: true);
           final named = exact.isNotEmpty || parsed != null
               ? exact
               : targets.matches(meant);

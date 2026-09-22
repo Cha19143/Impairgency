@@ -90,7 +90,7 @@ class _SosFlowState extends State<SosFlow> {
       echoOf: () => [
         for (var s = kArmingDuration.inSeconds; s >= 0; s--)
           armingAnnouncement(s, contactName: _contactName),
-        kArmingHint,
+        ...kArmingHintLines,
         kSosAlarm,
       ],
     );
@@ -189,6 +189,18 @@ class _SosFlowState extends State<SosFlow> {
     if (mounted) widget.onFinished();
   }
 
+  /// "I am okay", after the call. The record is marked resolved - not
+  /// cancelled: the call happened - and the guardian's phone says so.
+  Future<void> _resolve() async {
+    final receipt = _receipt;
+    if (receipt == null) return;
+    final outcome = await widget.engine.resolve(receipt.eventId);
+    if (!mounted) return;
+    await widget.speaker.speak(
+        okayAnnouncement(outcome, hasGuardian: widget.guardianCount > 0));
+    if (mounted) widget.onFinished();
+  }
+
   @override
   Widget build(BuildContext context) {
     final receipt = _receipt;
@@ -197,6 +209,9 @@ class _SosFlowState extends State<SosFlow> {
         receipt: receipt,
         speaker: widget.speaker,
         onDone: widget.onFinished,
+        voice: widget.voiceController,
+        onOkay: _resolve,
+        guardianTold: receipt.eventId != null && widget.guardianCount > 0,
         nextContact: _next,
         onCallNext: _next == null ? null : _callNext,
         contactCount: widget.contacts.length,

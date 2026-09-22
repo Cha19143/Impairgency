@@ -265,6 +265,8 @@ class AppSession extends ChangeNotifier {
           forgetFriend: forgetFriend,
         ),
         onNavigate: (route) => navigate?.call(route),
+        screenReaderOn: () => WidgetsBinding
+            .instance.platformDispatcher.accessibilityFeatures.accessibleNavigation,
       )
         ..handsFree = _handsFree
         ..setForeground(_foreground)
