@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/auth/email_address.dart';
 import '../../core/speech/speaker.dart';
+import '../voice_controller.dart';
+import '../widgets/dictated_field.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
+import '../widgets/voice_form.dart';
 
 /// Returns null when the link is on its way, or a sentence to say and show.
 typedef ResetHandler = Future<String?> Function(String email);
@@ -95,11 +98,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         'Type the email you signed up with. We will send a link to choose a '
             'new password.',
       ],
-      spokenSuffix: 'One field, and a button to send the link.',
-      extra: Column(
+      spokenSuffix: 'One field, and a button to send the link. Say fill in to '
+          'say the email address.',
+      micDetail: kFormMicDetail,
+      extra: VoiceForm(
+        submitLabel: 'Send me the link',
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(
+          DictatedField(
+            label: 'Email address',
+            controller: _email,
+            shape: DictationShape.email,
+            enabled: !_busy && !_sent,
+            field: Semantics(
             textField: true,
             label: 'Email address',
             child: TextField(
@@ -123,6 +135,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
             ),
           ),
+          ),
           if (_sent) ...[
             const SizedBox(height: 18),
             Semantics(
@@ -142,6 +155,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ],
         ],
+      ),
       ),
       actions: [
         if (!_sent)

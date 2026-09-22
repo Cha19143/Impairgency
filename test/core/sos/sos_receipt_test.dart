@@ -199,4 +199,34 @@ void main() {
       expect(kArmingDuration.inSeconds, inInclusiveRange(2, 5));
     });
   });
+
+  group('cancelled after the countdown', () {
+    const receipt = SosReceipt([
+      LegResult(SosLeg.alarm, LegOutcome.done),
+      LegResult(SosLeg.call, LegOutcome.cancelled),
+      LegResult(SosLeg.location, LegOutcome.cancelled),
+      LegResult(SosLeg.guardians, LegOutcome.cancelled),
+    ]);
+
+    test('says the user stopped it, not that something failed', () {
+      expect(receipt.cancelled, isTrue);
+      expect(receipt.headline, 'Cancelled before calling');
+      expect(receipt.spoken, startsWith('Cancelled before calling.'));
+      expect(receipt.spoken, isNot(contains('did not connect')));
+      expect(receipt.spoken, isNot(contains('could not be reached')));
+    });
+
+    test('names each leg that was not attempted, and why', () {
+      expect(receipt.sentenceFor(receipt.of(SosLeg.call)!),
+          'You said cancel, so nobody was called.');
+      expect(receipt.sentenceFor(receipt.of(SosLeg.location)!),
+          'Your location was not sent.');
+      expect(receipt.sentenceFor(receipt.of(SosLeg.guardians)!),
+          'You said cancel, so your guardian was not alerted.');
+    });
+
+    test('reached nobody, so trying again stays on offer', () {
+      expect(receipt.anyoneReached, isFalse);
+    });
+  });
 }

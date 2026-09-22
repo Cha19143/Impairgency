@@ -32,7 +32,15 @@ String withoutEcho(String heard, Iterable<String> spoken) {
 
   for (final sentence in spoken) {
     final said = spokenWords(sentence).map(_normalise).toList();
-    if (said.length < kEchoMinRun) continue;
+    if (said.length < kEchoMinRun) {
+      // A sentence of one word, heard back whole, is the app too: the name of
+      // a button pressed by voice, said as it is pressed, must not press it
+      // again from the next window.
+      if (said.isNotEmpty && words.length == 1 && words.single == said.single) {
+        echoed[0] = true;
+      }
+      continue;
+    }
     for (var i = 0; i < words.length; i++) {
       for (var j = 0; j < said.length; j++) {
         var run = 0;
@@ -54,6 +62,27 @@ String withoutEcho(String heard, Iterable<String> spoken) {
     for (var i = 0; i < words.length; i++)
       if (!echoed[i]) words[i],
   ].join(' ');
+}
+
+/// Whether [heard] ends in a word that one of [spoken] carries on from.
+///
+/// A partial result is a phrase still arriving. When its last word is one the
+/// app says with more after it - "cancel" in "Say cancel, or touch the screen"
+/// - the next partial may yet make it the app's own sentence, which
+/// [withoutEcho] would take out. Acting on the partial first would act on the
+/// app. A word the app does not say, or says only at the end of a sentence, is
+/// safe to act on before the phrase ends.
+bool mayBeEchoStart(String heard, Iterable<String> spoken) {
+  final words = spokenWords(heard);
+  if (words.isEmpty) return false;
+  final last = _normalise(words.last);
+  for (final sentence in spoken) {
+    final said = spokenWords(sentence).map(_normalise).toList();
+    for (var j = 0; j < said.length - 1; j++) {
+      if (said[j] == last) return true;
+    }
+  }
+  return false;
 }
 
 /// Digits and number words compare equal: the app says "3", a recogniser

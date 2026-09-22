@@ -296,4 +296,90 @@ void main() {
       expect(h.written.single['cancelled'], true);
     });
   });
+
+  group('cancel after the countdown, before the call', () {
+    // The alarm and the position take seconds before anyone is rung. A
+    // "cancel" in those seconds stops the SOS; after the dialler opens it
+    // cannot, and the app is behind the call anyway.
+    test('cancel between the alarm and the call stops the call, and the '
+        'receipt says so', () async {
+      final finding = Completer<LocationFix?>();
+      final h = Harness(location: _Finding(finding));
+      final cancelled = Completer<void>();
+      var committed = false;
+
+      final firing = h.engine.fire(
+        userId: 'u1',
+        contacts: const [EmergencyContact(name: 'Mum', number: '09170000000')],
+        guardianCount: 1,
+        cancelled: cancelled.future,
+        onCommitted: () => committed = true,
+      );
+      await pumpEventQueue();
+      expect(h.speaker.said, [kSosAlarm], reason: 'the alarm sounded');
+
+      cancelled.complete(); // while the position is still being found
+      final receipt = await firing;
+      await pumpEventQueue();
+
+      expect(h.dialled, isEmpty);
+      expect(committed, isFalse);
+      expect(receipt.cancelled, isTrue);
+      expect(receipt.anyoneReached, isFalse);
+      expect(receipt.headline, 'Cancelled before calling');
+      expect(receipt.of(SosLeg.call)!.outcome, LegOutcome.cancelled);
+      expect(receipt.of(SosLeg.guardians)!.outcome, LegOutcome.cancelled);
+      expect(receipt.spoken, contains('You said cancel, so nobody was called.'));
+
+      // Recorded as a cancellation, where it stopped, and without a position:
+      // nothing was sent, so nothing is kept.
+      expect(h.written.single,
+          {'userId': 'u1', 'cancelled': true, 'stage': 'before-call'});
+    });
+
+    test('a cancel during the alarm itself stops it there', () async {
+      final h = Harness();
+      final cancelled = Completer<void>()..complete();
+      final receipt = await h.engine.fire(
+        userId: 'u1',
+        contacts: const [EmergencyContact(name: 'Mum', number: '09170000000')],
+        guardianCount: 0,
+        cancelled: cancelled.future,
+      );
+      expect(h.dialled, isEmpty);
+      expect(receipt.cancelled, isTrue);
+    });
+
+    test('once committed, it calls as before', () async {
+      final h = Harness();
+      var committed = false;
+      final receipt = await h.engine.fire(
+        userId: 'u1',
+        contacts: const [EmergencyContact(name: 'Mum', number: '09170000000')],
+        guardianCount: 1,
+        cancelled: Completer<void>().future,
+        onCommitted: () => committed = true,
+      );
+      expect(committed, isTrue);
+      expect(h.dialled, hasLength(1));
+      expect(receipt.cancelled, isFalse);
+    });
+  });
+}
+
+/// A position that arrives when the test says.
+class _Finding implements LocationSource {
+  _Finding(this.fix);
+  final Completer<LocationFix?> fix;
+  @override
+  Future<LocationAvailability> availability() async =>
+      LocationAvailability.ready;
+  @override
+  Future<LocationAvailability> requestPermission() async =>
+      LocationAvailability.ready;
+  @override
+  Future<LocationFix?> currentFix({Duration timeout = Duration.zero}) =>
+      fix.future;
+  @override
+  Future<LocationFix?> lastKnownFix() async => null;
 }

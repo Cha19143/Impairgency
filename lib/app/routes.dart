@@ -51,8 +51,12 @@ abstract final class Routes {
   static const scan = '/scan';
 
   /// Smart assistance: where are you going? One tap sets the destination
-  /// and opens [scan] with directions.
+  /// and opens [journey].
   static const assist = '/assist';
+
+  /// Directions to the destination, on a map, with the obstacle warnings
+  /// still on. Stopping them goes back to [scan].
+  static const journey = '/journey';
 
   /// Reading books, labels and documents. Separate from [scan] on purpose:
   /// different camera mode, different prompts, different pace.
@@ -83,7 +87,6 @@ abstract final class Routes {
   static const adminSignIn = '/admin/sign-in';
   static const adminOverview = '/admin/overview';
   static const adminUsers = '/admin/users';
-  static const adminSessions = '/admin/sessions';
   static const adminHealth = '/admin/health';
   static const adminAccessibility = '/admin/accessibility';
 
@@ -107,6 +110,7 @@ class SessionState {
     this.uid,
     this.signedIn = false,
     this.isAdmin = false,
+    this.adminCheckPending = false,
     this.isGuardian = false,
     this.safetyAcknowledged = false,
     this.completedSteps = const <String>{},
@@ -125,6 +129,7 @@ class SessionState {
     String? uid,
     bool? signedIn,
     bool? isAdmin,
+    bool? adminCheckPending,
     bool? isGuardian,
     bool? safetyAcknowledged,
     Set<String>? completedSteps,
@@ -137,6 +142,7 @@ class SessionState {
         uid: uid ?? this.uid,
         signedIn: signedIn ?? this.signedIn,
         isAdmin: isAdmin ?? this.isAdmin,
+        adminCheckPending: adminCheckPending ?? this.adminCheckPending,
         isGuardian: isGuardian ?? this.isGuardian,
         safetyAcknowledged: safetyAcknowledged ?? this.safetyAcknowledged,
         completedSteps: completedSteps ?? this.completedSteps,
@@ -153,6 +159,13 @@ class SessionState {
 
   final bool signedIn;
   final bool isAdmin;
+
+  /// The roster read failed without an answer - no connection, or no reply in
+  /// time - so [isAdmin] is not yet known. The sign-in page says the check is
+  /// still going rather than that the account is not an administrator, and the
+  /// session asks again.
+  final bool adminCheckPending;
+
   final bool isGuardian;
 
   /// Whether the §7 limitation notice has been seen and acknowledged.
@@ -235,11 +248,12 @@ String? resolveRedirect({
     if (!session.signedIn) {
       return location == Routes.adminSignIn ? null : Routes.adminSignIn;
     }
-    // Authenticated but not on the roster. Staying is correct - the sign-in
-    // screen renders a "signed in, but not an administrator" state that names
-    // the account and prints the document that would grant it - but say so with
-    // null rather than a redirect to the current location, which is a no-op
-    // dressed up as a decision.
+    // Authenticated but not on the roster, or not known to be yet. Staying is
+    // correct - the sign-in screen renders a "signed in, but not an
+    // administrator" state that names the account and prints the document that
+    // would grant it, or says the roster is still being checked - but say so
+    // with null rather than a redirect to the current location, which is a
+    // no-op dressed up as a decision.
     if (!session.isAdmin) {
       return location == Routes.adminSignIn ? null : Routes.adminSignIn;
     }

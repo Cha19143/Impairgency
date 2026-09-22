@@ -119,6 +119,7 @@ class VoiceMicButton extends StatelessWidget {
                     : Icons.mic_none_outlined,
                 kind: kind,
                 onPressed: () => tap(controller, only: only),
+                pressByVoice: false,
               ),
               if (phase == VoicePhase.failed &&
                   controller.failureMessage != null)

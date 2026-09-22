@@ -83,6 +83,7 @@ import '../vi/screens/consent_centre_screen.dart';
 import '../vi/screens/dashboard_screen.dart';
 import '../vi/screens/learned_data_screen.dart';
 import '../vi/screens/people_screen.dart';
+import '../vi/screens/journey_screen.dart';
 import '../vi/screens/scan_screen.dart';
 import '../vi/screens/settings_screen.dart';
 import '../vi/screens/sign_out_screen.dart';
@@ -100,6 +101,7 @@ import '../vi/widgets/vi_button.dart';
 import '../vi/widgets/vi_screen.dart';
 import '../vi/widgets/voice_scope_host.dart';
 import 'routes.dart';
+import 'theme.dart';
 
 /// Live session, fed by FirebaseAuth once `flutterfire configure` has been run
 /// against the new project. Until then it reports signed out, which is the
@@ -125,7 +127,9 @@ class AppSession extends ChangeNotifier {
     PlaceSearchService? placeSearch,
     LocationSource? location,
     FriendStore? friendStore,
+    bool? dashboard,
   })  : store = store ?? InMemorySessionStore(),
+        _dashboard = dashboard ?? kIsWeb,
         speaker = speaker ?? const SilentSpeaker(),
         _pairing = pairing,
         _recognizer = recognizer,
@@ -142,6 +146,11 @@ class AppSession extends ChangeNotifier {
         _placeSearch = placeSearch,
         _location = location,
         _friendStore = friendStore;
+
+  /// Whether this is the web dashboard: the admin app, and the roster that
+  /// guards it. [kIsWeb], unless a test says otherwise.
+  bool get dashboard => _dashboard;
+  final bool _dashboard;
 
   /// Where "what the app noticed" goes for the guardian. Null in tests.
   final ActivityRecorder? _activity;
@@ -258,7 +267,33 @@ class AppSession extends ChangeNotifier {
         onNavigate: (route) => navigate?.call(route),
       )
         ..handsFree = _handsFree
-        ..setForeground(_foreground);
+        ..setForeground(_foreground)
+        ..fallbackScope = _dashboard ? null : _listenOn;
+
+  /// What a screen with no voice scope of its own listens for: the everyday
+  /// words, hands-free, and its buttons by name - on every screen of the
+  /// visually impaired app. Not in the guardian's app, which is used by
+  /// someone who can see it and never agreed to an open microphone.
+  VoiceScope? _listenOn(String? route) {
+    if (route == null || _state.isGuardian) return null;
+    if (route.startsWith(Routes.guardianHome) ||
+        route.startsWith(Routes.adminRoot) ||
+        route == Routes.debug) {
+      return null;
+    }
+    // The first run's safety notice is heard out before the microphone is
+    // asked for: the permission prompt would land on top of it.
+    if (route == Routes.safety && !_state.safetyAcknowledged) {
+      return const VoiceScope(handsFree: false);
+    }
+    // The SOS flow listens for "cancel" itself. A hands-free window taking
+    // the microphone between two of its windows would hear "cancel" as
+    // nothing, and the everyday words mean nothing there.
+    if (route == Routes.sos) {
+      return const VoiceScope(handsFree: false, exclusive: true);
+    }
+    return const VoiceScope();
+  }
 
   /// Hands-free listening, as the user set it - or, until they have, on for
   /// Android, where it has been tried, and off for iOS until it has been.
@@ -297,7 +332,7 @@ class AppSession extends ChangeNotifier {
 
   /// "Take me to…", by voice.
   ///
-  /// A saved place answers straight away and opens Scan with directions.
+  /// A saved place answers straight away and opens the journey screen.
   /// Anything else is looked up near the person, and each place found is
   /// offered in turn - "Jollibee, Paseo del Congreso, about 600 metres away.
   /// Say yes to go there, next for another, or no" - because the first match
@@ -311,7 +346,7 @@ class AppSession extends ChangeNotifier {
     if (place != null) {
       await setDestination(place);
       return VoiceOutcome(
-          spoken: 'Directions to ${place.label}.', route: Routes.scan);
+          spoken: 'Directions to ${place.label}.', route: Routes.journey);
     }
     final search = placeSearch;
     final voice = _voice;
@@ -344,7 +379,7 @@ class AppSession extends ChangeNotifier {
           await setDestination(destination);
           return VoiceOutcome(
               spoken: 'Directions to ${destination.label}.',
-              route: Routes.scan);
+              route: Routes.journey);
         case VoiceCommand.next:
           continue;
         case VoiceCommand.help:
@@ -528,6 +563,9 @@ class AppSession extends ChangeNotifier {
     if (path == _path) return;
     _path = path;
     _voice?.routeChanged(path);
+    if (_state.adminCheckPending && path.startsWith(Routes.adminRoot)) {
+      unawaited(recheckAdmin());
+    }
   }
 
   // Constructed lazily so a widget test that never opens a Firestore-backed
@@ -540,6 +578,52 @@ class AppSession extends ChangeNotifier {
 
   AdminRepository? _admin;
   AdminRepository get admin => _admin ??= AdminRepository();
+
+  /// How often, and how far apart, an unanswered roster check is asked again
+  /// before it waits for the sign-in page's Retry.
+  static const int rosterRetries = 3;
+  static const Duration rosterRetryGap = Duration(seconds: 3);
+
+  Timer? _rosterRetry;
+  int _rosterRetriesLeft = 0;
+  bool _rosterBusy = false;
+
+  /// Records what the roster said, and asks again later if it said nothing.
+  SessionState _withRoster(SessionState state, RosterCheck roster) {
+    _rosterRetry?.cancel();
+    if (roster == RosterCheck.unknown && _rosterRetriesLeft > 0) {
+      _rosterRetriesLeft--;
+      _rosterRetry =
+          Timer(rosterRetryGap, () => unawaited(recheckAdmin()));
+    }
+    return state.copyWith(
+      isAdmin: roster == RosterCheck.admin,
+      adminCheckPending: roster == RosterCheck.unknown,
+    );
+  }
+
+  /// Asks the roster again, after a read that could not tell.
+  ///
+  /// The first answer used to be the only one: a failed read at sign-in was
+  /// kept as "not an administrator" until the page was reloaded, and every
+  /// sidebar click bounced to the sign-in page. Now an unanswered check is
+  /// retried on its own, on a move to another dashboard page, and from the
+  /// sign-in page's Retry - and only an actual refusal is remembered.
+  Future<void> recheckAdmin() async {
+    final uid = _state.uid;
+    if (!_dashboard || uid == null || !_state.adminCheckPending) return;
+    if (_rosterBusy) return;
+    _rosterBusy = true;
+    final RosterCheck roster;
+    try {
+      roster = await admin.rosterCheck(uid);
+    } finally {
+      _rosterBusy = false;
+    }
+    // Signed out, or answered some other way, while the read was out.
+    if (_state.uid != uid || !_state.adminCheckPending) return;
+    update(_withRoster(_state, roster));
+  }
 
   AccountStatusRepository? _accountStatus;
   AccountStatusRepository get accountStatus =>
@@ -681,6 +765,7 @@ class AppSession extends ChangeNotifier {
     auth.accounts.listen((user) async {
       _watchRemoval(user?.uid);
       if (user == null) {
+        _rosterRetry?.cancel();
         // Read back off the device rather than carrying the old state
         // forward. Signing out clears what this phone held about that account,
         // and a listener that trusted its own memory would put it straight
@@ -696,21 +781,26 @@ class AppSession extends ChangeNotifier {
       // The roster only matters on the web dashboard. Asked on a phone, it
       // is a permission-denied read on every launch for everyone who is not
       // an administrator - which is everyone with a phone.
-      final isAdmin = kIsWeb ? await admin.isAdmin(user.uid) : false;
+      final roster = _dashboard
+          ? await admin.rosterCheck(user.uid)
+          : RosterCheck.notAdmin;
       // Which app this account is for, decided before the guard runs: a
       // guardian sent through the visually impaired flow would be asked to
       // create the account they have just created.
       final isGuardian = await _isGuardian(user.uid);
-      update(_state.copyWith(
-        uid: user.uid,
-        signedIn: true,
-        isAdmin: isAdmin,
-        isGuardian: isGuardian,
-        needsEmailVerification: !kIsWeb &&
-            requiresEmailVerification(
-              emailVerified: user.emailVerified,
-              createdAt: user.createdAt,
-            ),
+      _rosterRetriesLeft = rosterRetries;
+      update(_withRoster(
+        _state.copyWith(
+          uid: user.uid,
+          signedIn: true,
+          isGuardian: isGuardian,
+          needsEmailVerification: !_dashboard &&
+              requiresEmailVerification(
+                emailVerified: user.emailVerified,
+                createdAt: user.createdAt,
+              ),
+        ),
+        roster,
       ));
       // Best effort, and deliberately not awaited by the guard.
       unawaited(refreshProfile());
@@ -843,6 +933,7 @@ class AppSession extends ChangeNotifier {
   @override
   void dispose() {
     _sharer?.stop();
+    _rosterRetry?.cancel();
     unawaited(_removalWatch?.cancel());
     super.dispose();
   }
@@ -896,10 +987,10 @@ GoRouter createRouter(AppSession session) {
   final router = GoRouter(
       initialLocation: _startOverride.isNotEmpty
           ? _startOverride
-          : (kIsWeb ? Routes.adminRoot : Routes.welcome),
+          : (session.dashboard ? Routes.adminRoot : Routes.welcome),
       refreshListenable: session,
       redirect: (context, state) => resolveRedirect(
-        isWeb: kIsWeb,
+        isWeb: session.dashboard,
         location: state.matchedLocation,
         session: session.state,
       ),
@@ -1142,30 +1233,56 @@ GoRouter createRouter(AppSession session) {
             // Once per visit: the friends watched, and anyone to meet.
             final friends = session.friendRecognition();
             final meet = session.takePendingFriend();
+            return ScanScreen(
+              speaker: session.prioritySpeaker,
+              voice: session.voice,
+              friends: friends,
+              meetFriend: meet,
+              onObstacle: (label) =>
+                  session.recordActivity(ActivityKind.obstacle, label),
+              onBack: () => appNavigate(context, Routes.home),
+            );
+          },
+        ),
+        GoRoute(
+          path: Routes.journey,
+          // Nowhere to go is Smart assistance's question, not a blank map.
+          redirect: (_, __) =>
+              session.destination == null ? Routes.assist : null,
+          builder: (context, _) {
+            final friends = session.friendRecognition();
             // Rebuilt when the destination changes: "take me to" said on this
             // screen goes to the route it is already on, which the router
             // does not rebuild by itself.
             return _SessionSelector<Destination?>(
               session: session,
               select: (session) => session.destination,
-              builder: (destination) => ScanScreen(
-                speaker: session.prioritySpeaker,
-                voice: session.voice,
-                destination: destination,
-                positions: destination == null
-                    ? null
-                    : const GeolocatorLocationSource().positions(),
-                routing: session.routing,
-                friends: friends,
-                meetFriend: meet,
-                onStopGuidance: () async {
-                  await session.setDestination(null);
-                  if (context.mounted) appNavigate(context, Routes.scan);
-                },
-                onObstacle: (label) =>
-                    session.recordActivity(ActivityKind.obstacle, label),
-                onBack: () => appNavigate(context, Routes.home),
-              ),
+              builder: (destination) => destination == null
+                  ? const Scaffold(backgroundColor: AppColors.navy)
+                  : JourneyScreen(
+                      speaker: session.prioritySpeaker,
+                      voice: session.voice,
+                      destination: destination,
+                      positions: const GeolocatorLocationSource().positions(),
+                      routing: session.routing,
+                      friends: friends,
+                      onObstacle: (label) =>
+                          session.recordActivity(ActivityKind.obstacle, label),
+                      // A real move to Scan, which keeps warning. The screen
+                      // used to stay where it was and forget the destination
+                      // itself, because a go() to the route already open is a
+                      // no-op - and forgetting it by hand kept going wrong.
+                      // Leaving first, then clearing, so this route is never
+                      // asked to show a journey to nowhere.
+                      onStop: () async {
+                        appNavigate(context, Routes.scan);
+                        await session.setDestination(null);
+                      },
+                      onBack: () async {
+                        appNavigate(context, Routes.home);
+                        await session.setDestination(null);
+                      },
+                    ),
             );
           },
         ),
@@ -1193,7 +1310,7 @@ GoRouter createRouter(AppSession session) {
                   if (place == null) return false;
                   await session.speaker.speak('Directions to ${place.label}.');
                   await session.setDestination(place);
-                  if (context.mounted) appNavigate(context, Routes.scan);
+                  if (context.mounted) appNavigate(context, Routes.journey);
                   return true;
                 },
               ),
@@ -1206,7 +1323,7 @@ GoRouter createRouter(AppSession session) {
                 places: places,
                 onGo: (place) async {
                   await session.setDestination(place);
-                  if (context.mounted) appNavigate(context, Routes.scan);
+                  if (context.mounted) appNavigate(context, Routes.journey);
                 },
                 onManagePlaces: () => appNavigate(context, Routes.savedPlaces),
                 onBack: () => appNavigate(context, Routes.home),
@@ -1294,8 +1411,8 @@ GoRouter createRouter(AppSession session) {
                 final on = !session.handsFree;
                 await session.setHandsFree(on);
                 await session.speaker.speak(on
-                    ? 'Hands-free voice is on. The app listens for commands '
-                        'on the main, scan, read and where-to screens.'
+                    ? 'Hands-free voice is on. The app listens on every '
+                        "screen, for commands and buttons' names."
                     : 'Hands-free voice is off. Tap to speak before each '
                         'command.');
               },
@@ -1434,21 +1551,27 @@ GoRouter createRouter(AppSession session) {
           // off the roster the redirect rightly says "stay", so the route never
           // changed, nothing rebuilt the screen with who had signed in, and the
           // form just sat there looking like a wrong password.
-          builder: (_, __) => _SessionSelector<String?>(
+          builder: (_, __) =>
+              _SessionSelector<({String? signedInAs, bool checking})>(
             session: session,
             // Present only when authentication worked and the roster check
-            // did not. The screen explains itself instead of silently
-            // reappearing. Rebuilt only when this changes, so typing into the
-            // form is never interrupted by a session update it does not need.
-            select: (session) =>
-                session.state.signedIn && !session.state.isAdmin
-                    ? (session.auth.email ?? 'this account')
-                    : null,
-            builder: (signedInAs) => AdminSignInScreen(
+            // did not - refused, or not yet answered. The screen explains
+            // itself instead of silently reappearing. Rebuilt only when this
+            // changes, so typing into the form is never interrupted by a
+            // session update it does not need.
+            select: (session) => (
+              signedInAs: session.state.signedIn && !session.state.isAdmin
+                  ? (session.auth.email ?? 'this account')
+                  : null,
+              checking: session.state.adminCheckPending,
+            ),
+            builder: (roster) => AdminSignInScreen(
               onSignIn: (email, password) =>
                   session.auth.signIn(email, password),
-              signedInAs: signedInAs,
+              signedInAs: roster.signedInAs,
               signedInUid: session.state.uid,
+              checkingRoster: roster.checking,
+              onCheckAgain: session.recheckAdmin,
               onSignOut: () => session.auth.signOut(),
             ),
           ),

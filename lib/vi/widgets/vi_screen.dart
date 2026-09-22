@@ -4,6 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/speech/speaker.dart';
+import 'vi_button.dart';
+import 'voice_access.dart';
+import 'voice_mic_button.dart';
+
+/// What the microphone on an ordinary screen says it can do.
+const String kMicDetail = "Say a button's name to press it";
 
 /// The shape every screen in the visually impaired app takes.
 ///
@@ -16,6 +22,10 @@ import '../../core/speech/speaker.dart';
 ///    to the bottom. Someone who cannot see the screen should not have to
 ///    discover that the button is below the fold.
 ///  * **Every control carries a semantic label**, enforced by [ViButton].
+///
+/// And, where the app has a microphone, the screen offers it: a
+/// [VoiceMicButton] after the choices, and every button pressable by saying
+/// its label.
 class ViScreen extends StatefulWidget {
   const ViScreen({
     super.key,
@@ -26,6 +36,8 @@ class ViScreen extends StatefulWidget {
     this.speaker = const SilentSpeaker(),
     this.spokenSuffix,
     this.extra,
+    this.mic = true,
+    this.micDetail = kMicDetail,
   });
 
   final String title;
@@ -46,6 +58,13 @@ class ViScreen extends StatefulWidget {
 
   /// Anything between the body and the actions: a field, a code, switches.
   final Widget? extra;
+
+  /// Whether to offer the microphone at the foot of the choices. Screens that
+  /// place their own pass false.
+  final bool mic;
+
+  /// What the microphone button says it can do when idle.
+  final String micDetail;
 
   @override
   State<ViScreen> createState() => _ViScreenState();
@@ -87,6 +106,24 @@ class _ViScreenState extends State<ViScreen> {
     final height = painter.height;
     painter.dispose();
     return height + _bodyPadding.vertical;
+  }
+
+  /// [ViScreen.actions], with the microphone after the choices and before a
+  /// closing run of quiet ones - Back, Skip - where a way out is expected.
+  List<Widget> _actions(BuildContext context) {
+    final voice = widget.mic ? VoiceAccess.maybeOf(context) : null;
+    if (voice == null) return widget.actions;
+    var at = widget.actions.length;
+    while (at > 0) {
+      final action = widget.actions[at - 1];
+      if (action is! ViButton || action.kind != ViButtonKind.quiet) break;
+      at--;
+    }
+    return [
+      ...widget.actions.sublist(0, at),
+      VoiceMicButton(controller: voice, detail: widget.micDetail),
+      ...widget.actions.sublist(at),
+    ];
   }
 
   @override
@@ -182,7 +219,7 @@ class _ViScreenState extends State<ViScreen> {
                           padding: _actionsPadding,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: widget.actions,
+                            children: _actions(context),
                           ),
                         ),
                       ),

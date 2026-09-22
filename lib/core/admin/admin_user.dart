@@ -4,8 +4,50 @@
 /// them are tested without either.
 library;
 
+import 'dart:async';
+
 import '../auth/email_address.dart';
 import '../profile/impairment.dart';
+
+/// Whether the signed-in account is on the admin roster, as far as the read
+/// could tell.
+///
+/// Three answers, because a read can fail without saying no. The check used to
+/// return false for any failure, once, at sign-in: an administrator whose first
+/// read met a cold connection was told they were not one, and every sidebar
+/// click after that bounced back to the sign-in page for the rest of the
+/// session.
+enum RosterCheck { admin, notAdmin, unknown }
+
+/// Why a dashboard read failed, in the terms the page explains it in.
+enum AdminLoadFailure {
+  /// The rules said no - usually an account that is not on the roster.
+  refused,
+
+  /// The database was not reached, or did not answer in time.
+  unreachable,
+
+  /// Anything else: a missing index, a bug. Blamed on neither of the above.
+  other,
+}
+
+/// Sorts an error from a dashboard read.
+///
+/// Firebase errors are recognised by the code they print -
+/// `[cloud_firestore/permission-denied] ...` - rather than by type, so this
+/// file stays free of the Firebase packages.
+AdminLoadFailure describeFailure(Object error) {
+  if (error is TimeoutException) return AdminLoadFailure.unreachable;
+  final code = RegExp(r'\[[\w.-]+/([\w-]+)\]').firstMatch('$error')?.group(1);
+  return switch (code) {
+    'permission-denied' || 'unauthenticated' => AdminLoadFailure.refused,
+    'unavailable' ||
+    'deadline-exceeded' ||
+    'network-request-failed' =>
+      AdminLoadFailure.unreachable,
+    _ => AdminLoadFailure.other,
+  };
+}
 
 /// An account an administrator makes from the dashboard.
 ///

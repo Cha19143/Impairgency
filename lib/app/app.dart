@@ -10,6 +10,7 @@ import '../data/tts_engine.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../admin/admin_theme.dart';
+import '../vi/widgets/voice_access.dart';
 import 'router.dart';
 import 'theme.dart';
 
@@ -99,7 +100,11 @@ class _ImpairGencyAppState extends State<ImpairGencyApp>
       builder: (context, child) {
         // Text scaling is honoured rather than clamped - §4 asks for large text
         // and a user who has set 200% means it. Layouts are tested at 2.0x.
-        return child ?? const SizedBox.shrink();
+        final page = child ?? const SizedBox.shrink();
+        // The microphone, for every screen of the app: buttons pressed by
+        // name, fields filled in by voice. The dashboard has none.
+        if (kIsWeb) return page;
+        return VoiceAccess(voice: _session.voice, child: page);
       },
     );
   }

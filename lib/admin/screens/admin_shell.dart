@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/routes.dart';
 import '../admin_theme.dart';
 
 class AdminSection {
@@ -11,13 +12,14 @@ class AdminSection {
 }
 
 const adminSections = <AdminSection>[
-  AdminSection('Overview', Icons.insights_outlined, '/admin/overview'),
-  AdminSection('Users', Icons.people_outline, '/admin/users'),
+  AdminSection('Overview', Icons.insights_outlined, Routes.adminOverview),
+  AdminSection('Users', Icons.people_outline, Routes.adminUsers),
   // No "Sessions" entry until there is a screen behind it. A nav item that
   // goes nowhere is the same defect as the audits button that audited nothing.
-  AdminSection('System health', Icons.monitor_heart_outlined, '/admin/health'),
+  AdminSection(
+      'System health', Icons.monitor_heart_outlined, Routes.adminHealth),
   AdminSection('Accessibility', Icons.accessibility_new_outlined,
-      '/admin/accessibility'),
+      Routes.adminAccessibility),
 ];
 
 /// Below this the sidebar becomes a drawer.
@@ -382,57 +384,68 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Material(
-        color: selected
-            ? AdminColors.accent.withValues(alpha: 0.12)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: onTap,
+      // A button to a screen reader, and the open section marked as selected.
+      // A bare InkWell is announced as its text alone, with nothing to say it
+      // can be pressed or which one is current.
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: Material(
+          color: selected
+              ? AdminColors.accent.withValues(alpha: 0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
-          // No ripple. A sidebar is navigation, not a control being operated,
-          // and an ink splash that plays out after the pane has already changed
-          // reads as lag rather than feedback.
-          splashFactory: NoSplash.splashFactory,
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: AdminColors.accent.withValues(alpha: 0.06),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(0, 11, 10, 11),
-            child: Row(
-              children: [
-                // The marker on the left edge, so which section you are on
-                // survives being read at a glance or in greyscale.
-                Container(
-                  width: 3,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? AdminColors.accent
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 9),
-                Icon(section.icon,
-                    size: 18,
-                    color: selected ? AdminColors.accent : AdminColors.chromeText),
-                const SizedBox(width: 10),
-                // Expanded, not bare: "Accessibility" is wider than the
-                // sidebar's inner width and overflowed by 42 px.
-                Expanded(
-                  child: Text(
-                    section.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color:
-                          selected ? AdminColors.accent : AdminColors.chromeText,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(10),
+            // No ripple. A sidebar is navigation, not a control being
+            // operated, and an ink splash that plays out after the pane has
+            // already changed reads as lag rather than feedback.
+            splashFactory: NoSplash.splashFactory,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            hoverColor: AdminColors.accent.withValues(alpha: 0.06),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 11, 10, 11),
+              child: Row(
+                children: [
+                  // The marker on the left edge, so which section you are on
+                  // survives being read at a glance or in greyscale.
+                  Container(
+                    width: 3,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AdminColors.accent
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 9),
+                  Icon(section.icon,
+                      size: 18,
+                      color: selected
+                          ? AdminColors.accent
+                          : AdminColors.chromeText),
+                  const SizedBox(width: 10),
+                  // Expanded, not bare: "Accessibility" is wider than the
+                  // sidebar's inner width and overflowed by 42 px.
+                  Expanded(
+                    child: Text(
+                      section.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected
+                            ? AdminColors.accent
+                            : AdminColors.chromeText,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

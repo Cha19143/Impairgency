@@ -1,3 +1,75 @@
+# Where we left off — 2026-09-16
+
+## Tester feedback round 3
+
+The testers' list of September 16, on branch `claude/tester-feedback-sept-16`,
+from the plan agreed that day: PR calmadex/impairgency#86.
+`flutter analyze` is clean; **1297** Flutter tests, **90** rules tests
+and **13** browser tests pass. A release APK, the web app and an unsigned
+release iOS build all build. The checklist is in [`docs/TASKS.md`](docs/TASKS.md), "Tester feedback round 3".
+
+1. **Voice on every screen.** Hands-free listens on every screen of the user
+   app, through a fallback scope the router sets (`AppSession._listenOn`): not
+   on the first safety notice, not during SOS, not in the guardian app. Every
+   `ViScreen` offers the microphone. Any button is pressed by saying its label
+   (`core/voice/spoken_targets.dart`, `vi/voice_targets.dart`,
+   `vi/widgets/press_by_voice.dart`). Forms are dictated with read-back
+   (`core/voice/dictation.dart`, `VoiceController.dictate`,
+   `vi/widgets/dictated_field.dart`, `vi/widgets/voice_form.dart`), passwords
+   never.
+2. **Admin sidebar.** A roster read with no answer was remembered as "not an
+   administrator". `AdminRepository.rosterCheck` now tells a refusal from no
+   answer; the session retries and the sign-in page says it is checking. Pages
+   explain an unreachable database and time out; the open section reloads when
+   clicked.
+3. **Scan.** "Path looks clear" is "No known objects in view", said rarely.
+   Classes are weighted (`core/vision/class_risk.dart`); a handheld object is
+   never a Stop. A depth model for walls (`core/vision/depth.dart`,
+   `data/depth_estimator_io.dart`) is wired in **behind
+   `--dart-define=DEPTH_WARNINGS=true`, and its 66 MB file is not in the
+   repository**.
+4. **A map.** Directions moved to `/journey` (`vi/screens/journey_screen.dart`),
+   with the route drawn on OpenStreetMap tiles; Scan is surroundings only. Both
+   warn through one `SurroundingsWatch`. "Somewhere else" leads the chooser.
+5. **SOS cancel by voice.** The countdown listened once and stopped; a
+   `CancelListener` now reopens the microphone for as long as it runs, acts on
+   a partial "cancel", and keeps listening until the dialler opens
+   (`SosEngine.fire(cancelled:, onCommitted:)`). The countdown no longer talks
+   over its own "say cancel".
+
+Since then (the same evening): MobileFaceNet added (`a314026`), with its hash
+and shapes in `docs/VISION.md`; MiDaS downloaded for the depth check and kept
+out of git. **Hosting deployed** from `8c4014a`, and the live dashboard checked
+to hold the new build and none of the model files. On release
+`apk-2026-09-10`: `impairgency-8c4014a-(arm64-)release.apk` for testers, and
+`impairgency-8c4014a-depth-check-(arm64-)release.apk` with the depth model and
+flag, not for testers. The tester APK was installed on both emulators: the
+guardian's app opens without a microphone; the user app's Settings, Scan and
+Smart assistance work, with hands-free listening on Settings and "Somewhere
+else" asking by voice. That run found the Settings switch still naming four
+screens (`8c4014a`). SOS was not fired there: the emulators use the live
+project.
+
+## Waiting on someone
+
+- **Merge PR #86** once CI is green.
+- **Superseded APKs** stay attached to the release (`836fb6b`, `8424e2f`,
+  `7ac4791` stairs check), marked as such in the notes; delete them when the
+  new ones are confirmed to install.
+
+## Check on a real phone
+
+- Dictation: Filipino names and a Gmail address through the platform
+  recogniser; the first run's microphone prompt on the welcome screen.
+- A "cancel" heard over the countdown's own voice, on Android and on iOS.
+- The camera handed from Scan to the map and back; a walk in Malolos on the
+  map.
+- Pressing buttons by voice with hands-free on in a noisy room: anything
+  pressed that was not asked for.
+- With the depth file and flag: the checklist in `docs/VISION.md`, "Depth".
+
+---
+
 # Where we left off — 2026-09-15
 
 ## Tester feedback round 2

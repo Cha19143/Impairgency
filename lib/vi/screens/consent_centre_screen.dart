@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/speech/speaker.dart';
 import '../onboarding/consent_screen.dart';
+import '../widgets/press_by_voice.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
 
@@ -80,49 +81,53 @@ class _ConsentCentreScreenState extends State<ConsentCentreScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final choice in kConsentChoices)
-            Semantics(
-              toggled: _values[choice.key] ?? false,
-              label: '${choice.title}. ${choice.detail}',
-              onTap: () => _set(choice.key, !(_values[choice.key] ?? false)),
-              child: ExcludeSemantics(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Material(
-                    color: AppColors.navyRaised,
-                    borderRadius: BorderRadius.circular(16),
-                    child: InkWell(
-                      onTap: () =>
-                          _set(choice.key, !(_values[choice.key] ?? false)),
+            PressByVoice(
+              label: choice.title,
+              onPressed: () => _set(choice.key, !(_values[choice.key] ?? false)),
+              child: Semantics(
+                toggled: _values[choice.key] ?? false,
+                label: '${choice.title}. ${choice.detail}',
+                onTap: () => _set(choice.key, !(_values[choice.key] ?? false)),
+                child: ExcludeSemantics(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Material(
+                      color: AppColors.navyRaised,
                       borderRadius: BorderRadius.circular(16),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(choice.title,
-                                      style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.textPrimary)),
-                                  const SizedBox(height: 4),
-                                  Text(choice.detail,
-                                      style: const TextStyle(
-                                          fontSize: 14.5,
-                                          height: 1.35,
-                                          color: AppColors.textSecondary)),
-                                ],
+                      child: InkWell(
+                        onTap: () =>
+                            _set(choice.key, !(_values[choice.key] ?? false)),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(choice.title,
+                                        style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textPrimary)),
+                                    const SizedBox(height: 4),
+                                    Text(choice.detail,
+                                        style: const TextStyle(
+                                            fontSize: 14.5,
+                                            height: 1.35,
+                                            color: AppColors.textSecondary)),
+                                  ],
+                                ),
                               ),
-                            ),
-                            Switch(
-                              value: _values[choice.key] ?? false,
-                              activeThumbColor: AppColors.cyan,
-                              onChanged: (v) => _set(choice.key, v),
-                            ),
-                          ],
+                              Switch(
+                                value: _values[choice.key] ?? false,
+                                activeThumbColor: AppColors.cyan,
+                                onChanged: (v) => _set(choice.key, v),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

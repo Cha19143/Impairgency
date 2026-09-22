@@ -110,6 +110,9 @@ class VoiceActions {
                   'open it.'),
         VoiceCommand.yes || VoiceCommand.no => const VoiceOutcome(
             spoken: 'There is no question waiting for an answer.'),
+        // A screen with a form answers this itself, before it reaches here.
+        VoiceCommand.fillIn => const VoiceOutcome(
+            spoken: 'There is nothing to fill in on this screen.'),
       };
 
   Future<VoiceOutcome> _withName(String? name,

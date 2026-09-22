@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../shared/widgets/labelled_control.dart';
+import 'press_by_voice.dart';
 
 /// How a button looks, which is also what it means.
 enum ViButtonKind {
@@ -33,6 +34,7 @@ class ViButton extends StatelessWidget {
     this.icon,
     this.detail,
     this.semanticLabel,
+    this.pressByVoice = true,
   });
 
   final String label;
@@ -47,6 +49,10 @@ class ViButton extends StatelessWidget {
   /// Overrides what a screen reader announces. Defaults to label plus detail,
   /// which is almost always what it should be.
   final String? semanticLabel;
+
+  /// Whether saying [label] presses it. Off for the microphone button, whose
+  /// label is what it is doing rather than a thing to do.
+  final bool pressByVoice;
 
   static const double minHeight = 88;
 
@@ -121,7 +127,7 @@ class ViButton extends StatelessWidget {
       ],
     );
 
-    return LabelledControl(
+    final control = LabelledControl(
       label: semanticLabel ?? [label, if (detail != null) detail!].join('. '),
       onTap: onPressed,
       child: Padding(
@@ -147,5 +153,8 @@ class ViButton extends StatelessWidget {
         ),
       ),
     );
+    return pressByVoice
+        ? PressByVoice(label: label, onPressed: onPressed, child: control)
+        : control;
   }
 }

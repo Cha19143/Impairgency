@@ -93,6 +93,7 @@ class SttSpeechRecognizer implements SpeechRecognizer {
   Completer<VoiceHearing>? _session;
   String _partial = '';
   void Function(String partial)? _onPartial;
+  bool Function(String partial)? _settleOn;
 
   /// Which session is current. Results carry theirs; status and error
   /// callbacks cannot, so they are only believed once the current session
@@ -161,6 +162,7 @@ class SttSpeechRecognizer implements SpeechRecognizer {
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
     void Function(String partial)? onPartial,
+    bool Function(String partial)? settleOn,
   }) async {
     if (!_initialised) {
       final readiness = await prepare();
@@ -177,6 +179,7 @@ class SttSpeechRecognizer implements SpeechRecognizer {
     _session = session;
     _partial = '';
     _onPartial = onPartial;
+    _settleOn = settleOn;
     _retried = false;
     _options = SpeechListenOptions(
       listenFor: listenFor,
@@ -224,7 +227,18 @@ class SttSpeechRecognizer implements SpeechRecognizer {
     _started = true;
     _partial = result.recognizedWords;
     _onPartial?.call(_partial);
-    if (result.finalResult) _settle(_fromWords(_partial));
+    if (result.finalResult) {
+      _settle(_fromWords(_partial));
+    } else if (_partial.trim().isNotEmpty &&
+        (_settleOn?.call(_partial) ?? false)) {
+      // What the caller was waiting for, before the phrase has ended. This
+      // session is over: moved past at once, so its final result - still on
+      // the way - is not taken for the next session's, and cancelled rather
+      // than stopped, which would only ask the platform for that result.
+      _generation++;
+      unawaited(_backend.cancel().catchError((_) {}));
+      _settle(Heard(_partial.trim()));
+    }
   }
 
   void _onStatus(String status) {

@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart' show User;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:impairgency/admin/admin_theme.dart';
+import 'package:impairgency/admin/screens/admin_shell.dart';
 import 'package:impairgency/app/router.dart';
 import 'package:impairgency/app/routes.dart';
 import 'package:impairgency/app/theme.dart';
@@ -15,6 +19,7 @@ import 'package:impairgency/core/navigation/destination.dart';
 import 'package:impairgency/core/navigation/map_services.dart';
 import 'package:impairgency/core/navigation/place_search.dart';
 import 'package:impairgency/core/navigation/route.dart';
+import 'package:impairgency/core/places/session_summary.dart';
 import 'package:impairgency/core/safety/safety_notice.dart';
 import 'package:impairgency/core/session_store.dart';
 import 'package:impairgency/core/speech/speaker.dart';
@@ -22,6 +27,7 @@ import 'package:impairgency/core/vision/faces.dart';
 import 'package:impairgency/core/vision/friend_recognition.dart';
 import 'package:impairgency/core/voice/speech_recognizer.dart';
 import 'package:impairgency/data/account_status_repository.dart';
+import 'package:impairgency/data/admin_repository.dart';
 import 'package:impairgency/data/auth_service.dart';
 import 'package:impairgency/data/guardian_onboarding.dart';
 import 'package:impairgency/data/guardian_repository.dart';
@@ -307,14 +313,15 @@ void main() {
     const clinic =
         Destination(id: 'p1', label: 'Clinic', latitude: 14.8, longitude: 120.93);
 
-    test('"dalhin ako sa bahay" opens Scan with directions to Home', () async {
+    test('"dalhin ako sa bahay" opens the journey to Home', () async {
       final store = InMemorySessionStore(acknowledged: true);
       await store.cachePlaces(const [clinic, home]);
       final session = AppSession(store: store);
       await session.load();
 
       final outcome = await session.goTo('bahay');
-      expect(outcome.route, Routes.scan);
+      expect(outcome.route, Routes.journey,
+          reason: 'directions are on their own screen, with a map');
       expect(outcome.spoken, 'Directions to Home.');
       expect(session.destination, home);
 
@@ -373,7 +380,7 @@ void main() {
 
         await mic.hear(const Heard('yes'));
         final result = await outcome;
-        expect(result.route, Routes.scan);
+        expect(result.route, Routes.journey);
         expect(result.spoken, 'Directions to Jollibee.');
         expect(session.destination?.id, 'search-N3333');
       });
@@ -421,6 +428,120 @@ void main() {
       expect(again.handsFree, isTrue);
     });
   });
+
+  group('the dashboard', () {
+    Future<(AppSession, GoRouter)> pumpDashboard(
+        WidgetTester tester, _Roster roster, _ScriptedAuth auth) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final session = AppSession(
+        store: InMemorySessionStore(),
+        auth: auth,
+        admin: roster,
+        dashboard: true,
+      );
+      await session.load();
+      await session.bindAuth();
+      final router = createRouter(session);
+      await tester.pumpWidget(MaterialApp.router(
+        theme: buildAdminTheme(),
+        routerConfig: router,
+      ));
+      await tester.pumpAndSettle();
+      return (session, router);
+    }
+
+    const admin = AuthAccount(uid: 'admin-1', email: 'dex@example.com');
+
+    testWidgets('an offline roster check is retried, not remembered as a refusal',
+        (tester) async {
+      // The sidebar "did not work": one failed roster read at sign-in was
+      // kept as "not an administrator", so every click after it bounced to
+      // the sign-in page for the rest of the session.
+      final roster = _Roster(
+          [RosterCheck.unknown, RosterCheck.unknown, RosterCheck.admin]);
+      final auth = _ScriptedAuth();
+      final (session, router) = await pumpDashboard(tester, roster, auth);
+
+      auth.emit(admin);
+      await tester.pumpAndSettle();
+      expect(find.text('Checking the admin roster…'), findsOneWidget);
+      expect(find.text('Signed in, but not an administrator'), findsNothing);
+
+      await tester.pump(AppSession.rosterRetryGap);
+      await tester.pumpAndSettle();
+      expect(roster.asked, 2);
+      expect(find.text('Checking the admin roster…'), findsOneWidget);
+
+      await tester.pump(AppSession.rosterRetryGap);
+      await tester.pumpAndSettle();
+      expect(roster.asked, 3);
+      expect(session.state.isAdmin, isTrue);
+      expect(router.routerDelegate.currentConfiguration.uri.path,
+          Routes.adminOverview);
+    });
+
+    testWidgets('the retries stop, and Check again still asks',
+        (tester) async {
+      final roster = _Roster([RosterCheck.unknown]);
+      final auth = _ScriptedAuth();
+      final (session, _) = await pumpDashboard(tester, roster, auth);
+
+      auth.emit(admin);
+      await tester.pumpAndSettle();
+      for (var i = 0; i < AppSession.rosterRetries + 2; i++) {
+        await tester.pump(AppSession.rosterRetryGap);
+        await tester.pumpAndSettle();
+      }
+      expect(roster.asked, 1 + AppSession.rosterRetries,
+          reason: 'an offline dashboard does not poll for ever');
+
+      roster.answers.add(RosterCheck.admin);
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(session.state.isAdmin, isTrue);
+      expect(find.text('Checking the admin roster…'), findsNothing);
+    });
+
+    testWidgets('a refusal is remembered, and not asked again', (tester) async {
+      final roster = _Roster([RosterCheck.notAdmin]);
+      final auth = _ScriptedAuth();
+      await pumpDashboard(tester, roster, auth);
+
+      auth.emit(const AuthAccount(uid: 'staff-1', email: 'staff@example.com'));
+      await tester.pumpAndSettle();
+      await tester.pump(AppSession.rosterRetryGap * 4);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Signed in, but not an administrator'), findsOneWidget);
+      expect(roster.asked, 1);
+    });
+
+    testWidgets('an administrator can open every sidebar section',
+        (tester) async {
+      // Through the real router, which no test did before: every screen was
+      // tested on its own, with the navigation callback stubbed out.
+      final roster = _Roster([RosterCheck.admin]);
+      final auth = _ScriptedAuth();
+      final (_, router) = await pumpDashboard(tester, roster, auth);
+      auth.emit(admin);
+      await tester.pumpAndSettle();
+
+      // Backwards, so every click is a move to a different section.
+      for (final section in adminSections.reversed) {
+        await tester.tap(find.descendant(
+            of: find.byType(AdminNav), matching: find.text(section.label)));
+        await tester.pumpAndSettle();
+
+        expect(router.routerDelegate.currentConfiguration.uri.path,
+            section.route, reason: section.label);
+        expect(tester.widget<AdminShell>(find.byType(AdminShell)).current,
+            section.route, reason: section.label);
+        expect(tester.takeException(), isNull, reason: section.label);
+      }
+    });
+  });
 }
 
 /// Registration that succeeds the way Firebase would: the guardian ends up
@@ -463,6 +584,34 @@ class _NoWatchedUsers implements GuardianRepository {
   @override
   Stream<List<SosEvent>> recentSosEvents(String uid) =>
       Stream.value(const <SosEvent>[]);
+}
+
+/// The roster's answers in order, the last one repeated; the pages' reads
+/// empty.
+class _Roster implements AdminRepository {
+  _Roster(this.answers);
+
+  final List<RosterCheck> answers;
+  int asked = 0;
+
+  @override
+  Future<RosterCheck> rosterCheck(String uid) async =>
+      answers[min(asked++, answers.length - 1)];
+  @override
+  Future<UsageOverview> overview(
+          {Duration period = AdminRepository.defaultPeriod}) async =>
+      overviewOf(const []);
+  @override
+  Future<List<SessionSummary>> sessionsNeedingAttention(
+          {int limit = 25}) async =>
+      const [];
+  @override
+  Future<List<AdminUserRow>> users() async => const [];
+  @override
+  Future<List<UserInvite>> pendingInvites() async => const [];
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
 }
 
 /// Firebase Auth reduced to what the router listens to, driven by the test.

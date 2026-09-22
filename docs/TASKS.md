@@ -26,13 +26,14 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Phase 0 — Security and integrity `S` | `████████████` | 19 / 19 |
 | Phase 1 — Location, push, pairing `M` | `████████████` | 10 / 10 |
 | Phase 2 — Location history and aggregations `M` | `████████████` | 7 / 7 |
-| Phase 3 — Web dashboard `M` | `███████████░` | 19 / 20 |
+| Phase 3 — Web dashboard `M` | `████████████` | 21 / 21 |
 | Phase 4 — Flow, SOS, voice `L` | `████████████` | 21 / 21 |
 | Phase 5 — Accessibility, docs, defense `S` | `████████████` | 10 / 10 |
 | Port from `cprwire` — do not rewrite these | `████████████` | 4 / 4 |
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
-| Tester feedback round 2 — September 15 | `███████████░` | 35 / 38 |
-| **Overall** | | **138 / 142  (97%)** |
+| Tester feedback round 2 — September 15 | `███████████░` | 36 / 38 |
+| Tester feedback round 3 — September 16 | `██████████░░` | 26 / 30 |
+| **Overall** | | **167 / 173  (97%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -194,12 +195,11 @@ just do not populate it with fabricated figures.
   - [x] an administrator signs in and lands on the overview
   - [x] the overview reports the seeded sessions, not a placeholder
   - [x] an empty database says so, instead of showing zeroes
-  - [~] a non-admin is told why they cannot get in — **defect found by this
-        suite and not yet fixed.** Authentication succeeds, then nothing
-        happens: the "Signed in, but not an administrator" screen never
-        appears, because the redirect correctly returns null and go_router
-        therefore does not rebuild the route. Recorded as `test.fail()` in
-        `test/e2e/auth-gate.spec.js`, which will turn red when it is fixed
+  - [x] a non-admin is told why they cannot get in. Found by this suite:
+        authentication succeeded and nothing happened, because the redirect
+        correctly returned null and go_router did not rebuild the route. The
+        route now rebuilds from the session, and the spec is an ordinary test
+  - [x] an administrator can open every sidebar section (round 3)
 
 **Gate:** the deployed URL shows only the dashboard; a mobile build cannot reach
 it; a signed-in non-admin cannot reach it.
@@ -497,8 +497,8 @@ the scope table now states.
 - [x] People I know, under Settings: forget one, or everyone
 - [x] BlazeFace downloaded from Google's MediaPipe assets; hash and tensor
       shapes checked (`tool/tflite_shapes.py`)
-- [ ] MobileFaceNet: agree the exact file and its weights' licence, then add
-      it — see [`VISION.md`](VISION.md)
+- [x] MobileFaceNet: agree the exact file and its weights' licence, then add
+      it — see [`VISION.md`](VISION.md) (added in round 3)
 - [ ] Calibrate the match threshold with volunteers, at 0.5–3 m, in daylight
       and indoors
 
@@ -515,6 +515,119 @@ the scope table now states.
       went unreported while System health said otherwise (from #77)
 - [x] A phone with no speech engine stays open and silent, and reports it
       once, instead of throwing from the first screen (from #77)
+
+---
+
+## Tester feedback round 3 — September 16
+
+The testers' third list. Two of its seven items - friends, and "take me to any
+place" - were built in round 2 and reached them after the list was written.
+The rest is below. Decided with Dex on 2026-09-16: a depth model behind a flag
+for walls; voice on every screen, every button by its label and every text
+field by dictation, passwords never; the SOS countdown stays three seconds.
+
+**Voice** — §2.C
+
+- [x] Every screen listens. Hands-free worked on four screens, because only
+      four attached a voice scope; the rest had nothing to listen for. Not on
+      the first run's safety notice (the microphone prompt waits for it), not
+      during SOS, and not in the guardian's app
+- [x] A microphone button on every screen of the user app
+- [x] Any button is pressed by saying what it says - icons and choice rows
+      too, by the label a screen reader reads. A command said on its own is
+      still the command, and help is always help. Two buttons that both match
+      are asked about. A press is named as it happens, and that name heard
+      back is not a second press
+- [x] Forms by voice: say "fill in", or "say the email address". What was
+      heard is read back - an email letter by letter, a phone number in
+      threes - and kept only on a yes; anything else is taken as the answer
+      said again. Emails, names, ages, phone numbers, place names and the
+      search box. Passwords never — §7
+- [ ] On a phone: Filipino names and a Gmail address through the platform
+      recogniser; the first run's microphone prompt
+
+Out of scope: voice on the guardian's screens. They are used by someone who
+can see them.
+
+**Admin** — §1.1–§1.3, §6
+
+- [x] The sidebar "did not work": a roster read that failed for want of an
+      answer - offline, a cold start - was kept as "not an administrator" for
+      the rest of the session, so every click went to the sign-in page. A
+      refusal and no answer are now told apart; no answer is asked again, and
+      the sign-in page says the roster is still being checked
+- [x] A page that cannot reach the database says so instead of blaming the
+      roster, and one that hangs gives up after 15 seconds, in words
+- [x] Clicking the section already open reloads it, visibly. It used to do
+      nothing at all
+- [x] Sidebar entries are buttons to a screen reader, the open one selected
+- [x] Browser test: an administrator opens every section through the real
+      router, the real roster read and the real rules
+
+**Scan** — §2.A.1, §2.A.3
+
+- [x] "Path looks clear" is "No known objects in view", said when it becomes
+      true and every 20 seconds after, not every 3. The model has no walls,
+      doors, posts, kerbs or steps — §7
+- [x] What to name first weighs what it is: a car before a chair of the same
+      size, and a thing held in a hand never "Stop"
+- [x] Said sooner: "close" from a quarter of the frame, and 600 ms between
+      two different sentences
+- [x] Walls, doors and posts from a depth model, MiDaS v2.1 small (MIT),
+      behind `--dart-define=DEPTH_WARNINGS=true`; off by itself on a phone too
+      slow for it. See [`VISION.md`](VISION.md), "Depth"
+- [x] Add the depth model for a device-check build: 66 MB, MIT, not committed.
+      On the test release as `impairgency-8c4014a-depth-check`
+- [ ] Depth device check: walls, a glass door, posts, a table edge, a parked
+      motorcycle, open and narrow corridors, a slope down
+
+**Smart assistance** — §2.C, §2.A.7
+
+- [x] A map. Directions have their own screen: the route, where the user is
+      and where they are going, the next instruction in large type, and the
+      camera in a corner. Scan is the surroundings; Smart assistance is
+      getting somewhere; both warn about obstacles and people
+- [x] "Stop directions" goes to Scan, which keeps warning. Scan used to stay
+      put and forget the destination by hand, and got it wrong
+- [x] "Somewhere else" first on the chooser: a place by name, said or typed
+- [ ] On a phone: the camera handed from Scan to the map and back; a real walk
+      in Malolos following the map
+
+**Friends** — §2.A.6, §2.B.3
+
+- [x] Built in round 2; the file for the recogniser is agreed (see
+      [`VISION.md`](VISION.md), "Faces")
+- [x] Download MobileFaceNet (5.2 MB; weights for research use), check its
+      shapes, record its hash: `[1,112,112,3]` to `[1,192]`, hash in
+      [`VISION.md`](VISION.md)
+
+**SOS** — §2.A.5
+
+- [x] Saying "cancel" did not stop the countdown. Its one listening window
+      heard the countdown talking, took that out as the app's own voice, and
+      closed with seconds to go. The microphone now reopens for as long as
+      the countdown runs
+- [x] "Cancel" is acted on as soon as the recogniser hears it, not after two
+      seconds of silence - unless the app itself may be the one saying it
+- [x] "Cancel" still works after the countdown, while the alarm sounds and
+      the position is found, until the dialler opens: nobody is called, no
+      guardian alerted, and it is recorded as cancelled before the call
+- [x] The countdown's "Say cancel, or touch the screen" was cut off by
+      "Calling Mum in 2" a second in, so nobody heard how to stop it. The
+      count waits for it; the screen still counts every second
+- [ ] On a phone: a "cancel" heard over the countdown's own voice, on Android
+      and on iOS
+
+Voice cannot reach the phone's own call screen: once the dialler opens, the app
+is behind it. The docs say so.
+
+**Found on the way**
+
+- [x] A camera still held by the screen before is asked for again, and one
+      that will not open says so instead of "Starting…" for ever
+- [x] Dead `Routes.adminSessions` removed
+- [x] The consent switches, the settings icon, and the rename, remove and
+      move-up icons are pressable by name too
 
 ---
 

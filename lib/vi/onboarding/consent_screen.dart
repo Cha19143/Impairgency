@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/speech/speaker.dart';
+import '../widgets/press_by_voice.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
 
@@ -141,54 +142,58 @@ class _ConsentSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      toggled: value,
-      label: '${choice.title}. ${choice.detail}',
-      onTap: () => onChanged(!value),
-      child: ExcludeSemantics(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Material(
-            color: AppColors.navyRaised,
-            borderRadius: BorderRadius.circular(16),
-            child: InkWell(
-              onTap: () => onChanged(!value),
+    return PressByVoice(
+      label: choice.title,
+      onPressed: () => onChanged(!value),
+      child: Semantics(
+        toggled: value,
+        label: '${choice.title}. ${choice.detail}',
+        onTap: () => onChanged(!value),
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Material(
+              color: AppColors.navyRaised,
               borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            choice.title,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+              child: InkWell(
+                onTap: () => onChanged(!value),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              choice.title,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            choice.detail,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              height: 1.35,
-                              color: AppColors.textSecondary,
+                            const SizedBox(height: 4),
+                            Text(
+                              choice.detail,
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                height: 1.35,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Switch(
-                      value: value,
-                      onChanged: onChanged,
-                      activeThumbColor: AppColors.cyan,
-                    ),
-                  ],
+                      Switch(
+                        value: value,
+                        onChanged: onChanged,
+                        activeThumbColor: AppColors.cyan,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

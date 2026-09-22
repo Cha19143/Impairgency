@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/speech/speaker.dart';
 import '../voice_controller.dart';
+import '../widgets/press_by_voice.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/voice_mic_button.dart';
 
@@ -112,16 +113,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                   ),
-                  Semantics(
-                    button: true,
+                  PressByVoice(
                     label: 'Settings',
-                    onTap: widget.onSettings,
-                    child: ExcludeSemantics(
-                      child: IconButton(
-                        iconSize: 34,
-                        onPressed: widget.onSettings,
-                        icon: const Icon(Icons.settings_outlined,
-                            color: AppColors.textSecondary),
+                    onPressed: widget.onSettings,
+                    child: Semantics(
+                      button: true,
+                      label: 'Settings',
+                      onTap: widget.onSettings,
+                      child: ExcludeSemantics(
+                        child: IconButton(
+                          iconSize: 34,
+                          onPressed: widget.onSettings,
+                          icon: const Icon(Icons.settings_outlined,
+                              color: AppColors.textSecondary),
+                        ),
                       ),
                     ),
                   ),

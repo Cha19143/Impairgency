@@ -42,6 +42,9 @@ enum VoiceCommand {
   whoIsHere,
   yes,
   no,
+
+  /// Answer the questions on this screen by voice, one field at a time.
+  fillIn,
 }
 
 /// Words and phrases that map to each command.
@@ -169,6 +172,15 @@ const Map<VoiceCommand, List<String>> kVoiceKeywords = {
   ],
   VoiceCommand.yes: ['yes', 'yeah', 'yep', 'okay', 'ok', 'sure', 'opo', 'oo', 'sige'],
   VoiceCommand.no: ['no', 'nope', 'hindi', 'huwag'],
+  VoiceCommand.fillIn: [
+    'fill in',
+    'fill it in',
+    'fill in the form',
+    'answer by voice',
+    'dictate',
+    'punan',
+    'sagutan',
+  ],
 };
 
 /// Commands whose trigger must start the phrase and be followed by what they
@@ -203,6 +215,7 @@ const Set<VoiceCommand> kEverydayCommands = {
   VoiceCommand.callGuardian,
   VoiceCommand.connectDevice,
   VoiceCommand.whatCanISay,
+  VoiceCommand.fillIn,
 };
 
 /// Only the ways to stop something already in progress.
@@ -228,6 +241,10 @@ const Set<VoiceCommand> kScanCommands = {
   VoiceCommand.forgetFriend,
   VoiceCommand.whoIsHere,
 };
+
+/// What the journey screen listens for: Scan's words, whose "stop
+/// directions" means something there.
+const Set<VoiceCommand> kJourneyCommands = kScanCommands;
 
 /// What Read Text listens for: the three reading controls, and a way out.
 const Set<VoiceCommand> kReadingCommands = {
@@ -265,6 +282,7 @@ const Map<String, Set<VoiceCommand>> kScreenVocabularies = {
   'everyday': kEverydayCommands,
   'cancellation': kCancellationCommands,
   'scan': kScanCommands,
+  'journey': kJourneyCommands,
   'reading': kReadingCommands,
   'assist': kAssistCommands,
   'answer': kAnswerCommands,
@@ -500,4 +518,5 @@ const Map<VoiceCommand, String> kCommandDescriptions = {
   VoiceCommand.whoIsHere: 'Hear who is in front of you',
   VoiceCommand.yes: 'Answer yes',
   VoiceCommand.no: 'Answer no',
+  VoiceCommand.fillIn: 'Answer the questions on this screen by voice',
 };

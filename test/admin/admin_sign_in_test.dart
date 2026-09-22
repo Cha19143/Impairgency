@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/admin/admin_theme.dart';
@@ -93,6 +95,60 @@ void main() {
       expect(find.bySemanticsLabel('Signed in, but not an administrator'),
           findsOneWidget);
       handle.dispose();
+    });
+  });
+
+  group('signed in, but the roster did not answer', () {
+    // An administrator on a cold connection used to be told they were not
+    // one, and the dashboard stayed shut for the rest of the session.
+    testWidgets('says the check is still going, not that they are refused',
+        (tester) async {
+      await pump(
+        tester,
+        AdminSignInScreen(
+          onSignIn: (_, __) async => null,
+          signedInAs: 'dex@example.com',
+          signedInUid: 'uid-1',
+          checkingRoster: true,
+          onCheckAgain: () async {},
+          onSignOut: () {},
+        ),
+      );
+
+      expect(find.text('Checking the admin roster…'), findsOneWidget);
+      expect(find.text('Signed in, but not an administrator'), findsNothing);
+      expect(find.textContaining('dex@example.com'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets('Check again asks, and says it is asking', (tester) async {
+      final answer = Completer<void>();
+      var asked = 0;
+      await pump(
+        tester,
+        AdminSignInScreen(
+          onSignIn: (_, __) async => null,
+          signedInAs: 'dex@example.com',
+          checkingRoster: true,
+          onCheckAgain: () {
+            asked++;
+            return answer.future;
+          },
+        ),
+      );
+
+      await tester.tap(find.text('Check again'));
+      await tester.pump();
+      expect(asked, 1);
+      expect(find.text('Checking…'), findsOneWidget);
+
+      await tester.tap(find.text('Checking…'));
+      await tester.pump();
+      expect(asked, 1, reason: 'one question at a time');
+
+      answer.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Check again'), findsOneWidget);
     });
   });
 }

@@ -4,6 +4,10 @@ import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/vi/screens/settings_screen.dart';
 import 'package:impairgency/vi/widgets/vi_button.dart';
 import 'package:impairgency/vi/widgets/vi_screen.dart';
+import 'package:impairgency/vi/widgets/voice_access.dart';
+import 'package:impairgency/vi/widgets/voice_mic_button.dart';
+
+import '../voice_fakes.dart';
 
 /// A screen is the whole screen.
 ///
@@ -179,5 +183,50 @@ void main() {
     final button = tester.getRect(find.byType(ViButton));
     expect(button.bottom, lessThanOrEqualTo(_height));
     expect(button.top, greaterThan(_height / 2));
+  });
+
+  group('the microphone every screen offers', () {
+    Widget withVoice(Widget screen) => VoiceAccess(
+        voice: voiceControllerFor(OpenWindows(), Recording()), child: screen);
+
+    testWidgets('comes after the choices, before the way back',
+        (tester) async {
+      await pump(
+        tester,
+        withVoice(ViScreen(
+          title: 'Saved places',
+          actions: [
+            ViButton(label: 'Home', onPressed: () {}),
+            ViButton(label: 'Work', onPressed: () {}),
+            ViButton(
+                label: 'Back', kind: ViButtonKind.quiet, onPressed: () {}),
+          ],
+        )),
+      );
+      double top(Finder finder) => tester.getRect(finder).top;
+      expect(find.byType(VoiceMicButton), findsOneWidget);
+      expect(top(find.byType(VoiceMicButton)), greaterThan(top(find.text('Work'))));
+      expect(top(find.byType(VoiceMicButton)), lessThan(top(find.text('Back'))));
+    });
+
+    testWidgets('is not offered twice by a screen that places its own',
+        (tester) async {
+      await pump(
+        tester,
+        withVoice(ViScreen(
+          title: 'Where are you going?',
+          mic: false,
+          actions: [ViButton(label: 'Home', onPressed: () {})],
+        )),
+      );
+      expect(find.byType(VoiceMicButton), findsNothing);
+    });
+
+    testWidgets('fits at 2.0x text, with every choice still reachable',
+        (tester) async {
+      await pump(tester, withVoice(_settings()), textScale: 2.0);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(VoiceMicButton), findsOneWidget);
+    });
   });
 }

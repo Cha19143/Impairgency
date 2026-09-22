@@ -4,8 +4,12 @@ import '../../app/theme.dart';
 import '../../core/contacts/emergency_contact.dart';
 import '../../core/speech/speaker.dart';
 import '../../data/contact_picker.dart';
+import '../voice_controller.dart';
+import '../widgets/dictated_field.dart';
+import '../widgets/press_by_voice.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
+import '../widgets/voice_form.dart';
 
 /// Who an SOS rings, and in what order.
 ///
@@ -194,9 +198,12 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
       ],
       spokenSuffix: _contacts.isEmpty
           ? 'Enter a name and number, choose someone from your contacts, or '
-              'skip this step.'
+              'skip this step. Say fill in to say the name and number.'
           : describeContactOrder(_contacts),
-      extra: Column(
+      micDetail: kFormMicDetail,
+      extra: VoiceForm(
+        submitLabel: 'Add this person',
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < _contacts.length; i++)
@@ -209,7 +216,12 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
             ),
           if (_contacts.isNotEmpty) const SizedBox(height: 10),
           if (_contacts.length < kMaxEmergencyContacts) ...[
-            Semantics(
+            DictatedField(
+              label: 'Name',
+              prompt: 'Say their name.',
+              controller: _name,
+              shape: DictationShape.name,
+              field: Semantics(
               textField: true,
               label: 'Their name',
               child: TextField(
@@ -229,8 +241,14 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
                 ),
               ),
             ),
+            ),
             const SizedBox(height: 14),
-            Semantics(
+            DictatedField(
+              label: 'Phone number',
+              prompt: 'Say their phone number.',
+              controller: _number,
+              shape: DictationShape.phone,
+              field: Semantics(
               textField: true,
               label: 'Their phone number',
               child: TextField(
@@ -251,6 +269,7 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
                       horizontal: 16, vertical: 20),
                 ),
               ),
+            ),
             ),
             const SizedBox(height: 10),
             ViButton(
@@ -290,6 +309,7 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
             ),
           ],
         ],
+      ),
       ),
       actions: [
         ViButton(
@@ -388,35 +408,43 @@ class _ContactRow extends StatelessWidget {
                 ),
               ),
             ),
-            Semantics(
-              button: true,
-              enabled: onMoveUp != null,
+            PressByVoice(
               label: 'Move ${contact.name} up, so they are called sooner',
-              onTap: onMoveUp,
-              child: ExcludeSemantics(
-                child: IconButton(
-                  iconSize: 32,
-                  constraints: const BoxConstraints(
-                      minWidth: kMinTargetSize, minHeight: kMinTargetSize),
-                  onPressed: onMoveUp,
-                  icon: Icon(Icons.arrow_upward,
-                      color: onMoveUp == null
-                          ? AppColors.hairline
-                          : AppColors.cyan),
+              onPressed: onMoveUp,
+              child: Semantics(
+                button: true,
+                enabled: onMoveUp != null,
+                label: 'Move ${contact.name} up, so they are called sooner',
+                onTap: onMoveUp,
+                child: ExcludeSemantics(
+                  child: IconButton(
+                    iconSize: 32,
+                    constraints: const BoxConstraints(
+                        minWidth: kMinTargetSize, minHeight: kMinTargetSize),
+                    onPressed: onMoveUp,
+                    icon: Icon(Icons.arrow_upward,
+                        color: onMoveUp == null
+                            ? AppColors.hairline
+                            : AppColors.cyan),
+                  ),
                 ),
               ),
             ),
-            Semantics(
-              button: true,
+            PressByVoice(
               label: 'Remove ${contact.name}',
-              onTap: onRemove,
-              child: ExcludeSemantics(
-                child: IconButton(
-                  iconSize: 32,
-                  constraints: const BoxConstraints(
-                      minWidth: kMinTargetSize, minHeight: kMinTargetSize),
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.delete_outline, color: AppColors.red),
+              onPressed: onRemove,
+              child: Semantics(
+                button: true,
+                label: 'Remove ${contact.name}',
+                onTap: onRemove,
+                child: ExcludeSemantics(
+                  child: IconButton(
+                    iconSize: 32,
+                    constraints: const BoxConstraints(
+                        minWidth: kMinTargetSize, minHeight: kMinTargetSize),
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.delete_outline, color: AppColors.red),
+                  ),
                 ),
               ),
             ),

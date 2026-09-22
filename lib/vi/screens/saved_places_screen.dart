@@ -3,9 +3,13 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/navigation/destination.dart';
 import '../../core/speech/speaker.dart';
+import '../voice_controller.dart';
+import '../widgets/dictated_field.dart';
 import '../widgets/place_search_panel.dart';
+import '../widgets/press_by_voice.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
+import '../widgets/voice_form.dart';
 
 /// Returns null when saved, or a sentence to say and show.
 typedef SaveHereHandler = Future<String?> Function(
@@ -160,7 +164,10 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
       spokenSuffix: ordered.isEmpty
           ? 'Nothing is saved yet.'
           : 'Saved: ${ordered.map((p) => p.label).join(', ')}.',
-      extra: Column(
+      micDetail: kFormMicDetail,
+      extra: VoiceForm(
+        submitLabel: 'Save it with that name',
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final place in ordered)
@@ -195,7 +202,12 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
               kind: ViButtonKind.secondary,
               onPressed: _saving == null ? () => _saveHere(kind) : null,
             ),
-          Semantics(
+          DictatedField(
+            label: 'Place name',
+            prompt: 'Say a name for this place.',
+            controller: _label,
+            shape: DictationShape.name,
+            field: Semantics(
             textField: true,
             label: 'Name for somewhere else',
             child: TextField(
@@ -211,6 +223,7 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                     EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               ),
             ),
+          ),
           ),
           const SizedBox(height: 10),
           ViButton(
@@ -260,6 +273,7 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
             ),
         ],
       ),
+      ),
       actions: [
         ViButton(
           label: 'Back',
@@ -308,31 +322,39 @@ class _PlaceRow extends StatelessWidget {
               ),
             ),
             if (onRename != null)
-              Semantics(
-                button: true,
+              PressByVoice(
                 label: 'Rename ${place.label}',
-                onTap: onRename,
+                onPressed: onRename,
+                child: Semantics(
+                  button: true,
+                  label: 'Rename ${place.label}',
+                  onTap: onRename,
+                  child: ExcludeSemantics(
+                    child: IconButton(
+                      iconSize: 30,
+                      constraints: const BoxConstraints(
+                          minWidth: kMinTargetSize, minHeight: kMinTargetSize),
+                      onPressed: onRename,
+                      icon: const Icon(Icons.edit_outlined, color: AppColors.cyan),
+                    ),
+                  ),
+                ),
+              ),
+            PressByVoice(
+              label: 'Remove ${place.label}',
+              onPressed: onRemove,
+              child: Semantics(
+                button: true,
+                label: 'Remove ${place.label}',
+                onTap: onRemove,
                 child: ExcludeSemantics(
                   child: IconButton(
                     iconSize: 30,
                     constraints: const BoxConstraints(
                         minWidth: kMinTargetSize, minHeight: kMinTargetSize),
-                    onPressed: onRename,
-                    icon: const Icon(Icons.edit_outlined, color: AppColors.cyan),
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.delete_outline, color: AppColors.red),
                   ),
-                ),
-              ),
-            Semantics(
-              button: true,
-              label: 'Remove ${place.label}',
-              onTap: onRemove,
-              child: ExcludeSemantics(
-                child: IconButton(
-                  iconSize: 30,
-                  constraints: const BoxConstraints(
-                      minWidth: kMinTargetSize, minHeight: kMinTargetSize),
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.delete_outline, color: AppColors.red),
                 ),
               ),
             ),

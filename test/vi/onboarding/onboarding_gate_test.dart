@@ -195,10 +195,11 @@ void main() {
   });
 
   group('the flow does what the rework promised', () {
-    testWidgets('Create account never offers to dictate credentials',
+    testWidgets('Create account never offers to dictate the password',
         (tester) async {
       // ui.pdf p.7 offered to "speak the details instead of typing". A password
-      // said out loud is not a password.
+      // said out loud is not a password. The email address may be said since
+      // the September 16 round - read back letter by letter, kept on a yes.
       final speaker = await pump(
         tester,
         (s) => CreateAccountScreen(speaker: s, onCreate: (_, __) async => null),
@@ -208,7 +209,7 @@ void main() {
       expect(spoken, contains('keyboard'));
       expect(spoken, contains('not a password'));
       expect(spoken, isNot(contains('speak your password')));
-      expect(spoken, isNot(contains('say your email')));
+      expect(spoken, isNot(contains('say your password')));
     });
 
     testWidgets('Consent starts with everything off', (tester) async {
