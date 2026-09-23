@@ -56,16 +56,13 @@ the release.
 
 ## Waiting on someone
 
-- **Merge PR #87.** Its CI fails only at the artifact upload: the
-  account's Actions storage (500 MB) is full with five APK artifacts of
-  about 145 MB each, and every run since September 16 has failed there.
-  Analyze, the tests and both APK builds pass. `5dba0a5` makes each run keep
-  only the arm64 APK, for three days. The five old artifacts are Dex's to
-  delete, and GitHub recounts every 6 to 12 hours:
-
-  ```bash
-  gh api /repos/calmadex/impairgency/actions/artifacts --paginate --jq '.artifacts[] | select(.name=="impairgency-apk") | .id' | xargs -I{} gh api -X DELETE /repos/calmadex/impairgency/actions/artifacts/{}
-  ```
+- **Merge PR #87** once CI is green. Every run since September 16 had
+  failed at the artifact upload, after analyze, the tests and both APK
+  builds passed: five APK artifacts of about 145 MB each filled the
+  account's 500 MB of Actions storage. Dex deleted them on 2026-09-23, and
+  `5dba0a5` makes each run keep only the arm64 APK, for three days. GitHub
+  recounts storage every 6 to 12 hours; after that, re-run the PR's failed
+  job (`gh run rerun <run id> --failed`, or Re-run jobs on the PR).
 - **Rugs and tiled floors for the stairs model**: Open Images gave three of
   each. Phone photographs (`tool/fetch_stairs.py --negatives <folder>`),
   then train again (about 40 minutes) and measure.
