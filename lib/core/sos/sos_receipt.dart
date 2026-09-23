@@ -65,9 +65,13 @@ class LegResult {
 }
 
 class SosReceipt {
-  const SosReceipt(this.legs);
+  const SosReceipt(this.legs, {this.eventId});
 
   final List<LegResult> legs;
+
+  /// The record written for this SOS, so it can be marked resolved. Null
+  /// when nothing was written: nobody signed in, or cancelled first.
+  final String? eventId;
 
   LegResult? of(SosLeg leg) =>
       legs.where((l) => l.leg == leg).firstOrNull;
@@ -88,7 +92,7 @@ class SosReceipt {
     final index = legs.lastIndexWhere((l) => l.leg == SosLeg.call);
     final next = [...legs];
     next.insert(index < 0 ? 1 : index + 1, call);
-    return SosReceipt(next);
+    return SosReceipt(next, eventId: eventId);
   }
 
   bool get everythingWorked => legs.every((l) => l.succeeded);
@@ -166,3 +170,18 @@ class SosReceipt {
           ? 'Help has been called'
           : 'Nobody was reached';
 }
+
+/// What is said when the user says they are okay after the call, by whether
+/// the record could be marked resolved.
+String okayAnnouncement(LegOutcome resolved, {required bool hasGuardian}) =>
+    switch (resolved) {
+      LegOutcome.done when hasGuardian =>
+        'Okay. Your guardian will be told you are all right.',
+      LegOutcome.pending when hasGuardian =>
+        'Okay. Your guardian will be told you are all right as soon as this '
+            'phone has a connection.',
+      LegOutcome.failed when hasGuardian =>
+        'Okay. Your guardian could not be told that you are all right. Call '
+            'them if you can.',
+      _ => 'Okay. Nothing more will be sent.',
+    };

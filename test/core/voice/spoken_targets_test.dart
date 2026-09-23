@@ -105,4 +105,40 @@ void main() {
       expect(matchChoice('the bakery', choices), isEmpty);
     });
   });
+
+  group('round 4', () {
+    test('a word one letter off still names its button', () {
+      expect(matchSpokenTargets('save places', ['Saved places', 'Settings']),
+          [0]);
+    });
+
+    test('"on" is part of what is said, except after tap', () {
+      expect(matchSpokenTargets('tap on back', ['Back', 'Settings']), [0]);
+      expect(identifyingWords('turn on hands free'),
+          ['turn', 'on', 'hands', 'free']);
+      expect(matchSpokenTargets('hands free voice', ['Hands-free voice']), [0]);
+    });
+  });
+
+  group('choosing by position', () {
+    test('first to fifth, by number, and in Filipino', () {
+      expect(choiceByNumber('number two', 5), 1);
+      expect(choiceByNumber('the second one', 5), 1);
+      expect(choiceByNumber('two', 5), 1);
+      expect(choiceByNumber('fifth', 5), 4);
+      expect(choiceByNumber('ikalawa', 5), 1);
+      expect(choiceByNumber('ikalima po', 5), 4);
+    });
+
+    test('only when that is all that was said, and there is one', () {
+      expect(choiceByNumber('the one near the market', 5), isNull);
+      expect(choiceByNumber('fourth', 3), isNull);
+      expect(choiceByNumber('jollibee', 3), isNull);
+    });
+
+    test('two buttons with one name are told apart by position', () {
+      expect(matchChoice('the second', ['Jollibee', 'Jollibee']), [1]);
+      expect(matchChoice('number one', ['Jollibee', 'Jollibee']), [0]);
+    });
+  });
 }

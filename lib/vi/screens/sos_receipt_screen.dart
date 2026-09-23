@@ -1,10 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/contacts/emergency_contact.dart';
 import '../../core/sos/sos_receipt.dart';
 import '../../core/speech/speaker.dart';
+import '../../core/voice/voice_commands.dart';
+import '../voice_controller.dart';
 import '../widgets/vi_button.dart';
+import '../widgets/voice_mic_button.dart';
+
+/// Said after the receipt when the user can say they are okay.
+String afterCallHint({required bool guardianTold}) => guardianTold
+    ? 'If you are all right now, say: I am okay. Your guardian will be told.'
+    : 'If you are all right now, say: I am okay.';
 
 /// What actually happened, said and shown.
 ///
@@ -22,6 +32,9 @@ class SosReceiptScreen extends StatefulWidget {
     this.contactCount = 0,
     this.onTextAll,
     this.speaker = const SilentSpeaker(),
+    this.voice,
+    this.onOkay,
+    this.guardianTold = false,
   });
 
   final SosReceipt receipt;
@@ -40,17 +53,113 @@ class SosReceiptScreen extends StatefulWidget {
 
   final Speaker speaker;
 
+  /// The microphone, listening for "I am okay" once the call is over.
+  final VoiceController? voice;
+
+  /// The user said, or pressed, that they are okay. Null where there is no
+  /// emergency to clear.
+  final Future<void> Function()? onOkay;
+
+  /// Whether a guardian is told when the user says they are okay.
+  final bool guardianTold;
+
   @override
   State<SosReceiptScreen> createState() => _SosReceiptScreenState();
 }
 
-class _SosReceiptScreenState extends State<SosReceiptScreen> {
+class _SosReceiptScreenState extends State<SosReceiptScreen>
+    with WidgetsBindingObserver {
+  VoiceScopeHandle? _scope;
+
+  /// The dialler put the app behind the call. Back from it, the user is
+  /// asked again whether they are okay.
+  bool _away = false;
+  bool _okaySaid = false;
+
+  String? get _hint => widget.onOkay == null
+      ? null
+      : afterCallHint(guardianTold: widget.guardianTold);
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final voice = widget.voice;
+    // The dialler may already have put the app behind the call by the time
+    // this is built.
+    _away = voice != null && !voice.isForeground;
+    if (voice != null && widget.onOkay != null) {
+      // The route's own scope for /sos listens to nothing, so that nothing
+      // takes the microphone from the countdown. The call is over now, and
+      // this screen's scope outranks it.
+      _scope = voice.attach(VoiceScope(
+        commands: () => kAfterCallCommands,
+        onCommand: _onVoice,
+        exclusive: true,
+        echoOf: () => [widget.receipt.spoken, ?_hint],
+        // "Please cancel it" means it is over, here.
+        wholePhrase: const {},
+      ));
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.speaker.speak(widget.receipt.spoken);
+      if (mounted) unawaited(_announce(receipt: true));
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scope?.detach();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_away && !_okaySaid) {
+        _away = false;
+        unawaited(_announce(receipt: false));
+      }
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _away = true;
+    }
+  }
+
+  /// Says the receipt, then how to say okay - and, when hands-free is off,
+  /// listens once for it, as the dashboard does after its own prompt.
+  Future<void> _announce({required bool receipt}) async {
+    final hint = _hint;
+    await widget.speaker.speakLines([
+      if (receipt) widget.receipt.spoken,
+      ?hint,
+    ]);
+    final voice = widget.voice;
+    if (!mounted || hint == null || voice == null || _okaySaid) return;
+    if (voice.handsFree || !voice.isForeground) return;
+    await voice.listen(auto: true, silenceSpeaker: false);
+  }
+
+  Future<bool> _onVoice(ParsedCommand parsed) async {
+    switch (parsed.command) {
+      case VoiceCommand.allClear || VoiceCommand.cancel:
+        await _okay();
+      case VoiceCommand.help:
+        // Still in trouble: the alarm and the call again.
+        widget.onCallAgain?.call();
+      case VoiceCommand.repeat:
+        await widget.speaker.speakLines([widget.receipt.spoken, ?_hint]);
+      default:
+        return false;
+    }
+    return true;
+  }
+
+  Future<void> _okay() async {
+    final onOkay = widget.onOkay;
+    if (onOkay == null || _okaySaid) return;
+    _okaySaid = true;
+    await onOkay();
   }
 
   @override
@@ -93,6 +202,15 @@ class _SosReceiptScreenState extends State<SosReceiptScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (widget.onOkay != null)
+                    ViButton(
+                      label: "I'm okay",
+                      detail: widget.guardianTold
+                          ? 'Ends the emergency. Your guardian is told.'
+                          : 'Ends the emergency.',
+                      icon: Icons.verified_user_outlined,
+                      onPressed: () => unawaited(_okay()),
+                    ),
                   if (widget.nextContact != null && widget.onCallNext != null)
                     ViButton(
                       label: 'Call ${widget.nextContact!.name}',
@@ -120,10 +238,18 @@ class _SosReceiptScreenState extends State<SosReceiptScreen> {
                       kind: ViButtonKind.emergency,
                       onPressed: widget.onCallAgain,
                     ),
+                  if (widget.voice != null && widget.onOkay != null)
+                    VoiceMicButton(
+                      controller: widget.voice!,
+                      only: kAfterCallCommands,
+                      detail: 'Say: I am okay',
+                    ),
                   ViButton(
                     label: 'Done',
                     icon: Icons.check,
-                    kind: reached ? ViButtonKind.primary : ViButtonKind.secondary,
+                    kind: reached && widget.onOkay == null
+                        ? ViButtonKind.primary
+                        : ViButtonKind.secondary,
                     onPressed: widget.onDone,
                   ),
                 ],

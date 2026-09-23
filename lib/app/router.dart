@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -20,6 +21,7 @@ import '../core/navigation/map_services.dart';
 import '../core/navigation/place_search.dart';
 import '../core/navigation/route.dart';
 import '../core/navigation/route_follower.dart' show kPoorFixMetres;
+import '../core/places/journey_recorder.dart';
 import '../core/places/session_event.dart';
 import '../core/places/place.dart';
 import '../core/session_store.dart';
@@ -52,6 +54,7 @@ import '../data/osrm_routing_service.dart';
 import '../data/photon_place_search.dart';
 import '../data/pairing_repository.dart';
 import '../data/saved_places_repository.dart';
+import '../data/journey_store.dart';
 import '../data/location_history_repository.dart';
 import '../data/location_sharer.dart';
 import '../data/account_status_repository.dart';
@@ -99,7 +102,6 @@ import '../vi/voice_controller.dart';
 import '../vi/widgets/place_search_panel.dart';
 import '../vi/widgets/vi_button.dart';
 import '../vi/widgets/vi_screen.dart';
-import '../vi/widgets/voice_scope_host.dart';
 import 'routes.dart';
 import 'theme.dart';
 
@@ -127,6 +129,7 @@ class AppSession extends ChangeNotifier {
     PlaceSearchService? placeSearch,
     LocationSource? location,
     FriendStore? friendStore,
+    JourneyStore? journeyStore,
     bool? dashboard,
   })  : store = store ?? InMemorySessionStore(),
         _dashboard = dashboard ?? kIsWeb,
@@ -145,7 +148,8 @@ class AppSession extends ChangeNotifier {
         _routing = routing,
         _placeSearch = placeSearch,
         _location = location,
-        _friendStore = friendStore;
+        _friendStore = friendStore,
+        _journeyStore = journeyStore;
 
   /// Whether this is the web dashboard: the admin app, and the roster that
   /// guards it. [kIsWeb], unless a test says otherwise.
@@ -185,6 +189,11 @@ class AppSession extends ChangeNotifier {
     _foreground = foreground;
     _syncSharing(_state);
     _voice?.setForeground(foreground);
+    // Away for good, as far as a journey goes, after ten minutes.
+    _awayTimer?.cancel();
+    _awayTimer = foreground || !(_journeys?.recording ?? false)
+        ? null
+        : Timer(kJourneyIdleEnd, () => unawaited(journeys.end()));
     // Back from the mail app: if the link was opened, move on without
     // making them find a button.
     if (foreground && _state.needsEmailVerification) {
@@ -263,8 +272,15 @@ class AppSession extends ChangeNotifier {
           goTo: goTo,
           rememberFriend: rememberFriend,
           forgetFriend: forgetFriend,
+          setHandsFree: setHandsFree,
+          listFriends: listFriends,
+          renameFriend: renameFriend,
+          forgetAllFriends: forgetAllFriends,
         ),
         onNavigate: (route) => navigate?.call(route),
+        screenReaderOn: () => WidgetsBinding
+            .instance.platformDispatcher.accessibilityFeatures.accessibleNavigation,
+        listeningCue: HapticFeedback.mediumImpact,
       )
         ..handsFree = _handsFree
         ..setForeground(_foreground)
@@ -432,10 +448,69 @@ class AppSession extends ChangeNotifier {
       return const VoiceOutcome(
           spoken: 'Say hello friend, and then their name.');
     }
-    if (!facesConsented) return const VoiceOutcome(spoken: kFacesOffPhrase);
+    if (!facesConsented) {
+      // Asked, rather than sent to Settings: the friend is standing there.
+      final answer = await _voice?.ask(kTurnOnFacesQuestion);
+      if (answer?.command != VoiceCommand.yes) {
+        return const VoiceOutcome(spoken: 'Recognising people stays off.');
+      }
+      await turnOnFaces();
+    }
     _pendingFriend = friend;
     return VoiceOutcome(
         spoken: 'Opening scan, to meet $friend.', route: Routes.scan);
+  }
+
+  /// "Recognise people I know", switched on - by voice, from "hello friend"
+  /// - the same way the consent centre does it.
+  Future<void> turnOnFaces() async {
+    final values = {..._state.consent, 'faces': true};
+    try {
+      await onboarding.saveConsent(values);
+    } catch (e) {
+      // Offline: kept on the phone now, and on the account when it can be.
+      debugPrint('Consent not saved to the account yet: $e');
+    }
+    await rememberConsent(values);
+  }
+
+  /// The friends saved on this phone, as recognition sees them.
+  Future<FriendRecognition> _savedFriends() async {
+    final recognition =
+        FriendRecognition(store: friendStore, owner: faceOwner, say: (_) {});
+    await recognition.load();
+    return recognition;
+  }
+
+  /// "Who do I know", from anywhere.
+  Future<VoiceOutcome> listFriends() async =>
+      VoiceOutcome(spoken: (await _savedFriends()).list());
+
+  /// "Rename Sam to Samuel", from anywhere.
+  Future<VoiceOutcome> renameFriend(String argument) async {
+    final parts = renameParts(argument);
+    if (parts == null) {
+      return const VoiceOutcome(
+          spoken: 'Say rename, their name, to, and the new name.');
+    }
+    return VoiceOutcome(
+        spoken: await (await _savedFriends()).rename(parts.$1, parts.$2));
+  }
+
+  /// "Forget everyone", from anywhere: asked first.
+  Future<VoiceOutcome> forgetAllFriends() async {
+    final saved = (await _savedFriends()).friends;
+    if (saved.isEmpty) {
+      return const VoiceOutcome(spoken: 'No one is saved, so nothing changed.');
+    }
+    final answer = await _voice?.ask('Forget everyone saved? All '
+        '${saved.length} faces will be deleted from this phone. Say yes to '
+        'forget them.');
+    if (answer?.command != VoiceCommand.yes) {
+      return const VoiceOutcome(spoken: 'Nothing was deleted.');
+    }
+    await _forgetFaces(quietly: true);
+    return const VoiceOutcome(spoken: 'Everyone is forgotten.');
   }
 
   /// "Forget Sam", from anywhere: asked, then deleted.
@@ -473,23 +548,22 @@ class AppSession extends ChangeNotifier {
       return const PlaceSearchResult(
           problem: 'Searching for places is not available here.');
     }
+    // Without a position the search still runs - indoors, where a fix
+    // takes minutes, it used to refuse outright - and says what that means.
     final source = location;
     final availability = await source.requestPermission();
-    if (availability != LocationAvailability.ready) {
-      return PlaceSearchResult(
-          problem: 'To search nearby I need your location. '
-              '${permissionGuidance(availability)}');
-    }
-    final fix = await bestEffortFix(source, timeout: const Duration(seconds: 6));
-    if (fix == null) {
-      return const PlaceSearchResult(
-          problem: 'I could not get your position, so I cannot search nearby. '
-              'Saved places still work.');
-    }
-    final here = RoutePoint(fix.latitude, fix.longitude);
+    final fix = availability == LocationAvailability.ready
+        ? await bestEffortFix(source, timeout: const Duration(seconds: 6))
+        : null;
+    final here = fix == null ? null : RoutePoint(fix.latitude, fix.longitude);
+    final note = searchNote(fix, now: DateTime.now());
     try {
       final found = await search.search(query, near: here);
-      return PlaceSearchResult(found: nearbyCandidates(found, here), from: here);
+      return PlaceSearchResult(
+        found: here == null ? found : nearbyCandidates(found, here),
+        from: here,
+        note: note,
+      );
     } on MapServiceException catch (e) {
       return PlaceSearchResult(
         problem: switch (e.failure) {
@@ -703,26 +777,65 @@ class AppSession extends ChangeNotifier {
   /// not a setting.
   Destination? destination;
 
+  final JourneyStore? _journeyStore;
+  JourneyRecorder? _journeys;
+
+  /// The journey being recorded, from choosing a destination to arriving or
+  /// stopping. Its summary is what the dashboard's Overview counts.
+  JourneyRecorder get journeys => _journeys ??= JourneyRecorder(
+      store: _journeyStore ??
+          FirestoreJourneyStore(history: () => history, admin: () => admin));
+
+  /// Ends the journey when the app has been away this long.
+  Timer? _awayTimer;
+
   /// Records the destination the way §2.A.7 records a journey, and remembers
   /// it for the scan screen. Best effort on the record: it needs history
   /// consent and a connection, and the directions need neither.
+  ///
+  /// Null ends the journey - arrived, or stopped - and publishes its
+  /// summary.
   Future<void> setDestination(Destination? place) async {
     destination = place;
     notifyListeners();
     if (place != null) recordActivity(ActivityKind.journey, place.label);
     final uid = _state.uid;
-    if (place == null || uid == null) return;
-    try {
-      await history.recordEvent(
-        uid,
-        sessionId: 'journey-${DateTime.now().millisecondsSinceEpoch}',
-        kind: SessionEventKind.destinationSet,
-        detail: place.label,
-      );
-    } catch (_) {
-      // No consent, or no network. The directions do not depend on it.
+    if (place == null || uid == null) {
+      await journeys.end();
+      return;
     }
+    await journeys.start(
+      uid: uid,
+      consent: _state.consent['history'] == true,
+      destination: place.label,
+      // A name the user gave it; a place found by search is not named in
+      // the summary.
+      savedLabel: place.id.startsWith('search-') ? null : place.label,
+    );
   }
+
+  /// Something that happened on the way, for the journey's record.
+  void recordJourneyEvent(SessionEventKind kind, {String? detail, String? key}) =>
+      unawaited(journeys.recordEvent(kind, detail: detail, key: key));
+
+  /// An obstacle warned of: told to the guardian, if they may know, and
+  /// kept on the journey's record.
+  void noticedObstacle(String label) {
+    recordActivity(ActivityKind.obstacle, label);
+    recordJourneyEvent(
+        label == 'stairs'
+            ? SessionEventKind.stairsDetected
+            : SessionEventKind.obstacleDetected,
+        detail: label,
+        key: label);
+  }
+
+  /// A position the directions used, for the journey's record.
+  void recordJourneyFix(LocationFix fix) => unawaited(journeys.recordFix(fix));
+
+  /// The directions reached the place. The destination is kept - the screen
+  /// still shows it - but the journey is over.
+  Future<void> arrived() => journeys.end();
 
   GuardianRepository? _guardian;
   GuardianRepository get guardian =>
@@ -934,6 +1047,7 @@ class AppSession extends ChangeNotifier {
   void dispose() {
     _sharer?.stop();
     _rosterRetry?.cancel();
+    _awayTimer?.cancel();
     unawaited(_removalWatch?.cancel());
     super.dispose();
   }
@@ -956,7 +1070,9 @@ class AppSession extends ChangeNotifier {
   /// the user back at "Create your account" for an account they already have.
   /// That is the loop this release exists to close, reached by another road.
   Future<void> signOut() async {
-    // Before the account is gone: the faces are filed under it.
+    // Before the account is gone: the faces are filed under it, and the
+    // journey's summary is written as them.
+    await journeys.end();
     await _forgetFaces(quietly: true);
     await auth.signOut();
     await store.forgetAccount();
@@ -1238,8 +1354,7 @@ GoRouter createRouter(AppSession session) {
               voice: session.voice,
               friends: friends,
               meetFriend: meet,
-              onObstacle: (label) =>
-                  session.recordActivity(ActivityKind.obstacle, label),
+              onObstacle: session.noticedObstacle,
               onBack: () => appNavigate(context, Routes.home),
             );
           },
@@ -1266,8 +1381,12 @@ GoRouter createRouter(AppSession session) {
                       positions: const GeolocatorLocationSource().positions(),
                       routing: session.routing,
                       friends: friends,
-                      onObstacle: (label) =>
-                          session.recordActivity(ActivityKind.obstacle, label),
+                      onObstacle: session.noticedObstacle,
+                      onFix: session.recordJourneyFix,
+                      onGuidance: (sentence) => session.recordJourneyEvent(
+                          SessionEventKind.guidanceGiven,
+                          detail: sentence),
+                      onArrived: () => unawaited(session.arrived()),
                       // A real move to Scan, which keeps warning. The screen
                       // used to stay where it was and forget the destination
                       // itself, because a go() to the route already open is a
@@ -1299,35 +1418,21 @@ GoRouter createRouter(AppSession session) {
           path: Routes.assist,
           builder: (context, _) => AdminFreeFuture<List<Destination>>(
             load: () => session.places.list(session.state.uid ?? ''),
-            builder: (_, places) => VoiceScopeHost(
+            // The screen listens for itself: a saved place's name, and -
+            // once a search has run - "number two" or a result's name.
+            builder: (_, places) => SmartAssistanceScreen(
+              speaker: session.speaker,
               voice: session.voice,
-              scope: VoiceScope(
-                commands: () => kAssistCommands,
-                // A saved place's name said on its own - "home", "the
-                // clinic" - is the answer to this screen's question.
-                onWords: (words) async {
-                  final place = savedPlaceNamed(words, places);
-                  if (place == null) return false;
-                  await session.speaker.speak('Directions to ${place.label}.');
-                  await session.setDestination(place);
-                  if (context.mounted) appNavigate(context, Routes.journey);
-                  return true;
-                },
-              ),
-              child: SmartAssistanceScreen(
-                speaker: session.speaker,
-                voice: session.voice,
-                search: session.placeSearch == null
-                    ? null
-                    : session.searchPlaces,
-                places: places,
-                onGo: (place) async {
-                  await session.setDestination(place);
-                  if (context.mounted) appNavigate(context, Routes.journey);
-                },
-                onManagePlaces: () => appNavigate(context, Routes.savedPlaces),
-                onBack: () => appNavigate(context, Routes.home),
-              ),
+              search: session.placeSearch == null
+                  ? null
+                  : session.searchPlaces,
+              places: places,
+              onGo: (place) async {
+                await session.setDestination(place);
+                if (context.mounted) appNavigate(context, Routes.journey);
+              },
+              onManagePlaces: () => appNavigate(context, Routes.savedPlaces),
+              onBack: () => appNavigate(context, Routes.home),
             ),
           ),
         ),
@@ -1383,6 +1488,11 @@ GoRouter createRouter(AppSession session) {
                 await session.friendStore.deleteAll(session.faceOwner);
                 await reload();
               },
+              onRename: (friend, name) async {
+                final said = await session.renameFriend('${friend.name} to $name');
+                await reload();
+                return said.spoken;
+              },
               onBack: () => appNavigate(context, Routes.settings),
             ),
           ),
@@ -1396,6 +1506,7 @@ GoRouter createRouter(AppSession session) {
             voiceController: session.voice,
             contacts: session.state.contacts,
             guardianCount: session.state.guardianCount,
+            onEvent: (kind) => session.recordJourneyEvent(kind),
             onFinished: () => appNavigate(context, Routes.home),
           ),
         ),
@@ -1583,8 +1694,16 @@ GoRouter createRouter(AppSession session) {
             title: 'Overview',
             subtitle: 'Last 30 days',
             load: session.admin.overview,
-            isEmpty: (data) => data.sessions == 0,
-            emptyTitle: 'No sessions yet',
+            // Journeys are recorded only with history on, so no journeys is
+            // not an empty page: emergencies and active users are counted
+            // without them, and the page says why the rest is blank.
+            isEmpty: (data) =>
+                data.sessions == 0 &&
+                data.sosIncidents == 0 &&
+                data.activeUsers == 0,
+            emptyTitle: 'Nothing recorded in the last 30 days',
+            emptyDetail: 'No journeys, emergencies or shared positions. '
+                'Journeys are recorded only for users who turned history on.',
             builder: (_, data, __) => OverviewScreen(overview: data),
             onSelect: (s) => appNavigate(context, s.route),
             onSignOut: session.auth.signOut,
@@ -1667,7 +1786,12 @@ GoRouter createRouter(AppSession session) {
         GoRoute(
           path: Routes.adminHealth,
           builder: (context, _) => AdminPage<
-              ({UsageOverview overview, List<SessionSummary> flagged})>(
+              ({
+                UsageOverview overview,
+                List<SessionSummary> flagged,
+                List<SosRecord> sos,
+                Map<String, String> names,
+              })>(
             route: Routes.adminHealth,
             title: 'System health',
             subtitle: 'What can be measured without a server',
@@ -1675,15 +1799,29 @@ GoRouter createRouter(AppSession session) {
               final results = await Future.wait([
                 session.admin.overview(),
                 session.admin.sessionsNeedingAttention(),
+                session.admin.sosEvents(),
+                session.admin.users(),
               ]);
               return (
                 overview: results[0] as UsageOverview,
                 flagged: results[1] as List<SessionSummary>,
+                sos: results[2] as List<SosRecord>,
+                names: {
+                  for (final user in results[3] as List<AdminUserRow>)
+                    user.uid: user.name,
+                },
               );
             },
-            builder: (_, data, __) => SystemHealthScreen(
+            builder: (context, data, reload) => SystemHealthScreen(
               overview: data.overview,
               sessionsNeedingAttention: data.flagged,
+              sosEvents: data.sos,
+              userNames: data.names,
+              onResolve: (record) => _adminAction(context, reload, () async {
+                await session.admin
+                    .resolveSos(record.id, adminUid: session.state.uid ?? '');
+                return 'Marked resolved.';
+              }),
             ),
             onSelect: (s) => appNavigate(context, s.route),
             onSignOut: session.auth.signOut,

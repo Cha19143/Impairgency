@@ -127,7 +127,7 @@ void main() {
 
     test('too slow is given up on', () {
       final s = session();
-      expect(s.add([face([1, 0])], t0.add(const Duration(seconds: 7))),
+      expect(s.add([face([1, 0])], t0.add(const Duration(seconds: 11))),
           isA<EnrollmentFailed>()
               .having((f) => f.problem, 'problem', EnrollmentProblem.tooSlow));
     });

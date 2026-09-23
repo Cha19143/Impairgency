@@ -9,12 +9,13 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 import '../core/vision/depth.dart';
 import '../core/vision/detection.dart';
 import '../core/vision/faces.dart';
-import '../core/vision/stairs.dart';
+import '../core/vision/stairs.dart' show kStairsWarnings;
 import '../core/vision/yolo.dart';
 import '../core/vision/yuv_frame.dart';
 import 'crash_reporting.dart';
 import 'depth_estimator.dart';
 import 'face_recognizer.dart';
+import 'stairs_detector.dart';
 
 /// Camera frames in, detections out.
 ///
@@ -90,21 +91,20 @@ class ScanService {
   /// A person smaller than this in the frame is too far to recognise.
   static const double _minPersonExtent = 0.2;
 
-  /// The stairs search runs no more often than this - every other frame at
-  /// the model's pace. It runs on the isolate that draws the screen, where
-  /// YOLO does not, so its cost is the one felt there.
+  /// The stairs model runs no more often than this - every other frame at
+  /// the COCO model's pace. Two models on every frame would cook the phone.
   static const Duration _stairsGap = Duration(milliseconds: 500);
 
-  /// A frame between two searches carries the last reading, this long at most:
-  /// otherwise the status would flip between "stairs" and "clear" frame by
-  /// frame, and so would what is said.
+  /// A frame between two runs carries the last stairs found, this long at
+  /// most: otherwise what is said would flip between "stairs" and not frame
+  /// by frame.
   static const Duration _stairsFresh = Duration(seconds: 1);
 
-  /// Brightness for the stairs search, reused between frames. Made only when
-  /// [kStairsWarnings] is on.
-  late final List<List<int>> _luma = List.generate(
-      kStairsGridSide, (_) => List<int>.filled(kStairsGridSide, 0));
-  StairsReading _stairs = StairsReading.none;
+  /// The stairs model, when the build has it and [kStairsWarnings] is on. It
+  /// runs inside the same busy window as the objects, so dispose() waits for
+  /// it too.
+  StairsDetector? _stairsModel;
+  List<Detection> _stairs = const [];
   DateTime _stairsAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// The depth model, loaded only when [kDepthWarnings] is on and the file is
@@ -181,6 +181,9 @@ class ScanService {
       _output = outputBytes.buffer.asFloat32List();
 
       _interpreter = interpreter;
+      // Null without the file: the app runs as before and says nothing
+      // about stairs.
+      if (kStairsWarnings) _stairsModel = await StairsDetector.load();
       if (kDepthWarnings) {
         _depth = await DepthEstimator.load();
         if (_depth == null) {
@@ -328,13 +331,13 @@ class ScanService {
         ));
       }
       final frame = _uprightFrame(image);
+      final stairs = await _stairsIn(frame);
       final depth = await _depthIn(frame);
       if (_disposed) return;
       final notice = _notice;
       _notice = null;
       onFrame(ScanFrame(
-        detections: detections,
-        stairs: _stairsIn(frame),
+        detections: [...detections, ...stairs],
         depth: depth,
         notice: notice,
       ));
@@ -366,19 +369,19 @@ class ScanService {
     );
   }
 
-  /// Stairs in [frame], or the last reading while it is fresh - and never
-  /// anything unless a build switched stairs warnings on.
-  StairsReading _stairsIn(YuvFrame frame) {
-    if (!kStairsWarnings) return StairsReading.none;
+  /// The stairs in [frame], or the last found while fresh - and none
+  /// without the stairs model.
+  Future<List<Detection>> _stairsIn(YuvFrame frame) async {
+    final model = _stairsModel;
+    if (model == null) return const [];
     final now = DateTime.now();
     if (now.difference(_stairsAt) >= _stairsGap) {
-      fillStairsGrid(frame, _luma);
-      _stairs = stairsFrom(_luma);
-      _stairsAt = now;
+      _stairs = await model.detect(frame);
+      _stairsAt = DateTime.now();
     }
-    return now.difference(_stairsAt) <= _stairsFresh
+    return DateTime.now().difference(_stairsAt) <= _stairsFresh
         ? _stairs
-        : StairsReading.none;
+        : const [];
   }
 
   /// Something in the way in [frame], or the last reading while it is fresh -
@@ -558,6 +561,8 @@ class ScanService {
     _faces = null;
     await _depth?.close();
     _depth = null;
+    await _stairsModel?.close();
+    _stairsModel = null;
   }
 
   /// Exposed so a test can check the maths without a camera.

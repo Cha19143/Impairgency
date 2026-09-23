@@ -58,6 +58,8 @@ void main() {
     }
     final step = await result;
     expect(step, isA<EnrollmentDone>());
+    // Counted out loud, so whoever holds the phone knows it is working.
+    expect(said.skip(1), ['One.', 'Two.', 'Three.', 'Four.', 'Five.']);
     expect(enrollmentResultPhrase(step, name: 'Sam'),
         'Saved Sam. I will tell you when Sam is nearby.');
     expect(store.saved['u1']!.single.name, 'Sam');
@@ -89,5 +91,45 @@ void main() {
 
   test('the friend is asked, not the owner', () {
     expect(friendConsentQuestion('Sam'), startsWith('Sam, may this phone remember your face'));
+  });
+
+  group('by voice, from anywhere', () {
+    final ana = Friend(
+        id: 'f2', name: 'Ana', embeddings: [l2Normalize([0, 1, 0, 0])], savedAt: DateTime(2026));
+
+    test('who is saved, said', () async {
+      await recognition.load();
+      expect(recognition.list(), startsWith('No one is saved yet.'));
+      store.saved['u1'] = [sam, ana];
+      await recognition.load();
+      expect(recognition.list(), 'You have saved 2 people: Sam and Ana.');
+    });
+
+    test('renaming keeps the face and changes the name', () async {
+      store.saved['u1'] = [sam, ana];
+      await recognition.load();
+      expect(await recognition.rename('sam', 'samuel'), 'Sam is now Samuel.');
+      expect(store.saved['u1']!.first.name, 'Samuel');
+      expect(store.saved['u1']!.first.embeddings, sam.embeddings);
+      expect(await recognition.rename('lea', 'lee'),
+          'There is no one saved called Lea.');
+      expect(await recognition.rename('samuel', 'ana'),
+          'Someone is already saved as Ana.');
+    });
+
+    test('"rename Sam to Samuel" is read as two names', () {
+      expect(renameParts('sam to samuel'), ('sam', 'samuel'));
+      expect(renameParts('ana cruz as ana reyes'), ('ana cruz', 'ana reyes'));
+      expect(renameParts('sam'), isNull);
+    });
+
+    test('"forget everyone" is not a friend called Everyone', () {
+      expect(matchVoiceCommand('forget everyone'), VoiceCommand.forgetAllFriends);
+      expect(matchVoiceCommand('kalimutan lahat'), VoiceCommand.forgetAllFriends);
+      expect(parseVoiceCommand('forget sam')?.command, VoiceCommand.forgetFriend);
+      expect(parseVoiceCommand('rename sam to samuel')?.argument,
+          'sam to samuel');
+      expect(matchVoiceCommand('who do i know'), VoiceCommand.listFriends);
+    });
   });
 }

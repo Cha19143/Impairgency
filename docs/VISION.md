@@ -155,8 +155,8 @@ not run.
 - **Kerbs, glass doors, potholes and overhanging branches** are not among the
   classes and are not detected. The safety notice says so, and must keep
   saying so.
-- **Stairs** are not a COCO class either. A separate heuristic looks for them,
-  and is off by default: see "Stairs" below.
+- **Stairs** are not a COCO class either. A second, single-class model looks
+  for them: see "Stairs" below.
 - **Walls, doors and posts** are not classes. A separate depth model can
   warn about them, and is off by default: see "Depth" below.
 - **One camera has no depth.** Nearness is inferred from box size. A poster of
@@ -197,72 +197,189 @@ YOLO's output shape; everything else in the scan path is not.
 
 # Stairs
 
-A missed step is a fall, and YOLO11n has no class for stairs. So Scan can run a
-second, much simpler look at the floor: `core/vision/stairs.dart`, ported from
-PR #74, where it was written against the old SSD pipeline and never tried on a
-phone.
+A missed step is a fall, and YOLO11n's COCO classes have no stairs. Stairs
+come from a second detector: a single-class YOLO11n, trained here on Open
+Images' "Stairs" boxes, run beside the COCO model the way the face and depth
+models are. Its boxes join the frame's detections as `stairs`, so everything
+after that - ranking, "close" and "very close", the guardian's feed, the
+journey record - treats stairs as one more object.
 
-**It is off by default.** Builds switch it on with
-`--dart-define=STAIRS_WARNINGS=true`. The reason is measured, below.
+**Trained on 2026-09-23, and it names stairs; it does not say "Stop".** On
+photographs it never trained on, it finds 56% of the stairs close enough to
+matter and names stairs on 5% of photographs that have none - short of what
+a "Stop" needs (below, "The gate"). Trained a second time with crossings
+among its negatives, it takes about one zebra crossing in ten for stairs,
+down from a quarter. A build without `assets/models/yolo11n_stairs.tflite`
+runs as before and says nothing about stairs.
 
-## What it looks for
+## Why not the heuristic
 
-Regular horizontal banding in the lower part of the frame. That is what the
-nosings of a flight look like to one camera. Four or more edges must be found.
-They must be spaced regularly *in ratio*, so a flight is still regular after
-perspective shrinks the far treads, and they must cross most of the width. The
-result is a confidence from 0 to 1. It is not a probability: nothing here was
-calibrated against labelled photographs.
+Round 1 ported a floor-banding heuristic from PR #74: regular horizontal edges
+low in the frame. It was never tried on real photographs, and on its own
+synthetic ones a floor of 30 cm tiles scored **0.86** and a zebra crossing
+**0.75**, both over its 0.6 threshold - seen from above, a flight of stairs is
+a row of evenly receding edges, and so is a tiled floor. It stayed off in
+every tester build, and is gone; its history is in PR #74.
+
+## The data
+
+`tool/fetch_stairs.py` builds an Ultralytics dataset under
+`build/stairs-data/` (git-ignored):
+
+- **Positives**: Open Images train images with boxes for the class named
+  "Stairs" in Open Images' own class list, `/m/01lynh` (looked up by name
+  when the script runs). Crowds of stairs in one box and pictures of stairs
+  are left out. That leaves **2,478** images, every one the train split has.
+- **Negatives**, with empty label files: photographs taken on the phones the
+  app runs on (`--negatives`); Open Images validation images with a chosen
+  human-checked label and no Stairs box (`--negative-label`); and train
+  images by their machine-generated labels (`--machine-negative-label`).
+  There are no phone photographs yet. The model took all **490** validation
+  images labelled floor, tile, carpet, walkway or sidewalk, and **172** by
+  machine label: 58 zebra or pedestrian crossings, 110 hardwood floors, 3
+  rugs and 3 tiled floors.
+- **Licences**: Open Images annotations are CC BY 4.0 and its images are
+  listed as CC BY 2.0, as for the evaluation set above. `SOURCES.txt` lists
+  every image with its id, for the attribution.
+
+Split by a hash of the image id: 2,846 for training (599 negatives), 294
+for validation (63). About 980 MB, under `build/`.
+
+**Crossings, rugs and tiled floors come from machine labels.** Open Images
+has those labels, but its human-checked labels have not one of them in the
+validation or test split - so the first model, trained without them, was
+never shown the two cases the old heuristic failed on, and took a quarter of
+zebra crossings for stairs. Its machine-generated labels for the train split
+(a 7.35 GB list) have them: photographs labelled so at 0.7 or more, with any
+photograph where a box or a machine label (0.3) says stairs left out. Two
+were looked at: a street zebra crossing, and a striped plaza pavement.
+There were few rugs and tiled floors even there; phone photographs, passed
+with `--negatives`, are how to add more.
+
+Open Images labels no direction, so the model learns "stairs", never up or
+down.
+
+## Training
+
+`tool/train_stairs.sh`: `yolo detect train model=yolo11n.pt data=stairs.yaml
+imgsz=416 epochs=60 batch=32`, then the same export as the COCO model:
+Ultralytics' LiteRT path (`format=litert`; Ultralytics 8.4 renamed it from
+`tflite`), float32 weights, a planar input and box coordinates as fractions
+of it. The script checks the shapes with `tool/tflite_shapes.py` and refuses
+anything other than `[1, 3, 416, 416]` in and `[1, 5, anchors]` out, which
+is what `StairsDetector.load` checks too. The weights start from
+Ultralytics' `yolo11n.pt` and inherit its AGPL-3.0, as the COCO model does.
+
+The export was checked before it was trusted: the same tools re-exporting
+`yolo11n.pt` at 640 give a model whose output on the same input is
+bit-identical to the shipped `yolo11n.tflite` (the files differ only in the
+metadata Ultralytics embeds), so the stairs model is read by the code that
+already reads the COCO one. Both are float32; LiteRT's GPU delegate runs
+float32 weights in float16 by itself.
+
+| | |
+|---|---|
+| File | `assets/models/yolo11n_stairs.tflite`, 10,568,441 bytes |
+| SHA-256 | `ebf8d4df1122899ae8a4e04f19ef789c74118beed1887aca500c8b86b126e930` |
+| Shapes | `[1, 3, 416, 416]` float32 in, `[1, 5, 3549]` out |
+| Open Images class | `/m/01lynh`, "Stairs" |
+| Images | 2,478 with stairs, 662 without |
+| Started from | `yolo11n.pt`, SHA-256 `0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1` |
+| Trained | 2026-09-23 on this Mac's GPU (Apple M5 Pro, `device=mps`): 60 epochs in 37 minutes. Ultralytics 8.4.159, PyTorch 2.13, litert-torch 0.9.4, Python 3.13 |
+| Kept | epoch 60: mAP50 0.625, mAP50-95 0.412 on the 294 photographs held back from training |
+| Before it | the first model, `8b10561`, without the 172 machine-labelled negatives: SHA-256 `0840fcbc…b72ba21` |
+
+Trained on Open Images V7 annotations, © Google LLC, CC BY 4.0.
 
 ## How it runs
 
-- **The grid.** The brightness grid is 300 by 300: the grid its thresholds and
-  tests were tuned at, since tread spacing is measured in grid rows.
-  `fillStairsGrid` fills it from the camera's brightness plane through
-  `YuvFrame.lumaAt`, turned upright. Only the part the search reads is sampled:
-  the lower 55% of the frame, 15% in from each side.
-- **When.** In `ScanService`, inside the same busy window as YOLO and the face
-  pass, so closing the screen waits for it. At most every 500 ms, on the
-  isolate that draws the screen.
-- **Between searches.** A frame carries the last reading for up to a second,
-  so the status and the speech do not flip between "stairs" and "clear".
-- **With the objects.** The reading travels with that frame's objects as one
-  `ScanFrame`.
+- `lib/data/stairs_detector_io.dart`: its own interpreter, on its own isolate
+  when it can be. `load()` returns null when the file is missing or its shape
+  is wrong, so the rest carries on.
+- In `ScanService`, inside the same busy window as YOLO and the face pass,
+  at most every 500 ms. A frame between runs carries the last stairs found for
+  up to a second, so what is said does not flip frame by frame.
+- The frame is letterboxed to 416 with the same grey padding and planar
+  layout as the COCO model (`fillLetterboxed` in `core/vision/stairs.dart`),
+  and boxes are mapped back out of the letterbox before anything reads them.
 
 ## What it says
 
-*"Stop. Stairs ahead."*: never up or down, which one camera cannot tell apart.
-It goes through `guidanceFor` and `shouldSpeak`:
-- It is urgent, so it comes at hazard priority with a buzz, and repeats only
-  after `kHazardRepeat`.
-- It is said alone, ahead of any object, except an object urgent in its own
-  right: a car right in front is named as a car.
-- Below 0.6 it says nothing.
-- The guardian's feed shows "Obstacle: stairs", as for any urgent warning, and
-  only with activity consent.
+- Below **0.45** (`kStairsSoft`), nothing. It was 0.35 until the model was
+  measured: there it names stairs on 8% of photographs with none.
+- Otherwise named, with where: *"Stairs on your right"*, *"Stairs ahead,
+  close"*, *"Stairs close, on your left"*. At navigation priority, so the next
+  description does not drop it; told to the guardian as "Obstacle: stairs" and
+  kept on the journey record whenever said.
+- *"Stop. Stairs ahead."* - hazard priority, with a buzz - only for stairs
+  filling the view ahead at **0.55** or more (`kStairsHard`), **and only in a
+  build with `--dart-define=STAIRS_STOP=true`**. Until the gate below is
+  passed, stairs are named and never shouted: a "Stop" for every tiled floor
+  teaches someone to ignore "Stop".
+- Weighted with the cars (1.6) when choosing what to say first.
+- Never up or down, and never in metres - nothing here estimates a distance.
+- `--dart-define=STAIRS_WARNINGS=false` switches stairs off for a device
+  check of everything else.
 
-## Why it is off: what it cannot tell apart
+## The gate
 
-Seen from above, a flight is a row of evenly receding edges, and so is a tiled
-floor. In its own tests (`test/core/vision/stairs_test.dart`, "what banding
-cannot tell apart, measured"), a floor of 30 cm tiles scores **0.86** and a
-zebra crossing **0.75**. Both are over the threshold, so both would be
-announced as stairs. Escalators and striped rugs are the same kind of case.
+```bash
+tool/eval_detector.py --stairs --fetch --per-class 1000 --negative-limit 600 \
+  --negative-label Tile --negative-label Floor --negative-label Flooring \
+  --negative-label Carpet --negative-label Walkway --negative-label Sidewalk \
+  --negative-machine-label "Zebra crossing" \
+  --negative-machine-label "Pedestrian crossing" \
+  --negative-machine-label Rug --negative-machine-label "Tile flooring" \
+  --negative-machine-label Hardwood --negative-machine-label "Wood flooring" \
+  --negative-machine-label "Laminate flooring"
+```
 
-A warning that says "Stop" on every tiled floor in a mall or a hospital teaches
-someone to ignore "Stop". That is exactly what `kUrgentScore` exists to
-prevent for objects, and the next "Stop" may be a car.
+runs the model through the app's own pipeline - a 720-pixel camera frame, the
+416 letterbox, the same suppression - on photographs it never trained on:
+Open Images validation and test photographs with Stairs boxes (154
+photographs, 181 boxes, 145 of them close or nearer), and 598 test
+photographs with none. The crossings, rugs and wooden floors among those are
+from Open Images' machine-generated labels at 0.7 or more, marked
+"(machine)": its human-checked labels have none of them in either split. Two
+of the "zebra crossings" were looked at: a street crossing, and the painted
+stripes of a model airport.
 
-## Before turning it on
+| score ≥ | close+ recall | all recall | negatives, close+ | negatives named at all |
+|---|---|---|---|---|
+| 0.35 | 58% | 55% | 38/598, 6% | 46/598, 8% |
+| **0.45** | **56%** | 53% | 27/598, 5% | **29/598, 5%** |
+| 0.55 | 49% | 47% | 20/598, 3% | 22/598, 4% |
+| 0.65 | 46% | 44% | 18/598, 3% | 19/598, 3% |
 
-Build with the flag and hold the phone as users do. Go:
-- down and up real flights, indoors and out, in daylight and under lights;
-- across tiled floors, a zebra crossing, an escalator and a striped rug.
+Named at all at 0.45, by what the photograph shows (one photograph can show
+two): floor 11 of 306, hardwood 4 of 88, wood flooring 3 of 51, carpet 4 of
+53, flooring 4 of 49, tile 1 of 46, walkway 3 of 46, sidewalk 0 of 46,
+laminate 2 of 40, **zebra crossings 2 of 19, pedestrian crossings 2 of 26,
+rugs 4 of 26**.
 
-Note each time it spoke and each time it should have. Turn it on by default
-only if it warns on stairs from far enough away to stop, and stays quiet on
-floors. If floors still trigger it, it needs more than banding before it
-speaks: the phone's tilt, or a trained class.
+The first model, without the machine-labelled negatives, measured on the
+same photographs: 57%, 53%, 49% and 46% close+ recall at the four scores,
+and 51, 37, 29 and 16 negatives named - 5 of the 19 zebra crossings, 5 of
+the 26 pedestrian crossings and 5 of the 26 rugs at 0.55, and every zebra
+crossing it named at 0.35 still named at 0.55. The second finds as much or
+more at every score, with fewer false alarms up to 0.55.
+
+**"Stop" is turned on only if**, at 0.55, stairs close or nearer are found at
+least **70%** of the time and at most **5%** of the negatives fire (a stairs
+box close or nearer). **Neither model passes:** 49%, with 20 of 598
+negatives firing for the second. It ships named-only, with `STAIRS_STOP`
+off.
+
+**The named tier is 0.45**, by a rule set before the first numbers were
+read: the lowest score at which at most 5% of the negatives are named at
+all. For the first model that was 0.55.
+
+These are per photograph. Walking, the app looks twice a second, so a
+staircase approached for a few seconds has several chances to be found - and
+a tiled floor several chances to be taken for stairs. Which of those wins is
+for the phone: real flights up and down, indoors and out; a tiled floor, a
+zebra crossing, an escalator and a striped rug - every miss and every false
+alarm noted here.
 
 ---
 
@@ -326,8 +443,9 @@ It is 0 to 1 and not a probability: nothing here was calibrated.
 
 ## What it says
 
-Through `guidanceFor`, in this order: an object urgent in its own right; stairs;
-then, if no object big enough (over 30% of the frame) was named on that side:
+Through `guidanceFor`, in this order: an object urgent in its own right -
+stairs among them, once they may be a "Stop"; then, if no object big enough
+(over 30% of the frame) was named on that side:
 
 - *"Stop. Something right in front of you."* — ahead, and near (0.8 of the
   frame's range or more): hazard priority, a buzz, and the guardian's feed shows

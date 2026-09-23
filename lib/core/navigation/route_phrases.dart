@@ -221,6 +221,18 @@ String startPhrase(RouteStep depart, {double? relative, double startOffMetres = 
 }
 
 /// What the screen shows between sentences.
+/// Said between turns, so a long stretch is not silence: "Keep going. Turn
+/// left in about 120 metres."
+String progressPhrase(RouteStep step, double metres, {required String to}) =>
+    step.type == ManeuverType.arrive
+        ? 'Keep going. $to is in ${describeDistance(metres)}.'
+        : 'Keep going. ${capitalised(maneuverWords(step))} in '
+            '${describeDistance(metres)}.';
+
+/// Said once, when readings are too vague to follow a route with.
+const String kPoorFixPhrase = 'Your position is not accurate enough yet. '
+    'Keep walking in the open.';
+
 String nextStatus(RouteStep step, double metres, {required String to}) =>
     step.type == ManeuverType.arrive
         ? 'Arriving at $to in ${describeDistance(metres)}.'

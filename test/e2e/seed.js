@@ -44,7 +44,9 @@ export const NOT_ADMIN = {
 export const EXPECTED = {
   activeUsers: 2, // vi-anna and vi-ben
   sessions: 3,
-  sosIncidents: 1, // one sosFired, in session three
+  // Counted from sos_events, not the summaries: Anna's active one. Ben's was
+  // cancelled in time and is not an incident.
+  sosIncidents: 1,
   positioningQuality: 80, // median discarded fraction is 0.2 -> 80% usable
 };
 
@@ -126,10 +128,15 @@ const daysAgo = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
 /// Removes every session summary, leaving the accounts alone. Lets a spec prove
 /// the empty state without tearing down the sign-in it just did.
-export async function clearSessions() {
+export const clearSessions = () => clearCollection('session_summaries');
+
+/// Removes every SOS record.
+export const clearSos = () => clearCollection('sos_events');
+
+async function clearCollection(name) {
   const response = await ok(
-    await fetch(`${DB}/session_summaries?pageSize=300`, { headers: owner }),
-    'list sessions',
+    await fetch(`${DB}/${name}?pageSize=300`, { headers: owner }),
+    `list ${name}`,
   );
   const { documents = [] } = await response.json();
   for (const doc of documents) {
@@ -175,6 +182,29 @@ export async function seedSessions() {
     discardedFraction: dbl(0.3),
     concernCount: int(3),
     placeLabels: list([str('Home')]),
+  });
+}
+
+/// Two emergencies: Anna's, still active, with a position; Ben's, cancelled
+/// in time. The phone writes these; the dashboard used to read none of them.
+export const SOS = { active: 'sos-anna', cancelled: 'sos-ben' };
+
+export async function seedSos() {
+  await put(`sos_events/${SOS.active}`, {
+    userId: str('vi-anna'),
+    at: time(new Date(Date.now() - 60 * 60 * 1000)),
+    cancelled: { booleanValue: false },
+    status: str('active'),
+    lat: dbl(14.79),
+    lng: dbl(120.92),
+    accuracy: int(12),
+    locationSummary: str('Your location was sent.'),
+    contact: map({ name: str('Mum'), number: str('09170000000') }),
+  });
+  await put(`sos_events/${SOS.cancelled}`, {
+    userId: str('vi-ben'),
+    at: time(daysAgo(2)),
+    cancelled: { booleanValue: true },
   });
 }
 
@@ -228,6 +258,7 @@ export async function seed() {
   });
 
   await seedSessions();
+  await seedSos();
 }
 
 // `node test/e2e/seed.js` runs it; importing it does not.

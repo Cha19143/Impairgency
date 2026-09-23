@@ -28,12 +28,16 @@ class SosEngine {
     FirebaseFirestore? firestore,
     Future<bool> Function(Uri)? dial,
     Future<void> Function(Map<String, Object?> event)? writeEvent,
+    Future<void> Function(String id, Map<String, Object?> fields)? updateEvent,
+    String Function()? newEventId,
     this.locationBudget = const Duration(seconds: 6),
     this.guardianBudget = const Duration(seconds: 8),
   })  : _location = location ?? const GeolocatorLocationSource(),
         _firestore = firestore,
         _dial = dial ?? _defaultDial,
-        _writeEvent = writeEvent;
+        _writeEvent = writeEvent,
+        _updateEvent = updateEvent,
+        _newEventId = newEventId;
 
   final Speaker speaker;
   final LocationSource _location;
@@ -45,13 +49,36 @@ class SosEngine {
   FirebaseFirestore get _db => _firestore ??= FirebaseFirestore.instance;
 
   final Future<void> Function(Map<String, Object?> event)? _writeEvent;
+  final Future<void> Function(String id, Map<String, Object?> fields)?
+      _updateEvent;
+  final String Function()? _newEventId;
 
-  Future<void> _write(Map<String, Object?> event) => _writeEvent != null
-      ? _writeEvent(event)
-      : _db.collection('sos_events').add({
-          ...event,
-          'at': FieldValue.serverTimestamp(),
-        });
+  /// Writes an event: under [id] when given, so it can be found again to
+  /// be resolved, otherwise under a new one. An injected writer sees the id
+  /// as `eventId`.
+  Future<void> _write(Map<String, Object?> event, {String? id}) {
+    if (_writeEvent != null) {
+      return _writeEvent({...event, if (id != null) 'eventId': id});
+    }
+    final data = {...event, 'at': FieldValue.serverTimestamp()};
+    final events = _db.collection('sos_events');
+    return id == null ? events.add(data) : events.doc(id).set(data);
+  }
+
+  Future<void> _update(String id, Map<String, Object?> fields) =>
+      _updateEvent != null
+          ? _updateEvent(id, fields)
+          : _db.collection('sos_events').doc(id).update({
+              ...fields,
+              if (fields['status'] == 'resolved')
+                'resolvedAt': FieldValue.serverTimestamp(),
+            });
+
+  String _eventId() =>
+      _newEventId?.call() ??
+      (_writeEvent != null
+          ? 'sos-${DateTime.now().microsecondsSinceEpoch}'
+          : _db.collection('sos_events').doc().id);
 
   static Future<bool> _defaultDial(Uri uri) =>
       launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -123,7 +150,49 @@ class SosEngine {
       now: DateTime.now(),
     );
 
-    // 3. Call. Works with no data connection, which is why it outranks push.
+    // 3. The record. The document is what a guardian's listener picks up.
+    //
+    // Written whenever there is an account to write it against, guardians or
+    // not: the event is also the record an administrator reviews, and a
+    // guardian paired *after* the emergency should still be able to see it.
+    // Only the receipt's wording depends on whether anyone was there to be
+    // told.
+    //
+    // Started before the call, not after it: the dialler puts the app behind
+    // the call, and a phone dropped or killed during it used to lose the
+    // record altogether. Once started, the write is on the device's queue
+    // and goes when there is a connection. Its id is chosen here so "I am
+    // okay" after the call can find it again.
+    final event = <String, Object?>{
+      'userId': userId,
+      'cancelled': false,
+      'status': 'active',
+      'locationSummary': outcome.spoken,
+      if (contactName != null || contactNumber != null)
+        'contact': {'name': contactName, 'number': contactNumber},
+      if (contacts.isNotEmpty)
+        'contacts': contacts.map((c) => c.toJson()).toList(),
+      if (outcome.fix != null) ...{
+        'lat': outcome.fix!.latitude,
+        'lng': outcome.fix!.longitude,
+        'accuracy': outcome.fix!.accuracyMetres,
+      },
+    };
+    // No account means no document a guardian could read. Never written
+    // under a placeholder id: the rules would refuse it, silently.
+    final signedIn = userId != null && userId.isNotEmpty;
+    final eventId = signedIn ? _eventId() : null;
+    final Future<void>? written;
+    if (eventId != null) {
+      written = _write(event, id: eventId);
+      // Its outcome is read below when there are guardians to tell; with
+      // none, a failure has nobody to be reported to.
+      unawaited(written.catchError((_) {}));
+    } else {
+      written = null;
+    }
+
+    // 4. Call. Works with no data connection, which is why it outranks push.
     if (first == null) {
       legs.add(const LegResult(SosLeg.call, LegOutcome.notConfigured));
     } else {
@@ -136,43 +205,20 @@ class SosEngine {
       detail: outcome.spoken,
     ));
 
-    // 4. Guardians. The document is what a guardian's listener picks up.
-    //
-    // Written whenever there is an account to write it against, guardians or
-    // not: the event is also the record an administrator reviews, and a
-    // guardian paired *after* the emergency should still be able to see it.
-    // Only the receipt's wording depends on whether anyone was there to be
-    // told.
-    final event = <String, Object?>{
-      'userId': userId,
-      'cancelled': false,
-      'locationSummary': outcome.spoken,
-      if (contactName != null || contactNumber != null)
-        'contact': {'name': contactName, 'number': contactNumber},
-      if (contacts.isNotEmpty)
-        'contacts': contacts.map((c) => c.toJson()).toList(),
-      if (outcome.fix != null) ...{
-        'lat': outcome.fix!.latitude,
-        'lng': outcome.fix!.longitude,
-        'accuracy': outcome.fix!.accuracyMetres,
-      },
-    };
-    if (userId == null || userId.isEmpty) {
-      // No account means no document a guardian could read. Never written
-      // under a placeholder id: the rules would refuse it, silently.
+    // 5. Guardians: whether the record reached them.
+    if (written == null) {
       legs.add(const LegResult(SosLeg.guardians, LegOutcome.failed,
           detail: 'You are not signed in on this phone.'));
     } else if (guardianCount == 0) {
-      unawaited(_write(event).catchError((_) {}));
       legs.add(const LegResult(SosLeg.guardians, LegOutcome.notConfigured));
     } else {
-      legs.add(await _alertGuardians(event));
+      legs.add(await _alertGuardians(written));
     }
 
     // Sorted back into the order the receipt reads best in.
     legs.sort((a, b) =>
         SosLeg.values.indexOf(a.leg).compareTo(SosLeg.values.indexOf(b.leg)));
-    return SosReceipt(legs);
+    return SosReceipt(legs, eventId: eventId);
   }
 
   /// Stopped by the user after the countdown, before anyone was called.
@@ -225,18 +271,37 @@ class SosEngine {
 
   final bool _isIos = !kIsWeb && Platform.isIOS;
 
-  Future<LegResult> _alertGuardians(Map<String, Object?> event) async {
+  Future<LegResult> _alertGuardians(Future<void> written) async =>
+      LegResult(SosLeg.guardians, await _confirmed(written));
+
+  /// Whether the server took [write] within [guardianBudget].
+  Future<LegOutcome> _confirmed(Future<void> write) async {
     try {
-      await _write(event).timeout(guardianBudget);
-      return const LegResult(SosLeg.guardians, LegOutcome.done);
+      await write.timeout(guardianBudget);
+      return LegOutcome.done;
     } on TimeoutException {
       // Queued on the device. Not a success, and said so; not a failure
       // either, because giving up now would be wrong too.
-      return const LegResult(SosLeg.guardians, LegOutcome.pending);
+      return LegOutcome.pending;
     } catch (_) {
       // Refused, or the SDK threw. Either way the user is told.
-      return const LegResult(SosLeg.guardians, LegOutcome.failed);
+      return LegOutcome.failed;
     }
+  }
+
+  /// The user said they are okay after the call.
+  ///
+  /// Not a cancellation: "cancelled" means nothing happened, and here a call
+  /// was made. The event is marked resolved, by the user, which is what the
+  /// guardian's phone and the dashboard show. [LegOutcome.notConfigured]
+  /// when there was no event to mark - nobody was signed in.
+  Future<LegOutcome> resolve(String? eventId) async {
+    if (eventId == null) return LegOutcome.notConfigured;
+    final update = _update(eventId, const {
+      'status': 'resolved',
+      'resolvedBy': 'user',
+    });
+    return _confirmed(update);
   }
 
   /// Records that an armed SOS was stopped before anything happened.

@@ -40,8 +40,19 @@ String armingAnnouncement(int secondsLeft, {String? contactName}) {
 
 /// Said once when the countdown starts, so the user knows cancelling is
 /// possible at all.
-const String kArmingHint =
-    'Say cancel, or touch the screen anywhere, to stop this.';
+///
+/// Two sentences, so "cancel" ends one. Said as one sentence - "Say cancel,
+/// or touch the screen anywhere, to stop this." - both "cancel" and "stop"
+/// had more of the app's sentence after them, so a partial "cancel" or
+/// "stop" might still have been the app talking and was not acted on until
+/// the phrase ended. By then the three seconds were up.
+const List<String> kArmingHintLines = [
+  'Say cancel.',
+  'Or touch the screen anywhere.',
+];
+
+/// [kArmingHintLines] as one line, for the screen reader.
+final String kArmingHint = kArmingHintLines.join(' ');
 
 const String kCancelledAnnouncement =
     'Cancelled. Nothing was sent and nobody was called.';

@@ -72,30 +72,47 @@ class Detection {
     return extent * (1.0 + centrality) * riskWeight(label);
   }
 
-  String get phrase => switch (proximity) {
-        Proximity.veryClose => direction == 'ahead' && canBeHazard(label)
-            ? 'Stop. $label right in front of you'
-            : '$label very close $direction',
-        Proximity.close => '$label close, $direction',
-        Proximity.far => '$label $direction',
+  String get phrase => label == kStairsLabel
+      ? _stairsPhrase
+      : switch (proximity) {
+          Proximity.veryClose => direction == 'ahead' && canBeHazard(label)
+              ? 'Stop. $label right in front of you'
+              : '$label very close $direction',
+          Proximity.close => '$label close, $direction',
+          Proximity.far => '$label $direction',
+        };
+
+  /// "Stop. Stairs ahead." when they fill the view ahead and the model is
+  /// sure enough to stop someone for; otherwise named, with where.
+  String get _stairsPhrase => switch (proximity) {
+        Proximity.veryClose when direction == 'ahead' && isUrgentStairs =>
+          kStairsAhead,
+        Proximity.veryClose => 'Stairs very close, $direction',
+        Proximity.close =>
+          direction == 'ahead' ? 'Stairs ahead, close' : 'Stairs close, $direction',
+        Proximity.far => 'Stairs $direction',
       };
+
+  /// Stairs the model is sure of, where a "Stop" is allowed - see
+  /// [stairsMayStop].
+  bool get isUrgentStairs =>
+      label == kStairsLabel && stairsMayStop && score >= kStairsHard;
 }
 
-/// One analysed camera frame: the objects in it, and the floor under them.
+/// One analysed camera frame: the objects in it - stairs among them, from
+/// their own model - and anything in the way that has no name.
 ///
-/// One value rather than two arguments, because it is one observation: a
-/// caller should not be able to pair up an earlier frame's stairs with this
+/// One value rather than separate arguments, because it is one observation:
+/// a caller should not be able to pair up an earlier frame's depth with this
 /// frame's chair.
 class ScanFrame {
   const ScanFrame({
     required this.detections,
-    this.stairs = StairsReading.none,
     this.depth = DepthReading.none,
     this.notice,
   });
 
   final List<Detection> detections;
-  final StairsReading stairs;
 
   /// Something in the way that has no name - see `depth.dart`.
   final DepthReading depth;
@@ -135,12 +152,11 @@ class Guidance {
 /// is a sentence someone walks into a wall believing.
 const String kNoKnownObjects = 'No known objects in view';
 
-/// Said for stairs, and nothing else is said with it.
+/// Said for stairs that fill the view ahead.
 ///
-/// No direction beyond "ahead", because the heuristic only looks at the lower
-/// centre of the frame; and no "up" or "down", because ascending and
-/// descending treads look identical to one camera and guessing would be worse
-/// than the person finding out with their cane.
+/// No "up" or "down": the model was not trained to tell them apart, and one
+/// camera cannot, and guessing would be worse than the person finding out
+/// with their cane.
 const String kStairsAhead = 'Stop. Stairs ahead.';
 
 /// Confidence below which a detection is noise rather than an object.
@@ -179,22 +195,16 @@ String somethingPhrase(DepthDirection direction) => switch (direction) {
 /// everything in view is what makes these apps unusable — a user walking gets
 /// one useful sentence per few seconds, not an inventory.
 ///
-/// In order: an object urgent in its own right; stairs, when [stairs] is sure
-/// of them, said alone - walking into a chair is a bruise and a missed step is
-/// a fall, but a zebra crossing reads as stairs to the banding heuristic and a
-/// car right in front of someone standing on one has to be named as a car;
-/// something in the way that has no name, when [depth] is sure of it and no
-/// object big enough to be it was named on that side; then the objects.
+/// In order: an object urgent in its own right - stairs among them, weighted
+/// with the cars, because a missed step is a fall; something in the way that
+/// has no name, when [depth] is sure of it and no object big enough to be it
+/// was named on that side; then the objects.
 Guidance guidanceFor(
   List<Detection> detections, {
-  StairsReading stairs = StairsReading.none,
   DepthReading depth = DepthReading.none,
 }) {
   final objects = _objectGuidance(detections);
   if (objects.urgent) return objects;
-  if (stairs.isStairs) {
-    return const Guidance(phrase: kStairsAhead, urgent: true, label: 'stairs');
-  }
   if (depth.isBlocked && !_namedOn(depth.direction, detections)) {
     return Guidance(
       phrase:
@@ -242,10 +252,12 @@ Guidance _objectGuidance(List<Detection> detections) {
   return Guidance(
     phrase: phrase,
     // Never for something held in a hand: a phone at the lens is very close
-    // and not a reason to stop walking.
-    urgent: primary.proximity == Proximity.veryClose &&
-        primary.score >= kUrgentScore &&
-        canBeHazard(primary.label),
+    // and not a reason to stop walking. Stairs have their own, higher bar.
+    urgent: primary.label == kStairsLabel
+        ? primary.proximity == Proximity.veryClose && primary.isUrgentStairs
+        : primary.proximity == Proximity.veryClose &&
+            primary.score >= kUrgentScore &&
+            canBeHazard(primary.label),
     label: primary.label,
   );
 }

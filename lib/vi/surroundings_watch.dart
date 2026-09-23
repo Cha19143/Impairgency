@@ -8,6 +8,7 @@ import '../core/speech/speaker.dart';
 import '../core/vision/detection.dart';
 import '../core/vision/faces.dart';
 import '../core/vision/friend_recognition.dart';
+import '../core/vision/stairs.dart' show kStairsLabel;
 import '../core/voice/voice_commands.dart';
 import '../data/scan_service.dart';
 import 'voice_controller.dart';
@@ -70,6 +71,10 @@ class SurroundingsWatch extends ChangeNotifier {
   FaceWatch? _faceWatch;
   bool _facesReady = false;
 
+  /// Whether the face models have been asked to start: until then, "not
+  /// ready" means the camera is still starting, not that they failed.
+  bool _facesTried = false;
+
   String? _lastPhrase;
   DateTime? _lastSpokenAt;
   bool _disposed = false;
@@ -116,6 +121,7 @@ class SurroundingsWatch extends ChangeNotifier {
       if (_disposed) return;
       final watch = _faceWatch = FaceWatch(onFaces: friends.onFaces);
       _facesReady = await service.watchFaces(watch);
+      _facesTried = true;
       if (_disposed) return;
     }
     await speaker.speak(readyPhrase);
@@ -146,8 +152,7 @@ class SurroundingsWatch extends ChangeNotifier {
     if (notice != null) {
       speaker.announce(notice, priority: SpeechPriority.info);
     }
-    final guidance = guidanceFor(frame.detections,
-        stairs: frame.stairs, depth: frame.depth);
+    final guidance = guidanceFor(frame.detections, depth: frame.depth);
     _show(guidance.phrase);
     // While a friend's face is being taken down, "person ahead" is the friend.
     // Only a hazard interrupts.
@@ -168,15 +173,23 @@ class SurroundingsWatch extends ChangeNotifier {
     _lastSpokenAt = now;
     // A buzz as well as a word: someone in traffic may not hear it.
     if (guidance.urgent) HapticFeedback.heavyImpact();
-    if (guidance.urgent && guidance.label != null) {
+    // Stairs are told to the guardian and kept on the journey whenever they
+    // are said, "Stop" or not: a flight of stairs is worth knowing about.
+    final stairs = guidance.label == kStairsLabel;
+    if ((guidance.urgent || stairs) && guidance.label != null) {
       onObstacle?.call(guidance.label!);
     }
     // Hazards preempt whatever else is being said and are never restarted
     // while still in progress; ordinary descriptions wait their turn. The
-    // queue holds that rule, not this.
+    // queue holds that rule, not this. Stairs short of a "Stop" wait too, but
+    // are not dropped by the next thing said, as a description would be.
     speaker.announce(
       guidance.phrase,
-      priority: guidance.urgent ? SpeechPriority.hazard : SpeechPriority.info,
+      priority: guidance.urgent
+          ? SpeechPriority.hazard
+          : stairs
+              ? SpeechPriority.navigation
+              : SpeechPriority.info,
     );
   }
 
@@ -192,8 +205,44 @@ class SurroundingsWatch extends ChangeNotifier {
         await speaker.speak(friends == null
             ? kFacesOffPhrase
             : !_facesReady
-                ? kFacesUnavailablePhrase
+                ? _facesProblem
                 : friends.whoIsHere());
+        return true;
+      case VoiceCommand.listFriends:
+        final friends = _friends;
+        if (friends == null) return false;
+        await speaker.speak(friends.list());
+        return true;
+      case VoiceCommand.forgetAllFriends:
+        // Here, not app-wide: this screen's recognition holds the faces in
+        // memory, and would go on naming people until it was left.
+        final friends = _friends;
+        final voice = this.voice;
+        if (friends == null || voice == null) return false;
+        final saved = [...friends.friends];
+        if (saved.isEmpty) {
+          await speaker.speak('No one is saved, so nothing changed.');
+          return true;
+        }
+        final answer = await voice.ask('Forget everyone saved? All '
+            '${saved.length} faces will be deleted from this phone. Say yes '
+            'to forget them.');
+        if (answer?.command != VoiceCommand.yes) {
+          await speaker.speak('Nothing was deleted.');
+          return true;
+        }
+        for (final friend in saved) {
+          await friends.remove(friend);
+        }
+        await speaker.speak('Everyone is forgotten.');
+        return true;
+      case VoiceCommand.renameFriend:
+        final friends = _friends;
+        if (friends == null) return false;
+        final parts = renameParts(heard.argument ?? '');
+        await speaker.speak(parts == null
+            ? 'Say rename, their name, to, and the new name.'
+            : await friends.rename(parts.$1, parts.$2));
         return true;
       case VoiceCommand.forgetFriend:
         final friends = _friends;
@@ -228,7 +277,7 @@ class SurroundingsWatch extends ChangeNotifier {
       return;
     }
     if (!_facesReady || watch == null || voice == null) {
-      await speaker.speak(kFacesUnavailablePhrase);
+      await speaker.speak(_facesProblem);
       return;
     }
     final answer = await voice.ask(friendConsentQuestion(name));
@@ -249,6 +298,13 @@ class SurroundingsWatch extends ChangeNotifier {
     notifyListeners();
     await speaker.speak(enrollmentResultPhrase(result, name: name));
   }
+
+  /// Why friends cannot be recognised right now, said as it is.
+  String get _facesProblem => _failed || _refused
+      ? kFacesNoCameraPhrase
+      : !_facesTried
+          ? kFacesStartingPhrase
+          : kFacesModelsMissingPhrase;
 
   @override
   void dispose() {

@@ -51,6 +51,47 @@ hands over one row and never the address book, so no contacts permission is
 requested; the one vendor edge case that needs it is asked for once, at the
 moment it is needed, and explained if refused.
 
+## The record, and how an emergency ends
+
+Every SOS from a signed-in phone leaves one `sos_events` document. It is what a
+guardian's listener picks up, what the dashboard's System health lists, and
+where "it is over" is written.
+
+**Written before the call.** The document is started before the dialler opens,
+under an id chosen then: the dialler puts the app behind the call, and a
+phone dropped or killed during it used to lose the record. Once started, the
+write sits in Firestore's queue on the phone and goes when there is a
+connection; the guardian leg waits up to `guardianBudget` for the server to
+confirm it, and says "waiting for a connection" if it has not.
+
+| Field | Written by | Meaning |
+|---|---|---|
+| `userId` | the phone | whose emergency; never changed afterwards, by anyone |
+| `at` | the server | when it was taken |
+| `cancelled` | the phone | true only for a countdown stopped in time, or a cancel before the call |
+| `stage` | the phone | `before-call` when the alarm had already sounded |
+| `status` | phone, admin | `active` when fired; `resolved` when over |
+| `locationSummary`, `lat`, `lng`, `accuracy` | the phone | the position sentence, and the fix when there was one |
+| `contact`, `contacts` | the phone | who was rung first, and the whole calling order |
+| `resolvedAt` | the server | when it was said to be over |
+| `resolvedBy` | phone, admin | `user` for "I am okay"; an administrator's uid for Mark resolved |
+
+**Ending it.** After the call, the receipt asks: *"If you are all right now,
+say: I am okay."* - when it appears, and again when the app comes back from
+the dialler. "I am okay", "ayos lang", "false alarm", "cancel", or the I'm
+okay button, sets `status: resolved`, `resolvedBy: user`. That is not a
+cancellation: the call happened, and the record says so. The guardian's
+phone replaces "needs help" with "*Ana* says they are okay", once, and the
+card turns green. If the write cannot reach the server, the user is told the
+guardian will hear once the phone has a connection; if it is refused, they
+are told to call. An administrator can mark an emergency resolved from System
+health; the rules let them change those three fields and nothing else.
+
+**What voice cannot do during the call.** The phone call owns the microphone
+on Android and iOS alike, so nothing the user says during it reaches the
+app, and iOS lets no app end a call. Cancel works by voice up to the moment
+the dialler opens; after the call, "I am okay" does the rest.
+
 ## Where each leg actually breaks
 
 ### Location

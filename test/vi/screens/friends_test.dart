@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/speech/speaker.dart';
 import 'package:impairgency/core/vision/detection.dart';
-import 'package:impairgency/core/vision/stairs.dart';
 import 'package:impairgency/core/vision/faces.dart';
 import 'package:impairgency/core/vision/friend_recognition.dart';
 import 'package:impairgency/core/voice/speech_recognizer.dart';
@@ -42,9 +41,8 @@ class FaceScan extends ScanService {
   void Function(ScanFrame)? onFrame;
 
   /// One frame from the camera: these objects, and this floor.
-  void see(List<Detection> detections,
-          {StairsReading stairs = StairsReading.none}) =>
-      onFrame!(ScanFrame(detections: detections, stairs: stairs));
+  void see(List<Detection> detections) =>
+      onFrame!(ScanFrame(detections: detections));
   FaceWatch? watch;
 
   @override
@@ -192,7 +190,7 @@ void main() {
   testWidgets('no face models on this phone: said, not pretended', (tester) async {
     await open(tester, friends: recognition(), modelsLoad: false);
     await say(tester, 'hello friend sam');
-    expect(speaker.words.last, kFacesUnavailablePhrase);
+    expect(speaker.words.last, kFacesModelsMissingPhrase);
   });
 
   testWidgets('who is here, and forgetting', (tester) async {

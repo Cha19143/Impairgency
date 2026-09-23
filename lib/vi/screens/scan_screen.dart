@@ -199,7 +199,8 @@ class _ScanScreenState extends State<ScanScreen> {
                       VoiceMicButton(
                         controller: widget.voice!,
                         only: kScanCommands,
-                        detail: 'Say repeat, where am I, go back, or help',
+                        detail: 'Say repeat, where am I, hello friend and a '
+                            'name, or help',
                       ),
                     if (_watch.refused)
                       const Padding(

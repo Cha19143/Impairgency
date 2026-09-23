@@ -8,7 +8,8 @@
 # suite and still not produce an installable file. A GitHub runner reaches
 # them and already has the SDK on it.
 #
-# Download the APK from the run's Artifacts section. It is signed with the
+# Download the arm64 APK from the run's Artifacts section, for three days.
+# The testers' builds are on the GitHub release. It is signed with the
 # debug keys - see the signingConfig in android/app/build.gradle.kts - so it
 # installs for testing and is not fit for a store.
 name: APK
@@ -56,8 +57,13 @@ jobs:
       - run: flutter build apk --release
       - run: flutter build apk --release --split-per-abi
 
+      # One file, kept three days. Every APK of every run used to be kept for
+      # 90 days - about 145 MB a run - and five runs filled the account's
+      # 500 MB of Actions storage: from September 16 every run failed here,
+      # after everything it exists to check had passed.
       - uses: actions/upload-artifact@v4
         with:
           name: impairgency-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
+          retention-days: 3

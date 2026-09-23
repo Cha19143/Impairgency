@@ -10,7 +10,12 @@ import 'vi_button.dart';
 
 /// What a search found, and from where - or why it found nothing.
 class PlaceSearchResult {
-  const PlaceSearchResult({this.found = const [], this.from, this.problem});
+  const PlaceSearchResult({
+    this.found = const [],
+    this.from,
+    this.problem,
+    this.note,
+  });
 
   final List<PlaceCandidate> found;
 
@@ -19,6 +24,36 @@ class PlaceSearchResult {
 
   /// Said and shown instead of results: no connection, no position.
   final String? problem;
+
+  /// Said before the results: that they were found without a position, or
+  /// from one a few minutes old.
+  final String? note;
+}
+
+/// The most results read out, and offered as buttons.
+const int kSpokenResults = 5;
+
+const List<String> _positions = ['First', 'Second', 'Third', 'Fourth', 'Fifth'];
+
+/// What is said about a search: the problem, or how many were found and
+/// each of them in turn - "3 places found. First, Jollibee, MacArthur
+/// Highway, about 850 metres away. Second, ..." - so nobody has to find the
+/// buttons to know what came back.
+String describeSearchResult(PlaceSearchResult result, String query) {
+  if (result.problem != null) return result.problem!;
+  final found = result.found.take(kSpokenResults).toList();
+  final note = result.note == null ? '' : '${result.note} ';
+  if (found.isEmpty) return '${note}Nothing called $query was found nearby.';
+  final lines = [
+    '$note${found.length == 1 ? 'One place' : '${found.length} places'} '
+        'found for $query.',
+    for (final (i, place) in found.indexed)
+      '${_positions[i]}, ${describeCandidate(place, from: result.from)}',
+    found.length == 1
+        ? 'Say its name to go there.'
+        : 'Say the number or the name.',
+  ];
+  return lines.join(' ');
 }
 
 /// Looks up a place that is not saved: "Jollibee", "Bulacan Medical Center".
@@ -34,6 +69,7 @@ class PlaceSearchPanel extends StatefulWidget {
     required this.onChoose,
     this.chooseDetail = 'Start directions',
     this.onResult,
+    this.onResults,
   });
 
   final Future<PlaceSearchResult> Function(String query) search;
@@ -44,6 +80,12 @@ class PlaceSearchPanel extends StatefulWidget {
 
   /// Told what to say about a result - how many, or what went wrong.
   final void Function(String sentence)? onResult;
+
+  /// Given the results to show them itself. When set, the panel does not
+  /// list them: Smart assistance makes them its main buttons, where they
+  /// used to sit six hundred pixels down, below its saved places, in a
+  /// scrolling box nobody found.
+  final void Function(PlaceSearchResult result)? onResults;
 
   @override
   State<PlaceSearchPanel> createState() => PlaceSearchPanelState();
@@ -100,14 +142,17 @@ class PlaceSearchPanelState extends State<PlaceSearchPanel> {
       _result = result;
       _searched = query;
     });
-    widget.onResult?.call(_summary(result, query));
+    widget.onResults?.call(result);
+    widget.onResult?.call(describeSearchResult(result, query));
   }
 
   static String _summary(PlaceSearchResult result, String query) {
     if (result.problem != null) return result.problem!;
-    final count = result.found.length;
-    if (count == 0) return 'Nothing called $query was found nearby.';
-    return '${count == 1 ? 'One place' : '$count places'} found for $query.';
+    final count = result.found.take(kSpokenResults).length;
+    final note = result.note == null ? '' : '${result.note} ';
+    if (count == 0) return '${note}Nothing called $query was found nearby.';
+    return '$note${count == 1 ? 'One place' : '$count places'} found for '
+        '$query.';
   }
 
   @override
@@ -160,8 +205,8 @@ class PlaceSearchPanelState extends State<PlaceSearchPanel> {
               ),
             ),
           ),
-        if (result != null)
-          for (final place in result.found)
+        if (result != null && widget.onResults == null)
+          for (final place in result.found.take(kSpokenResults))
             ViButton(
               label: place.label,
               detail: '${describeCandidate(place, from: result.from)} '

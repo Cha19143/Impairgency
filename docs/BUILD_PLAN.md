@@ -351,7 +351,9 @@ defensible under §7's own framing.
 Stairs, walls and door detection (§2.A.3) sit between build and substitute. Generic
 object detection covers some of it. **Stairs specifically is a fall risk and should be
 attempted** — a dedicated class, or a floor-plane heuristic, and an honest confidence
-threshold that stays silent rather than guessing.
+threshold that stays silent rather than guessing. *(Round 4: the heuristic was tried
+and retired - it could not tell stairs from a tiled floor - and a dedicated,
+single-class detector replaces it. See [`VISION.md`](VISION.md), "Stairs".)*
 
 ---
 

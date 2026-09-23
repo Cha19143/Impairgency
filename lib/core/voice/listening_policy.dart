@@ -68,11 +68,13 @@ const List<Duration> _failureBackoff = [
 Duration? delayBeforeListening(ListenOutcome outcome,
         {int failuresInARow = 0}) =>
     switch (outcome) {
+      // Short: each window that ends is a moment nothing hears. The
+      // recogniser's own restart takes a few hundred milliseconds on top.
       ListenOutcome.acted ||
       ListenOutcome.nothingHeard ||
       ListenOutcome.notUnderstood ||
       ListenOutcome.cancelled =>
-        const Duration(milliseconds: 250),
+        const Duration(milliseconds: 100),
       ListenOutcome.busy => const Duration(milliseconds: 500),
       ListenOutcome.blocked => null,
       ListenOutcome.network => _networkBackoff[

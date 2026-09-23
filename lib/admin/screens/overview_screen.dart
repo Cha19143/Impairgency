@@ -44,7 +44,8 @@ class OverviewScreen extends StatelessWidget {
                 width: cardWidth,
                 label: 'Active users',
                 value: '${overview.activeUsers}',
-                note: 'with a session in this period',
+                note: 'with a journey, or who shared a position, in this '
+                    'period',
                 icon: Icons.people_outline,
               ),
               AdminStat(
@@ -58,11 +59,11 @@ class OverviewScreen extends StatelessWidget {
                 width: cardWidth,
                 label: 'SOS incidents',
                 value: '${overview.sosIncidents}',
-                // sosFired, so: alerts that went out. Cancelled countdowns
-                // are a different event and are not counted here.
+                // Counted from the SOS records: alerts that went out.
+                // Countdowns cancelled in time are not counted here.
                 note: overview.sosIncidents == 0
                     ? 'none in this period'
-                    : 'alerts sent',
+                    : 'sent - see System health',
                 icon: Icons.emergency_outlined,
                 tone: overview.sosIncidents > 0
                     ? AdminTone.bad
@@ -81,6 +82,13 @@ class OverviewScreen extends StatelessWidget {
             ],
           );
         }),
+        if (overview.sessions == 0) ...[
+          const SizedBox(height: 18),
+          const AdminPanel(
+            title: 'Journeys',
+            child: _Empty(kNoJourneysExplanation),
+          ),
+        ],
         const SizedBox(height: 18),
         LayoutBuilder(builder: (context, constraints) {
           final stacked = constraints.maxWidth < 780;
@@ -133,6 +141,12 @@ class OverviewScreen extends StatelessWidget {
     );
   }
 }
+
+/// Why the journey numbers are blank, rather than a blank.
+const String kNoJourneysExplanation =
+    'No journeys recorded in this period. A journey is recorded when a user '
+    'with history turned on follows directions to a place; users without '
+    'history consent are not recorded.';
 
 String _pretty(String kindName) {
   final kind = SessionEventKind.values

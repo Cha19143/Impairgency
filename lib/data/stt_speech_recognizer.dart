@@ -27,6 +27,9 @@ abstract interface class SpeechBackend {
 
   Future<void> stop();
   Future<void> cancel();
+
+  /// Changes the silence that ends the phrase, while listening.
+  void changePauseFor(Duration pauseFor);
 }
 
 class SpeechToTextBackend implements SpeechBackend {
@@ -59,6 +62,9 @@ class SpeechToTextBackend implements SpeechBackend {
 
   @override
   Future<void> cancel() => _stt.cancel();
+
+  @override
+  void changePauseFor(Duration pauseFor) => _stt.changePauseFor(pauseFor);
 }
 
 /// Time to leave between one listening session ending and the next starting.
@@ -94,6 +100,12 @@ class SttSpeechRecognizer implements SpeechRecognizer {
   String _partial = '';
   void Function(String partial)? _onPartial;
   bool Function(String partial)? _settleOn;
+  void Function()? _onListening;
+
+  /// The silence that ends this window's phrase, once a word has been said.
+  /// Until then it is at least [kStartGrace].
+  Duration _pauseFor = kPauseEndsPhrase;
+  bool _graceOver = false;
 
   /// Which session is current. Results carry theirs; status and error
   /// callbacks cannot, so they are only believed once the current session
@@ -161,8 +173,10 @@ class SttSpeechRecognizer implements SpeechRecognizer {
   Future<VoiceHearing> listen({
     Duration listenFor = kListenWindow,
     Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
     void Function(String partial)? onPartial,
     bool Function(String partial)? settleOn,
+    void Function()? onListening,
   }) async {
     if (!_initialised) {
       final readiness = await prepare();
@@ -180,13 +194,22 @@ class SttSpeechRecognizer implements SpeechRecognizer {
     _partial = '';
     _onPartial = onPartial;
     _settleOn = settleOn;
+    _onListening = onListening;
     _retried = false;
+    _pauseFor = pauseFor;
+    _graceOver = pauseFor >= kStartGrace;
     _options = SpeechListenOptions(
       listenFor: listenFor,
-      pauseFor: pauseFor,
+      // The plugin starts counting silence when the microphone opens. Whoever
+      // takes two seconds to begin - after "say the email address", say -
+      // lost the window before a word. Longer until the first word.
+      pauseFor: _graceOver ? pauseFor : kStartGrace,
       partialResults: true,
       cancelOnError: true,
-      listenMode: ListenMode.confirmation,
+      // iOS's dictation hint expects pauses and longer speech.
+      listenMode: kind == ListenKind.dictation
+          ? ListenMode.dictation
+          : ListenMode.confirmation,
     );
     await _start();
 
@@ -226,6 +249,13 @@ class SttSpeechRecognizer implements SpeechRecognizer {
     if (generation != _generation) return;
     _started = true;
     _partial = result.recognizedWords;
+    if (!_graceOver && _partial.trim().isNotEmpty) {
+      // Talking has started: from here the window's own silence rule.
+      _graceOver = true;
+      try {
+        _backend.changePauseFor(_pauseFor);
+      } catch (_) {}
+    }
     _onPartial?.call(_partial);
     if (result.finalResult) {
       _settle(_fromWords(_partial));
@@ -244,6 +274,8 @@ class SttSpeechRecognizer implements SpeechRecognizer {
   void _onStatus(String status) {
     if (status == SpeechToText.listeningStatus) {
       _started = true;
+      _onListening?.call();
+      _onListening = null;
       return;
     }
     // A "done" before this session has said it is listening is the previous

@@ -149,4 +149,16 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('FREQUENTLY VISITED PLACES'), findsOneWidget);
   });
+
+  testWidgets('with no journeys, says why rather than showing a blank',
+      (tester) async {
+    await pump(tester, overview(sessions: 0, places: const [], detections: const []));
+    expect(find.text(kNoJourneysExplanation), findsOneWidget);
+    expect(find.text('3'), findsOneWidget, reason: 'SOS are still counted');
+  });
+
+  testWidgets('with journeys, no explanation is needed', (tester) async {
+    await pump(tester, overview());
+    expect(find.text(kNoJourneysExplanation), findsNothing);
+  });
 }

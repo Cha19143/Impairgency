@@ -44,6 +44,8 @@ class Harness {
     this.dialThrows = false,
     this.writeThrows = false,
     this.writeHangs = false,
+    this.updateThrows = false,
+    this.updateHangs = false,
     LocationSource? location,
   }) : location = location ?? const FixedLocation(LocationAvailability.denied);
 
@@ -51,10 +53,16 @@ class Harness {
   final bool dialThrows;
   final bool writeThrows;
   final bool writeHangs;
+  final bool updateThrows;
+  final bool updateHangs;
   final LocationSource location;
   final speaker = RecordingSpeaker();
   final dialled = <Uri>[];
   final written = <Map<String, Object?>>[];
+  final updated = <String, Map<String, Object?>>{};
+
+  /// 'write' and 'dial', in the order they started.
+  final order = <String>[];
 
   late final engine = SosEngine(
     speaker: speaker,
@@ -62,15 +70,23 @@ class Harness {
     locationBudget: Duration.zero,
     guardianBudget: const Duration(milliseconds: 50),
     dial: (uri) async {
+      order.add('dial');
       if (dialThrows) throw StateError('no dialler');
       dialled.add(uri);
       return dialResult;
     },
     writeEvent: (event) async {
+      order.add('write');
       if (writeThrows) throw StateError('permission denied');
       if (writeHangs) await Completer<void>().future;
       written.add(event);
     },
+    updateEvent: (id, fields) async {
+      if (updateThrows) throw StateError('permission denied');
+      if (updateHangs) await Completer<void>().future;
+      updated[id] = fields;
+    },
+    newEventId: () => 'e1',
   );
 }
 
@@ -272,6 +288,86 @@ void main() {
       expect(event['lat'], 14.6);
       expect((event['contact'] as Map)['number'], '0917');
       expect(event['locationSummary'], 'Your location was sent.');
+    });
+  });
+
+  group('the record, before the call', () {
+    // The dialler puts the app behind the call. Written after it, the record
+    // was lost whenever the phone was dropped or the app killed mid-call.
+    test('is started before the dialler opens, under a known id', () async {
+      final h = Harness();
+      final receipt = await h.engine.fire(
+          userId: 'u1',
+          contacts: const [EmergencyContact(name: 'Mum', number: '0917')],
+          guardianCount: 0);
+      expect(h.order, ['write', 'dial']);
+      expect(h.written.single['eventId'], 'e1');
+      expect(h.written.single['status'], 'active');
+      expect(receipt.eventId, 'e1');
+    });
+
+    test('with guardians too, and the call does not wait for the server',
+        () async {
+      final h = Harness(writeHangs: true);
+      final receipt = await h.engine.fire(
+          userId: 'u1',
+          contacts: const [EmergencyContact(name: 'Mum', number: '0917')],
+          guardianCount: 1);
+      expect(h.order, ['write', 'dial']);
+      expect(h.dialled, hasLength(1));
+      expect(receipt.of(SosLeg.guardians)!.outcome, LegOutcome.pending);
+    });
+
+    test('a refused write with no guardian does not take the SOS down',
+        () async {
+      final h = Harness(writeThrows: true);
+      final receipt = await h.engine.fire(
+          userId: 'u1',
+          contacts: const [EmergencyContact(name: 'Mum', number: '0917')],
+          guardianCount: 0);
+      expect(h.dialled, hasLength(1));
+      expect(receipt.of(SosLeg.guardians)!.outcome, LegOutcome.notConfigured);
+    });
+
+    test('nobody signed in: no record, no id', () async {
+      final h = Harness();
+      final receipt = await h.engine.fire(userId: null, guardianCount: 1);
+      expect(h.order, isNot(contains('write')));
+      expect(receipt.eventId, isNull);
+    });
+
+    test('a receipt keeps its id when the next contact is rung', () async {
+      final h = Harness();
+      final receipt = await h.engine.fire(userId: 'u1', guardianCount: 0);
+      final more = receipt.withCall(const LegResult(SosLeg.call, LegOutcome.done));
+      expect(more.eventId, 'e1');
+    });
+  });
+
+  group('"I am okay" after the call', () {
+    // Not a cancellation: a call was made. The record says it is over, and
+    // who said so.
+    test('marks the record resolved, by the user', () async {
+      final h = Harness();
+      expect(await h.engine.resolve('e1'), LegOutcome.done);
+      expect(h.updated['e1'], {'status': 'resolved', 'resolvedBy': 'user'});
+    });
+
+    test('offline, it is pending, not failed', () async {
+      final h = Harness(updateHangs: true);
+      expect(await h.engine.resolve('e1').timeout(const Duration(seconds: 2)),
+          LegOutcome.pending);
+    });
+
+    test('refused, it is failed', () async {
+      final h = Harness(updateThrows: true);
+      expect(await h.engine.resolve('e1'), LegOutcome.failed);
+    });
+
+    test('with no record there is nothing to resolve', () async {
+      final h = Harness();
+      expect(await h.engine.resolve(null), LegOutcome.notConfigured);
+      expect(h.updated, isEmpty);
     });
   });
 

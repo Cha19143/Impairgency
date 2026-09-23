@@ -269,8 +269,16 @@ service cloud.firestore {
                     && request.resource.data.userId == request.auth.uid;
 
       // Legs are appended by the Cloud Function that performs them, and by the
-      // owner cancelling. Nobody else edits an emergency record.
-      allow update: if signedIn() && resource.data.userId == request.auth.uid;
+      // owner cancelling or saying "I am okay" after the call. An
+      // administrator may mark it resolved - those three fields, nothing
+      // else. Nobody moves an emergency onto someone else.
+      allow update: if signedIn()
+                    && request.resource.data.userId == resource.data.userId
+                    && (resource.data.userId == request.auth.uid
+                        || (isAdmin()
+                            && request.resource.data.diff(resource.data)
+                                 .affectedKeys()
+                                 .hasOnly(['resolvedAt', 'resolvedBy', 'status'])));
       allow delete: if false;
     }
 

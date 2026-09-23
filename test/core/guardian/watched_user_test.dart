@@ -116,6 +116,30 @@ void main() {
       );
     });
 
+    test('says when they said they are okay', () {
+      expect(
+        describeLastSos(
+            WatchedUser(
+                uid: 'u',
+                lastSos: now.subtract(const Duration(minutes: 5)),
+                lastSosResolvedAt: now.subtract(const Duration(minutes: 2)),
+                lastSosResolvedByUser: true),
+            now: now),
+        'Called for help 5 minutes ago, then said they are okay 2 minutes '
+            'ago.',
+      );
+      expect(
+        describeLastSos(
+            WatchedUser(
+                uid: 'u',
+                lastSos: now.subtract(const Duration(minutes: 5)),
+                lastSosResolvedAt: now.subtract(const Duration(minutes: 2))),
+            now: now),
+        'Called for help 5 minutes ago. An administrator marked it resolved '
+            '2 minutes ago.',
+      );
+    });
+
     test('is silent about one from days ago', () {
       expect(
         describeLastSos(

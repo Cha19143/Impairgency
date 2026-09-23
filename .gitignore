@@ -70,3 +70,6 @@ test/e2e/playwright-report/
 # MiDaS v2.1 small for the depth device check (66 MB, MIT). Not committed:
 # see docs/VISION.md, "Depth".
 assets/models/model_opt.tflite
+
+# tool/build_depth_check.sh puts it back when the build ends.
+pubspec.yaml.depth-check-backup

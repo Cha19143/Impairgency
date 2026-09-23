@@ -57,8 +57,12 @@ class YuvFrame {
   /// [rgbAt], written straight into [out] at [at] as `value * scale + shift`,
   /// with nothing allocated: a face crop reads twenty-five thousand pixels,
   /// a few times a second. False, and nothing written, outside the frame.
+  ///
+  /// [stride] is how far apart the three values go: 1 for red, green, blue
+  /// side by side, a whole plane for a model that takes all of red, then all
+  /// of green, then all of blue.
   bool writeRgb(double x, double y, Float32List out, int at,
-      {required double scale, required double shift}) {
+      {required double scale, required double shift, int stride = 1}) {
     final source = _source(x, y);
     if (source < 0) return false;
     final sx = source % width;
@@ -72,10 +76,11 @@ class YuvFrame {
             : (uvIndex < v.length ? v[uvIndex] : 128)) -
         128.0;
     out[at] = (luma + 1.402 * cr).clamp(0.0, 255.0) * scale + shift;
-    out[at + 1] =
+    out[at + stride] =
         (luma - 0.344136 * cb - 0.714136 * cr).clamp(0.0, 255.0) * scale +
             shift;
-    out[at + 2] = (luma + 1.772 * cb).clamp(0.0, 255.0) * scale + shift;
+    out[at + 2 * stride] =
+        (luma + 1.772 * cb).clamp(0.0, 255.0) * scale + shift;
     return true;
   }
 

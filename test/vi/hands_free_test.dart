@@ -53,7 +53,8 @@ void main() {
     c.attach(const VoiceScope());
     await pumpEventQueue();
     await windows.hear(const Heard('did you remember the bread'));
-    expect(speaker.said, isEmpty);
+    expect(speaker.said, [kHandsFreeListening],
+        reason: 'only that it is listening, once');
     c.handsFree = false;
     await pumpEventQueue();
   });
@@ -101,7 +102,8 @@ void main() {
     await windows.hear(const Heard('clinic'));
     expect(names, ['clinic']);
 
-    await windows.hear(const Heard('tulong get me home'));
+    // Short, as help is in a window the app opened by itself.
+    await windows.hear(const Heard('tulong po'));
     expect(names, ['clinic'], reason: 'not asked');
     expect(c.lastCommand, VoiceCommand.help);
     expect(routes, [Routes.sos]);
@@ -264,5 +266,85 @@ void main() {
     expect(handled, [VoiceCommand.next]);
     c.handsFree = false;
     await pumpEventQueue();
+  });
+
+  group('round 4', () {
+    test('says once that it is listening, not on every window', () async {
+      final windows = OpenWindows();
+      final speaker = Recording();
+      final c = controller(windows, speaker)..handsFree = true;
+      c.attach(const VoiceScope());
+      await pumpEventQueue();
+      await windows.hear(const NotHeard(VoiceInputFailure.nothingHeard));
+      c.routeChanged(Routes.settings);
+      await pumpEventQueue();
+      expect(speaker.said.where((s) => s == kHandsFreeListening), hasLength(1));
+      c.handsFree = false;
+      await pumpEventQueue();
+    });
+
+    test('an instructed phrase is heard, though the app just said it',
+        () async {
+      // "Say fill in" took "fill in" out of the user's own "fill in".
+      final engine = HeldEngine();
+      final queue = SpeechQueue(engine: engine, lineGap: Duration.zero);
+      final windows = OpenWindows();
+      final routes = <String>[];
+      final c = controller(windows, queue, routes: routes)..handsFree = true;
+      c.attach(const VoiceScope());
+      await pumpEventQueue();
+
+      unawaited(queue.speak('Say scan, read, take me to a place, or help.'));
+      await pumpEventQueue();
+      await windows.hear(const Heard('scan'));
+      engine.finish();
+      engine.finish();
+      await pumpEventQueue();
+      expect(routes, [Routes.scan]);
+      c.handsFree = false;
+      await pumpEventQueue();
+    });
+
+    test('a microphone that failed is tried again on the next screen',
+        () async {
+      final windows = OpenWindows();
+      final c = controller(windows, Recording())..handsFree = true;
+      c.routeChanged(Routes.home);
+      c.attach(const VoiceScope());
+      await pumpEventQueue();
+      for (var i = 0; i < 5; i++) {
+        await windows.hear(const NotHeard(VoiceInputFailure.failed));
+      }
+      expect(c.isHandsFreeActive, isFalse);
+
+      c.routeChanged(Routes.settings);
+      c.attach(const VoiceScope());
+      await pumpEventQueue();
+      expect(windows.open, isTrue, reason: 'given another chance');
+      c.handsFree = false;
+      await pumpEventQueue();
+    });
+
+    test('a refused microphone is not asked again on every screen, only on '
+        'coming back to the app', () async {
+      final windows =
+          OpenWindows(readiness: RecognizerReadiness.microphoneBlocked);
+      final speaker = Recording();
+      final c = controller(windows, speaker)..handsFree = true;
+      c.routeChanged(Routes.home);
+      c.attach(const VoiceScope());
+      await pumpEventQueue();
+      c.routeChanged(Routes.settings);
+      c.attach(const VoiceScope());
+      await pumpEventQueue();
+      expect(speaker.said.where((s) => s.contains('blocked')), hasLength(1));
+
+      c.setForeground(false);
+      c.setForeground(true);
+      await pumpEventQueue();
+      expect(speaker.said.where((s) => s.contains('blocked')), hasLength(2));
+      c.handsFree = false;
+      await pumpEventQueue();
+    });
   });
 }

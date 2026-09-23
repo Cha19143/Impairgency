@@ -198,6 +198,68 @@ Hands-free stays on. Keep the phone on the table, screen up, for 1 to 4.
    after that the call is the phone's, and it is hung up with the phone's own
    button.
 
+## Round 4 — voice only, start to finish (8 min)
+
+Each of these is done without touching the screen, on the Android phone,
+hands-free on. They are also the testers' checklist for this round.
+
+**SOS**
+
+1. Say *"help"*. Over the countdown say *"stop"* before it reaches 2: *"Cancelled.
+   Nothing was sent and nobody was called."* Again with *"cancel"*. **Say:**
+   the hint is two sentences now, so "cancel" is the end of one and is acted on
+   the moment it is heard.
+2. Say *"help"* and stay silent. The alarm, then the dialler. End the call on
+   the phone. The receipt is read, then *"If you are all right now, say: I am
+   okay."* Say *"I am okay"*: *"Okay. Your guardian will be told you are all
+   right."* The guardian's phone shows *"… says they are okay"*; the dashboard
+   row reads *Resolved by user*.
+3. On Settings, say *"emergency contacts"*: the contacts open, no SOS. With
+   hands-free on, say *"I need help finding the settings"*: nothing. Tap the
+   microphone and say *"help"*: the countdown starts.
+
+**The dashboard** (a browser)
+
+4. After (2), System health: *Emergencies 1*, a row with the time, the user,
+   the position and a map link, who was called, and its status. Fire another
+   and click *Mark resolved*: *Resolved by admin*. Every sidebar entry shows
+   numbers or says why it has none; the console links open in a new tab.
+
+**Voice**
+
+5. Fresh install: Welcome is read. Say *"create an account"*: the form opens.
+   *"Fill in"* - *"Say the email address"* and a buzz. *"My email is j d e x
+   at gmail dot com"* - read back letter by letter - *"done"* - *"Email
+   address kept."*
+6. *"Fill in"*, *"ana at yahoo"*, *"add dot com"*, *"delete last word"*,
+   *"spell it"*, *"c o m"*, *"done"*: kept as ana@yahoo.com. An address with
+   no dot is not kept.
+7. *"Navigat for me"* opens smart assistance. *"Arround here"* once: *"I heard
+   …, you can say …"*; again within 20 seconds: silence.
+8. On Settings, *"turn off hands-free voice"*: off, and said. Tap the
+   microphone, *"turn on hands-free"*: on.
+
+**Smart assistance**
+
+9. *"Find Jollibee"*: *"2 places found for Jollibee. First, … Second, …"*.
+   *"Number two"*: directions start. Indoors with no fix, results still come,
+   with *"Searching without your position"*.
+10. Outside, walk a route: the summary, *"In 40 metres, turn left"*, *"Now,
+    turn left"*, *"Keep going …"* on the long stretch, *"You have arrived"*.
+    Stand still for 40 seconds: no *"lost your position"*.
+
+**Scan and friends**
+
+11. On the home screen, *"hello friend Sam"*: Scan opens, Sam is asked, and
+    *"One. Two. … Five. Saved Sam."* Sam walks up: *"Your friend Sam is
+    approaching."* *"Who do I know"*: *"You have saved one person: Sam."*
+    *"Rename Sam to Samuel"*, then *"forget Samuel"* and *"yes"*.
+12. In a build with the stairs model (the `fadb8f0` APKs do not have it):
+    walk towards a staircase - *"Stairs ahead, close"*, never *"Stop"*. A
+    tiled floor, a striped rug and a zebra crossing: nothing, though about
+    one crossing in ten is taken for stairs. Note every miss and every false
+    alarm for [`VISION.md`](VISION.md).
+
 ---
 
 ## If something fails live

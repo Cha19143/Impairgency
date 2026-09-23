@@ -18,6 +18,7 @@ class PeopleScreen extends StatefulWidget {
     required this.onForget,
     required this.onForgetEveryone,
     required this.onBack,
+    this.onRename,
     this.consented = true,
     this.speaker = const SilentSpeaker(),
   });
@@ -26,6 +27,9 @@ class PeopleScreen extends StatefulWidget {
   final Future<void> Function(Friend friend) onForget;
   final Future<void> Function() onForgetEveryone;
   final VoidCallback onBack;
+
+  /// Gives a saved friend another name. Returns what to say. Null hides it.
+  final Future<String> Function(Friend friend, String name)? onRename;
 
   /// Whether recognition is on. Off, there is nobody to show - turning it
   /// off deleted them - and the screen says how to turn it on.
@@ -70,6 +74,38 @@ class _PeopleScreenState extends State<PeopleScreen> {
     await _tell('Everyone is forgotten.');
   }
 
+  Future<void> _rename(Friend friend) async {
+    final field = TextEditingController(text: friend.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Rename ${friend.name}'),
+        content: TextField(
+          controller: field,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          style: const TextStyle(fontSize: 20),
+          decoration: const InputDecoration(labelText: 'New name'),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(fontSize: 18)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(field.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    field.dispose();
+    final rename = widget.onRename;
+    if (name == null || name.trim().isEmpty || rename == null) return;
+    await _tell(await rename(friend, name.trim()));
+  }
+
   Future<void> _tell(String text) async {
     if (!mounted) return;
     setState(() => _notice = text);
@@ -102,7 +138,15 @@ class _PeopleScreenState extends State<PeopleScreen> {
       extra: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final friend in friends)
+          for (final friend in friends) ...[
+            if (widget.onRename != null)
+              ViButton(
+                label: 'Rename ${friend.name}',
+                detail: 'Changes the name said when they are near',
+                icon: Icons.drive_file_rename_outline,
+                kind: ViButtonKind.secondary,
+                onPressed: () => _rename(friend),
+              ),
             ViButton(
               label: 'Forget ${friend.name}',
               detail: 'Deletes their saved face from this phone',
@@ -110,6 +154,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
               kind: ViButtonKind.secondary,
               onPressed: () => _forget(friend),
             ),
+          ],
           if (_notice != null)
             Semantics(
               liveRegion: true,

@@ -67,7 +67,7 @@ class _SosCountdownScreenState extends State<SosCountdownScreen> {
     super.initState();
     unawaited(widget.speaker.speakLines([
       armingAnnouncement(_secondsLeft, contactName: widget.contactName),
-      kArmingHint,
+      ...kArmingHintLines,
     ]).then((_) => _hintSaid = true));
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
