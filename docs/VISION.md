@@ -205,12 +205,12 @@ after that - ranking, "close" and "very close", the guardian's feed, the
 journey record - treats stairs as one more object.
 
 **Trained on 2026-09-23, and it names stairs; it does not say "Stop".** On
-photographs it never trained on, it finds about half the stairs close
-enough to matter and names stairs on 5% of photographs that have none -
-short of what a "Stop" needs (below, "The gate"). Its worst mistake is the
-zebra crossing: a quarter of them. A build without
-`assets/models/yolo11n_stairs.tflite` runs as before and says nothing about
-stairs.
+photographs it never trained on, it finds 56% of the stairs close enough to
+matter and names stairs on 5% of photographs that have none - short of what
+a "Stop" needs (below, "The gate"). Trained a second time with crossings
+among its negatives, it takes about one zebra crossing in ten for stairs,
+down from a quarter. A build without `assets/models/yolo11n_stairs.tflite`
+runs as before and says nothing about stairs.
 
 ## Why not the heuristic
 
@@ -231,22 +231,30 @@ every tester build, and is gone; its history is in PR #74.
   when the script runs). Crowds of stairs in one box and pictures of stairs
   are left out. That leaves **2,478** images, every one the train split has.
 - **Negatives**, with empty label files: photographs taken on the phones the
-  app runs on (`--negatives`), and Open Images validation images with a
-  chosen human-checked label and no Stairs box (`--negative-label`). The
-  first run had no phone photographs; it took all **488** validation images
-  labelled floor, tile, carpet, walkway or sidewalk.
+  app runs on (`--negatives`); Open Images validation images with a chosen
+  human-checked label and no Stairs box (`--negative-label`); and train
+  images by their machine-generated labels (`--machine-negative-label`).
+  There are no phone photographs yet. The model took all **490** validation
+  images labelled floor, tile, carpet, walkway or sidewalk, and **172** by
+  machine label: 58 zebra or pedestrian crossings, 110 hardwood floors, 3
+  rugs and 3 tiled floors.
 - **Licences**: Open Images annotations are CC BY 4.0 and its images are
   listed as CC BY 2.0, as for the evaluation set above. `SOURCES.txt` lists
   every image with its id, for the attribution.
 
-Split by a hash of the image id: 2,693 for training (446 negatives), 273
-for validation (42). About 940 MB, under `build/`.
+Split by a hash of the image id: 2,846 for training (599 negatives), 294
+for validation (63). About 980 MB, under `build/`.
 
-**No zebra crossings, rugs or tiled floors among the negatives.** Open
-Images has those labels, but its human-checked labels have not one of them
-in the validation or test split, so the two cases the old heuristic failed
-on are the two the model was not shown. Phone photographs of them, passed
-with `--negatives`, are how to add them.
+**Crossings, rugs and tiled floors come from machine labels.** Open Images
+has those labels, but its human-checked labels have not one of them in the
+validation or test split - so the first model, trained without them, was
+never shown the two cases the old heuristic failed on, and took a quarter of
+zebra crossings for stairs. Its machine-generated labels for the train split
+(a 7.35 GB list) have them: photographs labelled so at 0.7 or more, with any
+photograph where a box or a machine label (0.3) says stairs left out. Two
+were looked at: a street zebra crossing, and a striped plaza pavement.
+There were few rugs and tiled floors even there; phone photographs, passed
+with `--negatives`, are how to add more.
 
 Open Images labels no direction, so the model learns "stairs", never up or
 down.
@@ -271,14 +279,15 @@ float32 weights in float16 by itself.
 
 | | |
 |---|---|
-| File | `assets/models/yolo11n_stairs.tflite`, 10,568,442 bytes |
-| SHA-256 | `0840fcbc054ac4ca33bf444d7eff22f73714a39930b19c81338ef2a72b72ba21` |
+| File | `assets/models/yolo11n_stairs.tflite`, 10,568,441 bytes |
+| SHA-256 | `ebf8d4df1122899ae8a4e04f19ef789c74118beed1887aca500c8b86b126e930` |
 | Shapes | `[1, 3, 416, 416]` float32 in, `[1, 5, 3549]` out |
 | Open Images class | `/m/01lynh`, "Stairs" |
-| Images | 2,478 with stairs, 488 without |
+| Images | 2,478 with stairs, 662 without |
 | Started from | `yolo11n.pt`, SHA-256 `0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1` |
-| Trained | 2026-09-23 on this Mac's GPU (Apple M5 Pro, `device=mps`): 60 epochs in 36 minutes. Ultralytics 8.4.159, PyTorch 2.13, litert-torch 0.9.4, Python 3.13 |
-| Kept | epoch 58: mAP50 0.633, mAP50-95 0.422 on the 273 photographs held back from training |
+| Trained | 2026-09-23 on this Mac's GPU (Apple M5 Pro, `device=mps`): 60 epochs in 37 minutes. Ultralytics 8.4.159, PyTorch 2.13, litert-torch 0.9.4, Python 3.13 |
+| Kept | epoch 60: mAP50 0.625, mAP50-95 0.412 on the 294 photographs held back from training |
+| Before it | the first model, `8b10561`, without the 172 machine-labelled negatives: SHA-256 `0840fcbc…b72ba21` |
 
 Trained on Open Images V7 annotations, © Google LLC, CC BY 4.0.
 
@@ -296,8 +305,8 @@ Trained on Open Images V7 annotations, © Google LLC, CC BY 4.0.
 
 ## What it says
 
-- Below **0.55** (`kStairsSoft`), nothing. It was 0.35 until the model was
-  measured: there it named stairs on 9% of photographs with none.
+- Below **0.45** (`kStairsSoft`), nothing. It was 0.35 until the model was
+  measured: there it names stairs on 8% of photographs with none.
 - Otherwise named, with where: *"Stairs on your right"*, *"Stairs ahead,
   close"*, *"Stairs close, on your left"*. At navigation priority, so the next
   description does not drop it; told to the guardian as "Obstacle: stairs" and
@@ -337,29 +346,33 @@ stripes of a model airport.
 
 | score ≥ | close+ recall | all recall | negatives, close+ | negatives named at all |
 |---|---|---|---|---|
-| 0.35 | 57% | 54% | 44/598, 7% | 51/598, 9% |
-| 0.45 | 53% | 50% | 34/598, 6% | 37/598, 6% |
-| **0.55** | **49%** | 45% | 27/598, 5% | **29/598, 5%** |
-| 0.65 | 46% | 41% | 16/598, 3% | 16/598, 3% |
+| 0.35 | 58% | 55% | 38/598, 6% | 46/598, 8% |
+| **0.45** | **56%** | 53% | 27/598, 5% | **29/598, 5%** |
+| 0.55 | 49% | 47% | 20/598, 3% | 22/598, 4% |
+| 0.65 | 46% | 44% | 18/598, 3% | 19/598, 3% |
 
-Named at all at 0.55, by what the photograph shows (one photograph can show
-two): floor 8 of 306, hardwood 6 of 88, wood flooring 3 of 51, carpet 2 of
-53, flooring 4 of 49, tile 3 of 46, walkway 1 of 46, sidewalk 1 of 46,
-laminate 1 of 40 - and **zebra crossings 5 of 19, pedestrian crossings 5 of
-26, rugs 5 of 26**. Every zebra crossing named at 0.35 is still named at
-0.55: the model is sure of them, so no threshold removes them. Crossings and
-rugs in training would; phone photographs of them with `--negatives`, or
-Open Images' machine labels for its train split (a 7.35 GB list), are where
-they would come from.
+Named at all at 0.45, by what the photograph shows (one photograph can show
+two): floor 11 of 306, hardwood 4 of 88, wood flooring 3 of 51, carpet 4 of
+53, flooring 4 of 49, tile 1 of 46, walkway 3 of 46, sidewalk 0 of 46,
+laminate 2 of 40, **zebra crossings 2 of 19, pedestrian crossings 2 of 26,
+rugs 4 of 26**.
+
+The first model, without the machine-labelled negatives, measured on the
+same photographs: 57%, 53%, 49% and 46% close+ recall at the four scores,
+and 51, 37, 29 and 16 negatives named - 5 of the 19 zebra crossings, 5 of
+the 26 pedestrian crossings and 5 of the 26 rugs at 0.55, and every zebra
+crossing it named at 0.35 still named at 0.55. The second finds as much or
+more at every score, with fewer false alarms up to 0.55.
 
 **"Stop" is turned on only if**, at 0.55, stairs close or nearer are found at
 least **70%** of the time and at most **5%** of the negatives fire (a stairs
-box close or nearer). **The first model does not pass:** 49%, with 27 of 598
-negatives firing. It ships named-only, with `STAIRS_STOP` off.
+box close or nearer). **Neither model passes:** 49%, with 20 of 598
+negatives firing for the second. It ships named-only, with `STAIRS_STOP`
+off.
 
-**The named tier moved from 0.35 to 0.55**, by a rule set before the numbers
-were read: the lowest score at which at most 5% of the negatives are named
-at all. It costs eight points of close recall.
+**The named tier is 0.45**, by a rule set before the first numbers were
+read: the lowest score at which at most 5% of the negatives are named at
+all. For the first model that was 0.55.
 
 These are per photograph. Walking, the app looks twice a second, so a
 staircase approached for a few seconds has several chances to be found - and

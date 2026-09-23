@@ -69,11 +69,11 @@ PAIRS = {
 BANDS = [('very close (>0.55)', 0.55), ('close (0.30-0.55)', 0.30),
          ('far (<0.30)', 0.0)]
 
-# The scores the stairs model is measured at. 0.35 is where the named tier
-# started; kStairsSoft and kStairsHard have both been 0.55 since the first
-# measurement (docs/VISION.md, "The gate"); 0.65 is past them.
+# The scores the stairs model is measured at: 0.35, where the named tier
+# started; kStairsSoft, 0.45 since the model trained with crossings as
+# negatives (docs/VISION.md, "The gate"); kStairsHard, 0.55; and past it.
 STAIRS_SCORES = [0.35, 0.45, 0.55, 0.65]
-STAIRS_SOFT = STAIRS_HARD = 0.55
+STAIRS_SOFT, STAIRS_HARD = 0.45, 0.55
 
 
 def band_of(w, h):

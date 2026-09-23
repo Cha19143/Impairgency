@@ -37,15 +37,19 @@ the model files. On release `apk-2026-09-10`, retitled "Android test build
 2026-09-23": `impairgency-fadb8f0-(arm64-)release.apk`, without the stairs
 model.
 
-**The stairs model** was trained the same day on this Mac, from Open Images:
-2,478 photographs of stairs and 488 of floors, 60 epochs in 36 minutes
-(`a1a9ca2` fixed the tools first: the export path, the run folder, the
-camera size the measurement simulates, and negatives it never trained on).
-On photographs it never saw, at 0.55 it finds 49% of close stairs and names
-stairs on 5% of photographs with none, so **"Stop" stays off**, and the
-named tier moved from 0.35 to 0.55. It takes about a quarter of zebra
-crossings for stairs: Open Images has no human-checked crossing to train it
-against. `assets/models/yolo11n_stairs.tflite`, 10.6 MB; hash and table in
+**The stairs model** was trained the same day on this Mac, from Open Images'
+2,478 photographs of stairs (`a1a9ca2` fixed the tools first: the export
+path, the run folder, the camera size the measurement simulates, and
+negatives it never trained on). The first model (`8b10561`) took a quarter
+of zebra crossings for stairs, because Open Images' human-checked labels
+have no crossing to train against; its APKs,
+`impairgency-8b10561-(arm64-)release.apk`, are on the release. Trained again
+with 172 photographs from Open Images' machine labels as negatives, 58 of
+them crossings, it finds 56% of close stairs at 0.45 on photographs neither
+model saw, and names stairs on 5% of photographs with none - about one
+zebra crossing in ten. At 0.55 it finds 49%, short of the 70% "Stop" needs,
+so **"Stop" stays off** and stairs are named from 0.45.
+`assets/models/yolo11n_stairs.tflite`, 10.6 MB; hash and table in
 [`docs/VISION.md`](docs/VISION.md), "Stairs".
 
 ## Waiting on someone
@@ -53,13 +57,18 @@ against. `assets/models/yolo11n_stairs.tflite`, 10.6 MB; hash and table in
 - **Merge PR #87.** Its CI fails only at the artifact upload: the
   account's Actions storage (500 MB) is full with five APK artifacts of
   about 145 MB each, and every run since September 16 has failed there.
-  Analyze, the tests and both APK builds pass. Delete the old artifacts, or
-  have the workflow keep less (only the arm64 APK, a `retention-days`).
-- **A tester APK with the stairs model**: built, not uploaded - asks first.
-- **Crossings for the stairs model**: phone photographs of zebra crossings,
-  tiled floors and rugs (`tool/fetch_stairs.py --negatives <folder>`), or
-  Open Images' train-split machine labels (a 7.35 GB list); then train again
-  (about 40 minutes) and measure.
+  Analyze, the tests and both APK builds pass. `5dba0a5` makes each run keep
+  only the arm64 APK, for three days. The five old artifacts are Dex's to
+  delete, and GitHub recounts every 6 to 12 hours:
+
+  ```bash
+  gh api /repos/calmadex/impairgency/actions/artifacts --paginate --jq '.artifacts[] | select(.name=="impairgency-apk") | .id' | xargs -I{} gh api -X DELETE /repos/calmadex/impairgency/actions/artifacts/{}
+  ```
+- **Tester APKs with the retrained stairs model**: built, not uploaded -
+  asks first. The release has the first model's (`8b10561`).
+- **Rugs and tiled floors for the stairs model**: Open Images gave three of
+  each. Phone photographs (`tool/fetch_stairs.py --negatives <folder>`),
+  then train again (about 40 minutes) and measure.
 - **Superseded APKs** on the release: the `8c4014a` tester pair, `836fb6b`,
   `8424e2f`, and the `7ac4791` stairs check, whose heuristic is gone. Delete
   them once the new ones are confirmed to install. The `8c4014a`

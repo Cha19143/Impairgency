@@ -33,8 +33,8 @@ tick it here, close the issue there, and run `python3 tool/progress.py`.
 | Tester feedback round — one tester, one device, thirteen items | `████████████` | 13 / 13 |
 | Tester feedback round 2 — September 15 | `███████████░` | 36 / 38 |
 | Tester feedback round 3 — September 16 | `██████████░░` | 26 / 30 |
-| Tester feedback round 4 — September 18 | `█████████░░░` | 29 / 37 |
-| **Overall** | | **196 / 210  (93%)** |
+| Tester feedback round 4 — September 18 | `█████████░░░` | 30 / 38 |
+| **Overall** | | **197 / 211  (93%)** |
 ---
 
 ## Phase 0 — Security and integrity `S`
@@ -746,17 +746,19 @@ summaries are written this round.
 - [x] Tools: `fetch_stairs.py` (Open Images "Stairs", floors as negatives),
       `train_stairs.sh`, `eval_detector.py --stairs`
 - [x] Fetch the data and train the model: 2,478 Open Images photographs
-      of stairs and 488 of floors, 60 epochs on this Mac; shapes checked,
+      of stairs and 490 of floors, 60 epochs on this Mac; shapes checked,
       hash in [`VISION.md`](VISION.md). The tools were fixed first: the
       export path, the run folder, the camera size the measurement
       simulates, and negatives it never trained on
-- [x] Measure it: at 0.55 it finds 49% of close stairs and names stairs on
-      5% of photographs with none, so "Stop" stays off; the named tier moved
-      from 0.35 to 0.55 by the same 5%
-- [ ] Crossings and rugs as training negatives: the model takes a quarter
-      of zebra crossings for stairs, and Open Images has no human-checked
-      crossing to train against. Phone photographs (`--negatives`), or its
-      train split's machine labels (a 7.35 GB list)
+- [x] Measure it: at 0.55 it finds 49% of close stairs, so "Stop" stays off
+- [x] Crossings as training negatives: Open Images has no human-checked
+      crossing, so 172 more photographs came from its train split's machine
+      labels, 58 of them crossings. Trained again, it takes one zebra
+      crossing in ten for stairs, not a quarter, and the named tier came
+      down to 0.45 - 56% of close stairs, 5% of photographs with none
+- [ ] Rugs and tiled floors: Open Images gave three of each. Phone
+      photographs (`tool/fetch_stairs.py --negatives`), then train and
+      measure again
 - [x] "Hello friend Sam" from the home screen; with recognition off it asks
       to turn it on; the real reason when it cannot run
 - [x] Ten seconds to take a face down, counted aloud

@@ -50,10 +50,10 @@ const bool kStairsWarnings =
 ///
 /// The lowest score at which at most 5 percent of photographs with no stairs
 /// in them - floors, carpets, walkways, crossings - get a stairs box at all:
-/// at 0.35 the first model named stairs on 9 percent of them, at 0.55 on 5
+/// at 0.35 the model names stairs on 8 percent of them, at 0.45 on 5
 /// (`docs/VISION.md`, "The gate"). Stairs said over every tiled floor would
 /// be stairs nobody listens for.
-const double kStairsSoft = 0.55;
+const double kStairsSoft = 0.45;
 
 /// At or above this, stairs close enough to stop for are a "Stop".
 ///
