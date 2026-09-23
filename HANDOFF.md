@@ -43,12 +43,14 @@ path, the run folder, the camera size the measurement simulates, and
 negatives it never trained on). The first model (`8b10561`) took a quarter
 of zebra crossings for stairs, because Open Images' human-checked labels
 have no crossing to train against; its APKs,
-`impairgency-8b10561-(arm64-)release.apk`, are on the release. Trained again
-with 172 photographs from Open Images' machine labels as negatives, 58 of
-them crossings, it finds 56% of close stairs at 0.45 on photographs neither
-model saw, and names stairs on 5% of photographs with none - about one
-zebra crossing in ten. At 0.55 it finds 49%, short of the 70% "Stop" needs,
-so **"Stop" stays off** and stairs are named from 0.45.
+`impairgency-8b10561-(arm64-)release.apk`, went on the release first. Trained
+again (`23ddbab`) with 172 photographs from Open Images' machine labels as
+negatives, 58 of them crossings, it finds 56% of close stairs at 0.45 on
+photographs neither model saw, and names stairs on 5% of photographs with
+none - about one zebra crossing in ten. At 0.55 it finds 49%, short of the
+70% "Stop" needs, so **"Stop" stays off** and stairs are named from 0.45.
+**The testers' build is now `impairgency-23ddbab-(arm64-)release.apk`**, on
+the release.
 `assets/models/yolo11n_stairs.tflite`, 10.6 MB; hash and table in
 [`docs/VISION.md`](docs/VISION.md), "Stairs".
 
@@ -64,14 +66,13 @@ so **"Stop" stays off** and stairs are named from 0.45.
   ```bash
   gh api /repos/calmadex/impairgency/actions/artifacts --paginate --jq '.artifacts[] | select(.name=="impairgency-apk") | .id' | xargs -I{} gh api -X DELETE /repos/calmadex/impairgency/actions/artifacts/{}
   ```
-- **Tester APKs with the retrained stairs model**: built, not uploaded -
-  asks first. The release has the first model's (`8b10561`).
 - **Rugs and tiled floors for the stairs model**: Open Images gave three of
   each. Phone photographs (`tool/fetch_stairs.py --negatives <folder>`),
   then train again (about 40 minutes) and measure.
-- **Superseded APKs** on the release: the `8c4014a` tester pair, `836fb6b`,
-  `8424e2f`, and the `7ac4791` stairs check, whose heuristic is gone. Delete
-  them once the new ones are confirmed to install. The `8c4014a`
+- **Superseded APKs** on the release: the `8b10561` and `fadb8f0` pairs from
+  this round, the `8c4014a` tester pair, `836fb6b`, `8424e2f`, and the
+  `7ac4791` stairs check, whose heuristic is gone. Delete them once the
+  `23ddbab` ones are confirmed to install. The `8c4014a`
   depth-check pair is still the depth check.
 - **Three live Firestore indexes** that `firestore.indexes.json` does not
   have: `sessions (viUid, startedAt)`, `sos_events (resolved, firedAt)` and
