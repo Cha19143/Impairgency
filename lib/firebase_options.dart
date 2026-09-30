@@ -30,10 +30,7 @@ class DefaultFirebaseOptions {
           'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -47,29 +44,36 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCa-EM6HFOfgv_nD3bvw-0Z8MeqnnXDlOM',
-    appId: '1:237041921468:web:9ec90cf2e78abe589f4fb9',
-    messagingSenderId: '237041921468',
-    projectId: 'impairgency-capstone',
-    authDomain: 'impairgency-capstone.firebaseapp.com',
-    storageBucket: 'impairgency-capstone.firebasestorage.app',
+    apiKey: 'AIzaSyBU1RpvVb53PuE-7teec0D-UaA5ofM6yRE',
+    appId: '1:636582021781:web:9ba21b40d21bb824f5e99c',
+    messagingSenderId: '636582021781',
+    projectId: 'impairgency-878cb',
+    authDomain: 'impairgency-878cb.firebaseapp.com',
+    storageBucket: 'impairgency-878cb.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyANDPQQI21c6vyNyH4ELFp2CKbax62D888',
-    appId: '1:237041921468:android:f211c3700f87e20e9f4fb9',
-    messagingSenderId: '237041921468',
-    projectId: 'impairgency-capstone',
-    storageBucket: 'impairgency-capstone.firebasestorage.app',
+    apiKey: 'AIzaSyD7AUHlfeVV_y34rpRznuP01m0jk7BKFfQ',
+    appId: '1:636582021781:android:1ab2b2f61ed70fb3f5e99c',
+    messagingSenderId: '636582021781',
+    projectId: 'impairgency-878cb',
+    storageBucket: 'impairgency-878cb.firebasestorage.app',
+  );
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyDbOn2Brzuj_WQdeX1H9ylChyUrvAqhh6g',
+    appId: '1:636582021781:ios:f2790affaa109326f5e99c',
+    messagingSenderId: '636582021781',
+    projectId: 'impairgency-878cb',
+    storageBucket: 'impairgency-878cb.firebasestorage.app',
+    iosBundleId: 'ph.impairgency.app',
   );
 
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBLSjEtLzZWmolAgcUT4wZqxtnpCeXqjF4',
-    appId: '1:237041921468:ios:47c61adc30e0b0cb9f4fb9',
-    messagingSenderId: '237041921468',
-    projectId: 'impairgency-capstone',
-    storageBucket: 'impairgency-capstone.firebasestorage.app',
-    iosClientId: '237041921468-476aq8o7n0risbc0s2m6stva1rrvbm8p.apps.googleusercontent.com',
-    iosBundleId: 'ph.impairgency.app',
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyBU1RpvVb53PuE-7teec0D-UaA5ofM6yRE',
+    appId: '1:636582021781:web:dee6b63d6e9aea91f5e99c',
+    messagingSenderId: '636582021781',
+    projectId: 'impairgency-878cb',
+    authDomain: 'impairgency-878cb.firebaseapp.com',
+    storageBucket: 'impairgency-878cb.firebasestorage.app',
   );
 }
