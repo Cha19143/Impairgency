@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/sos/sos_countdown.dart';
+import '../../core/speech/screen_reading.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/voice/voice_commands.dart';
 
@@ -65,10 +66,13 @@ class _SosCountdownScreenState extends State<SosCountdownScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(widget.speaker.speakLines([
+    unawaited(widget.speaker.speakLines(screenReadingLines([
       armingAnnouncement(_secondsLeft, contactName: widget.contactName),
       ...kArmingHintLines,
-    ]).then((_) => _hintSaid = true));
+      'Nothing has been sent yet.',
+      'Or say "cancel", "teka", or "tigil".',
+      'CANCEL',
+    ])).then((_) => _hintSaid = true));
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     _voiceSub = widget.voice?.listen((command) {

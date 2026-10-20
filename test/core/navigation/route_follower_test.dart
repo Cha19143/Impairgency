@@ -62,27 +62,68 @@ void main() {
   List<String> turns(List<String> said) =>
       said.where((s) => !s.startsWith('Keep going.')).toList();
 
-  test('each turn is said ahead of it and at it, once each', () {
+  test('each turn is counted down once per stage, then said at the corner', () {
     final said = turns(walk(a, east: 118, heading: 90));
     expect(said, [
       'Walk straight ahead along Rizal Street.',
-      'In about 50 metres, turn left onto Mabini Street.',
-      'Now, turn left onto Mabini Street.',
+      'Turn left onto Mabini Street in 50 meters.',
+      'Turn left onto Mabini Street in 20 meters.',
+      'Turn left onto Mabini Street in 10 meters.',
+      'Turn left onto Mabini Street now.',
     ]);
     expect(follower.update(at(b, heading: 0)).status,
         startsWith('Next: turn right, in about'));
   });
 
-  test('a turn close behind the last rides along with it, and is said again',
-      () {
+  test('the next turn is ready as soon as this one is said', () {
     walk(a, east: 118, heading: 90);
     final said = turns(walk(b, north: 78, heading: 0, startSecond: 60));
     expect(said, [
-      'In about 50 metres, turn right.',
-      'Now, turn right, then turn left.',
+      'Turn right in 50 meters.',
+      'Turn right in 20 meters.',
+      'Turn right in 10 meters.',
+      'Turn right now. Turn left in 20 meters.',
     ]);
-    final after = walk(c, east: 14, heading: 90, every: 3, startSecond: 120);
-    expect(after, ['Now, turn left.']);
+    final after = turns(walk(c, east: 14, heading: 90, every: 3, startSecond: 120));
+    expect(after, [
+      'Turn left in 10 meters.',
+      'Turn left now.',
+    ]);
+    expect(after.join(' '), isNot(contains('50 meters')));
+  });
+
+  test('a short approach skips the stages already past', () {
+    final said = turns(walk(moved(a, east: 90), east: 30, heading: 90));
+    expect(said.join('\n'), isNot(contains('50 meters')));
+    expect(said, contains('Turn left onto Mabini Street in 20 meters.'));
+  });
+
+  test('a reading at the corner says now, not a distance already passed', () {
+    follower.update(at(a, heading: 90));
+    final atCorner =
+        follower.update(at(moved(a, east: 114), heading: 90, seconds: 8));
+    expect(atCorner.say, 'Turn left onto Mabini Street now.');
+  });
+
+  test('a cut-off countdown is recomputed, not repeated at the old distance',
+      () {
+    follower.update(at(a, heading: 90));
+    String? fifty;
+    for (var east = 4.0; east <= 90; east += 4) {
+      now = start.add(Duration(seconds: east.toInt()));
+      final guidance = follower.update(
+          at(moved(a, east: east), heading: 90, seconds: east.toInt()));
+      if (guidance.say != null && guidance.say!.contains('50 meters')) {
+        fifty = guidance.say;
+        break;
+      }
+    }
+    expect(fifty, isNotNull);
+    follower.retractLastCountdown();
+    now = start.add(const Duration(seconds: 90));
+    final closer =
+        follower.update(at(moved(a, east: 102), heading: 90, seconds: 90));
+    expect(closer.say, 'Turn left onto Mabini Street in 20 meters.');
   });
 
   test('arriving is said once, with the side', () {
@@ -136,7 +177,9 @@ void main() {
       expect(follower.update(at(away, seconds: 2)).offRoute, isFalse);
       expect(follower.update(at(away, seconds: 3)).offRoute, isFalse,
           reason: 'three readings, but only two seconds apart');
-      expect(follower.update(at(away, seconds: 9)).offRoute, isTrue);
+      final triggered = follower.update(at(away, seconds: 9));
+      expect(triggered.offRoute, isTrue);
+      expect(triggered.offMetres, greaterThan(kOffRouteMetres));
     });
 
     test('one wild reading is not leaving it', () {

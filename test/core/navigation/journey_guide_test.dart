@@ -90,7 +90,7 @@ void main() {
 
     advance(60);
     guide.update(at(moved(a, east: 72), heading: 90, seconds: 60));
-    expect(said.last, 'In about 50 metres, turn left onto Mabini Street.');
+    expect(said.last, 'Turn left onto Mabini Street in 50 meters.');
   });
 
   test('no route says why, and the straight line takes over', () async {
@@ -216,6 +216,28 @@ void main() {
     guide.update(at(a, heading: 0, accuracy: 90, seconds: 31));
     expect(said.first, kUnclearPositionPhrase);
     expect(guide.mode, JourneyMode.straightLine);
+  });
+
+  test('leaving the route is reported once, with how far off it was', () async {
+    final off = <double>[];
+    final watching = JourneyGuide(
+      destination: clinic,
+      say: said.add,
+      routing: routing,
+      now: () => now,
+      onOffRoute: (fix, metres) => off.add(metres),
+    );
+    watching.update(at(a, heading: 90));
+    await routing.answer(parseOsrmRoute(osrmClinicRoute()));
+
+    final away = moved(a, east: 40, north: 60);
+    for (final s in [10, 14, 19, 23, 27]) {
+      advance(s);
+      watching.update(at(away, seconds: s));
+    }
+    expect(off, hasLength(1));
+    expect(off.single, greaterThan(25));
+    expect(said, contains(kOffRoutePhrase));
   });
 
   test('a route that arrives after stopping is ignored', () async {

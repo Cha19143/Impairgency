@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
 import '../../core/pairing/pairing_code.dart';
+import '../../core/speech/screen_reading.dart';
+import '../../core/speech/speaker.dart';
 
 /// Redeems a code, or explains why it could not.
 typedef RedeemHandler = Future<String?> Function(String code);
@@ -22,11 +24,14 @@ class AcceptInvitationScreen extends StatefulWidget {
     required this.onRedeem,
     this.onAccepted,
     this.onBack,
+    this.speaker = const SilentSpeaker(),
   });
 
   /// Back to wherever the guardian came from. Without it this screen had no
   /// way out but a valid code: the system back gesture left the app.
   final VoidCallback? onBack;
+
+  final Speaker speaker;
 
   /// Returns null on success, or a message to show on failure.
   final RedeemHandler onRedeem;
@@ -74,12 +79,26 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
       _busy = false;
       _error = failure;
     });
+    if (failure != null) widget.speaker.speak(failure);
     if (failure == null) widget.onAccepted?.call();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AnnounceOnce(
+      speaker: widget.speaker,
+      lines: [
+        'ImpairGency',
+        if (widget.onBack != null) 'Back',
+        'Enter the code they gave you',
+        'Eight characters, read aloud from their phone. '
+            'It does not contain the letter O or the number zero.',
+        'Invitation code',
+        'ACCEPT INVITATION',
+        'Codes work once and expire after thirty minutes. '
+            'If yours has run out, ask them to make a new one.',
+      ],
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('ImpairGency'),
         leading: widget.onBack == null
@@ -173,6 +192,7 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

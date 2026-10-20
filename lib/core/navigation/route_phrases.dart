@@ -105,6 +105,17 @@ String upcomingPhrase(RouteStep step, double metres, {required String to}) =>
         ? 'In ${describeDistance(metres)}, you will reach $to.'
         : 'In ${describeDistance(metres)}, ${maneuverWords(step)}.';
 
+/// "Turn left onto Mabini Street in 50 meters."
+///
+/// [metres] is the stage, 50, 20, or 10, not the raw reading. The unit is
+/// written "meters" so the spoken line matches the countdown the walker
+/// was promised.
+String turnCountdownPhrase(RouteStep step, int metres) =>
+    '${_capitalise(maneuverWords(step))} in $metres meters.';
+
+/// "Turn left onto Mabini Street now."
+String turnNowPhrase(RouteStep step) => '${_capitalise(maneuverWords(step))} now.';
+
 /// Said at the manoeuvre, with the one straight after it when that one is
 /// too close to be said separately.
 String nowPhrase(RouteStep step, {RouteStep? then}) {

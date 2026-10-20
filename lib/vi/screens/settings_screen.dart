@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/speech/speaker.dart';
+import '../../core/speech/speech_pace.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
 
@@ -28,6 +29,8 @@ class SettingsScreen extends StatelessWidget {
     this.speaker = const SilentSpeaker(),
     this.handsFree = false,
     this.onToggleHandsFree,
+    this.speechPace = SpeechPace.normal,
+    this.onChangeSpeechPace,
   });
 
   final VoidCallback onConsent;
@@ -51,6 +54,12 @@ class SettingsScreen extends StatelessWidget {
 
   /// Null hides the entry.
   final VoidCallback? onToggleHandsFree;
+
+  /// The pace the user last chose. Normal is the rate the app already uses.
+  final SpeechPace speechPace;
+
+  /// Null hides the entry. Cycles slow, normal, fast.
+  final VoidCallback? onChangeSpeechPace;
 
   final VoidCallback onBack;
 
@@ -115,6 +124,20 @@ class SettingsScreen extends StatelessWidget {
               icon: handsFree ? Icons.mic : Icons.mic_off_outlined,
               kind: ViButtonKind.secondary,
               onPressed: onToggleHandsFree,
+            ),
+          if (onChangeSpeechPace != null)
+            ViButton(
+              // The pace is not in the label. Putting "fast" in the name
+              // would make saying "fast" press the button.
+              label: 'Speech rate',
+              detail: switch (speechPace) {
+                SpeechPace.slow => 'Slow. Tap for normal.',
+                SpeechPace.normal => 'Normal. Tap for fast.',
+                SpeechPace.fast => 'Fast. Tap for slow.',
+              },
+              icon: Icons.speed,
+              kind: ViButtonKind.secondary,
+              onPressed: onChangeSpeechPace,
             ),
           ViButton(
             label: 'What the app is using',

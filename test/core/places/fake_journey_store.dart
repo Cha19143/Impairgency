@@ -1,4 +1,5 @@
 import 'package:impairgency/core/location/location_fix.dart';
+import 'package:impairgency/core/navigation/route_deviation.dart';
 import 'package:impairgency/core/places/journey.dart';
 import 'package:impairgency/core/places/journey_recorder.dart';
 import 'package:impairgency/core/places/session_event.dart';
@@ -15,6 +16,7 @@ class FakeJourneyStore implements JourneyStore {
 
   final fixes = <(String uid, String sessionId, LocationFix fix)>[];
   final events = <(String uid, SessionEvent event)>[];
+  final deviations = <(String uid, String sessionId, RouteDeviation deviation)>[];
   final published = <SessionSummary>[];
 
   DateTime Function() now = DateTime.now;
@@ -46,6 +48,36 @@ class FakeJourneyStore implements JourneyStore {
         at: now(),
         kind: kind,
         detail: detail,
+      ),
+    ));
+  }
+
+  @override
+  Future<void> recordRouteDeviation(
+    String uid, {
+    required String sessionId,
+    required LocationFix at,
+    required double distanceMetres,
+  }) async {
+    _check();
+    final deviation = RouteDeviation(
+      at: at.at,
+      latitude: at.latitude,
+      longitude: at.longitude,
+      distanceMetres: distanceMetres,
+    );
+    deviations.add((uid, sessionId, deviation));
+    events.add((
+      uid,
+      SessionEvent(
+        id: 'ev${events.length}',
+        sessionId: sessionId,
+        at: at.at,
+        kind: SessionEventKind.routeDeviation,
+        detail: deviation.documentFields(sessionId: sessionId)['detail']
+            as String?,
+        latitude: at.latitude,
+        longitude: at.longitude,
       ),
     ));
   }

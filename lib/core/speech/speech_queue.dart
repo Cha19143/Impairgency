@@ -28,6 +28,9 @@ class _Request {
 
   final Completer<void> done = Completer<void>();
 
+  /// A hazard stopped this sentence before it finished.
+  bool interrupted = false;
+
   void finish() {
     if (!done.isCompleted) done.complete();
   }
@@ -113,9 +116,23 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
   List<String> get pending => _pending.map((r) => r.text).toList();
 
   @override
-  Future<void> announce(String text,
-      {required SpeechPriority priority}) {
-    if (text.trim().isEmpty) return Future.value();
+  Future<void> announce(String text, {required SpeechPriority priority}) {
+    final request = _start(text, priority);
+    if (request == null) return Future.value();
+    return request.done.future;
+  }
+
+  /// A direction. Completes false when a hazard cut the sentence off, so
+  /// the caller can say the distance that is true now rather than the one
+  /// that was queued.
+  Future<bool> announceNavigation(String text) {
+    final request = _start(text, SpeechPriority.navigation);
+    if (request == null) return Future<bool>.value(true);
+    return request.done.future.then((_) => !request.interrupted);
+  }
+
+  _Request? _start(String text, SpeechPriority priority) {
+    if (text.trim().isEmpty) return null;
 
     if (priority == SpeechPriority.hazard) {
       // Already saying exactly this: let it finish rather than restart it.
@@ -124,25 +141,29 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
       if (current != null &&
           current.priority == SpeechPriority.hazard &&
           current.text == text) {
-        return current.done.future;
+        return current;
       }
       final queued = _pending
           .where((r) => r.priority == SpeechPriority.hazard && r.text == text)
           .firstOrNull;
-      if (queued != null) return queued.done.future;
+      if (queued != null) return queued;
     }
 
     final request = _enqueue(text, priority, pauseAfter: Duration.zero);
 
     // A hazard is the only thing allowed to cut a sentence short — and it
     // cuts anything, including a different hazard, because a new danger is
-    // new information.
+    // new information. A direction that was cut off is marked, so the
+    // distance can be said again from where the walker is now.
     if (priority == SpeechPriority.hazard && _current != null) {
+      if (_current!.priority == SpeechPriority.navigation) {
+        _current!.interrupted = true;
+      }
       unawaited(_engine.stop());
     }
 
     unawaited(_drain());
-    return request.done.future;
+    return request;
   }
 
   @override
@@ -263,5 +284,15 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
     } finally {
       _draining = false;
     }
+  }
+
+  /// Applies [rate] when the engine can change speed. A recording engine
+  /// used in tests cannot, and that is ignored.
+  Future<void> setSpeechRate(double rate) {
+    final engine = _engine;
+    if (engine is AdjustableSpeech) {
+      return (engine as AdjustableSpeech).setSpeechRate(rate);
+    }
+    return Future<void>.value();
   }
 }

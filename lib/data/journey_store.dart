@@ -37,6 +37,20 @@ class FirestoreJourneyStore implements JourneyStore {
           sessionId: sessionId, kind: kind, detail: detail);
 
   @override
+  Future<void> recordRouteDeviation(
+    String uid, {
+    required String sessionId,
+    required LocationFix at,
+    required double distanceMetres,
+  }) =>
+      _history().recordRouteDeviation(
+        uid,
+        sessionId: sessionId,
+        at: at,
+        distanceMetres: distanceMetres,
+      );
+
+  @override
   Future<SessionTimeline> timeline(String uid, String sessionId) =>
       _history().timeline(uid, sessionId);
 

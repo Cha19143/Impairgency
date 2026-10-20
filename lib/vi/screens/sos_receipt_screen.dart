@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/contacts/emergency_contact.dart';
 import '../../core/sos/sos_receipt.dart';
+import '../../core/speech/screen_reading.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/voice/voice_commands.dart';
 import '../voice_controller.dart';
@@ -126,14 +127,45 @@ class _SosReceiptScreenState extends State<SosReceiptScreen>
     }
   }
 
+  /// Buttons on screen when the receipt opens. Not said again when the user
+  /// comes back from the phone call, and not said again by repeat.
+  List<String> _buttonLines() => [
+        if (widget.onOkay != null) "I'm okay",
+        if (widget.onOkay != null)
+          widget.guardianTold
+              ? 'Ends the emergency. Your guardian is told.'
+              : 'Ends the emergency.',
+        if (widget.nextContact != null && widget.onCallNext != null)
+          'Call ${widget.nextContact!.name}',
+        if (widget.nextContact != null && widget.onCallNext != null)
+          'The next person on your list',
+        if (widget.onTextAll != null && widget.contactCount > 0)
+          widget.contactCount == 1
+              ? 'Text your contact'
+              : 'Text all ${widget.contactCount} contacts',
+        if (widget.onTextAll != null && widget.contactCount > 0)
+          'Opens a message with your location filled in. You press send.',
+        if (!widget.receipt.anyoneReached && widget.onCallAgain != null)
+          'Try again',
+        if (!widget.receipt.anyoneReached && widget.onCallAgain != null)
+          'Sound the alarm and call again',
+        if (widget.voice != null && widget.onOkay != null)
+          ...openingMicLines(
+            handsFree: widget.voice!.handsFree,
+            detail: 'Say: I am okay',
+          ),
+        'Done',
+      ];
+
   /// Says the receipt, then how to say okay - and, when hands-free is off,
   /// listens once for it, as the dashboard does after its own prompt.
   Future<void> _announce({required bool receipt}) async {
     final hint = _hint;
-    await widget.speaker.speakLines([
+    await widget.speaker.speakLines(screenReadingLines([
       if (receipt) widget.receipt.spoken,
       ?hint,
-    ]);
+      if (receipt) ..._buttonLines(),
+    ]));
     final voice = widget.voice;
     if (!mounted || hint == null || voice == null || _okaySaid) return;
     if (voice.handsFree || !voice.isForeground) return;

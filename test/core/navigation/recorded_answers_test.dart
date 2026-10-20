@@ -89,9 +89,12 @@ void main() {
       }
 
       expect(said.first, startsWith('Walk straight ahead.'));
-      expect(said.where((s) => s.contains('Now, turn left onto P. Burgos Street')),
+      expect(
+          said.where((s) => s.contains('Turn left onto P. Burgos Street now')),
           hasLength(1));
-      expect(said.where((s) => s.contains('Now, turn right onto Enriquez Street')),
+      expect(
+          said.where(
+              (s) => s.contains('Turn right onto Enriquez Street now')),
           hasLength(1));
       expect(said.where((s) => s.startsWith('You have arrived')), hasLength(1));
       expect(said, isNot(contains(kWrongWayPhrase)));

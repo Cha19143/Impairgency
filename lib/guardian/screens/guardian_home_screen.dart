@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../../core/guardian/activity.dart';
 import '../../core/guardian/watched_user.dart';
 import '../../core/location/location_policy.dart' show describeAge;
+import '../../core/speech/screen_reading.dart';
 import '../../core/speech/speaker.dart';
 import '../../vi/widgets/vi_button.dart';
 
@@ -26,6 +27,8 @@ class GuardianHomeScreen extends StatefulWidget {
     required this.onCall,
     required this.onOpenMap,
     this.onLiveLocation,
+    this.onNavigationHistory,
+    this.onObstacleHistory,
     required this.onEnterCode,
     required this.onSignOut,
     this.loading = false,
@@ -43,6 +46,12 @@ class GuardianHomeScreen extends StatefulWidget {
 
   /// The map that follows them, in the app. Null hides the button.
   final void Function(WatchedUser user)? onLiveLocation;
+
+  /// Their trips from the last 30 days. Null hides the button.
+  final void Function(WatchedUser user)? onNavigationHistory;
+
+  /// Near obstacles from the last 30 days. Null hides the button.
+  final void Function(WatchedUser user)? onObstacleHistory;
   final VoidCallback onEnterCode;
   final VoidCallback onSignOut;
 
@@ -76,17 +85,61 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _speakOnce());
   }
 
-  /// A summary, once, when the first real data arrives.
+  /// A summary, once, when the first real data arrives. The summary that was
+  /// already spoken stays; the buttons and labels on the cards are added to
+  /// the same announcement.
   void _speakOnce() {
     if (_spoken || widget.loading || !mounted) return;
     _spoken = true;
-    final lines = widget.users.isEmpty
-        ? ['You are not watching over anyone yet. Enter the code from their phone.']
-        : [
-            for (final u in widget.users)
-              describeWatchedLocation(u, now: _now),
-          ];
-    widget.speaker.speakLines(['Guardian', ...lines]);
+    final lines = <String?>['Guardian'];
+    if (widget.users.isEmpty) {
+      lines.add(
+          'You are not watching over anyone yet. Enter the code from their phone.');
+    } else {
+      for (final user in widget.users) {
+        lines.add(describeWatchedLocation(user, now: _now));
+        lines.add(describeLastSos(user, now: _now));
+        lines.add('Recent activity');
+        final rows = user.activity.take(3);
+        if (!user.sharesActivity) {
+          lines.add(
+              '${user.displayName} is not sharing what the app notices.');
+        } else if (rows.isEmpty) {
+          lines.add('Nothing noticed yet.');
+        } else {
+          for (final event in rows) {
+            lines.add(activityHeadline(event));
+            lines.add(describeAge(_now.difference(event.at)));
+          }
+        }
+        final target = callTargetFor(user);
+        lines.add('Call');
+        lines.add(target?.label ?? noCallTargetMessage(user));
+        if (user.fix != null && widget.onLiveLocation != null) {
+          lines.add('Live location');
+          lines.add('A map that follows them');
+        }
+        if (user.fix != null) {
+          lines.add('Open on a map');
+          lines.add('Shows the last position in your maps app');
+        }
+        if (widget.onNavigationHistory != null) {
+          lines.add('Navigation history');
+          lines.add('Trips from the last 30 days');
+        }
+        if (widget.onObstacleHistory != null) {
+          lines.add('Obstacle history');
+          lines.add('Near obstacles from the last 30 days');
+        }
+      }
+    }
+    lines.add(widget.reachabilityNote);
+    lines.add(widget.users.isEmpty
+        ? 'Enter their code'
+        : 'Watch over someone else');
+    lines.add('The eight-character code from their phone');
+    lines.add('Sign out');
+    widget.speaker.speakLines(screenReadingLines(lines));
   }
 
   Future<void> _call(WatchedUser user) async {
@@ -141,17 +194,18 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Center(
-                          child: CircularProgressIndicator(
-                              color: AppColors.cyan)),
+                        child: CircularProgressIndicator(color: AppColors.cyan),
+                      ),
                     )
                   else if (widget.users.isEmpty)
                     const Text(
                       'You are not watching over anyone yet. Ask them to open '
                       'Settings, then Guardian, and read you the code.',
                       style: TextStyle(
-                          fontSize: 18,
-                          height: 1.45,
-                          color: AppColors.textSecondary),
+                        fontSize: 18,
+                        height: 1.45,
+                        color: AppColors.textSecondary,
+                      ),
                     )
                   else
                     for (final user in widget.users)
@@ -164,8 +218,14 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
                             : () => widget.onOpenMap(user),
                         onLiveLocation:
                             user.fix == null || widget.onLiveLocation == null
-                                ? null
-                                : () => widget.onLiveLocation!(user),
+                            ? null
+                            : () => widget.onLiveLocation!(user),
+                        onNavigationHistory: widget.onNavigationHistory == null
+                            ? null
+                            : () => widget.onNavigationHistory!(user),
+                        onObstacleHistory: widget.onObstacleHistory == null
+                            ? null
+                            : () => widget.onObstacleHistory!(user),
                       ),
                   if (_notice != null)
                     Semantics(
@@ -175,9 +235,10 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
                         child: Text(
                           _notice!,
                           style: const TextStyle(
-                              fontSize: 16,
-                              height: 1.35,
-                              color: AppColors.amber),
+                            fontSize: 16,
+                            height: 1.35,
+                            color: AppColors.amber,
+                          ),
                         ),
                       ),
                     ),
@@ -187,9 +248,10 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
                       child: Text(
                         widget.reachabilityNote!,
                         style: const TextStyle(
-                            fontSize: 15,
-                            height: 1.35,
-                            color: AppColors.textSecondary),
+                          fontSize: 15,
+                          height: 1.35,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ),
                 ],
@@ -233,6 +295,8 @@ class _UserCard extends StatelessWidget {
     required this.onCall,
     required this.onOpenMap,
     required this.onLiveLocation,
+    required this.onNavigationHistory,
+    required this.onObstacleHistory,
   });
 
   final WatchedUser user;
@@ -240,6 +304,8 @@ class _UserCard extends StatelessWidget {
   final VoidCallback onCall;
   final VoidCallback? onOpenMap;
   final VoidCallback? onLiveLocation;
+  final VoidCallback? onNavigationHistory;
+  final VoidCallback? onObstacleHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -276,23 +342,25 @@ class _UserCard extends StatelessWidget {
                 // Red while it may still be going on; green once they said
                 // they are okay.
                 Icon(
-                    user.lastSosResolvedAt == null
-                        ? Icons.emergency_outlined
-                        : Icons.verified_user_outlined,
-                    color: user.lastSosResolvedAt == null
-                        ? AppColors.red
-                        : AppColors.green,
-                    size: 24),
+                  user.lastSosResolvedAt == null
+                      ? Icons.emergency_outlined
+                      : Icons.verified_user_outlined,
+                  color: user.lastSosResolvedAt == null
+                      ? AppColors.red
+                      : AppColors.green,
+                  size: 24,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     sos,
                     style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: user.lastSosResolvedAt == null
-                            ? AppColors.red
-                            : AppColors.green),
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: user.lastSosResolvedAt == null
+                          ? AppColors.red
+                          : AppColors.green,
+                    ),
                   ),
                 ),
               ],
@@ -314,9 +382,10 @@ class _UserCard extends StatelessWidget {
                 child: Text(
                   location,
                   style: const TextStyle(
-                      fontSize: 17,
-                      height: 1.4,
-                      color: AppColors.textSecondary),
+                    fontSize: 17,
+                    height: 1.4,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
             ],
@@ -348,6 +417,22 @@ class _UserCard extends StatelessWidget {
               kind: ViButtonKind.secondary,
               onPressed: onOpenMap,
             ),
+          if (onNavigationHistory != null)
+            ViButton(
+              label: 'Navigation history',
+              detail: 'Trips from the last 30 days',
+              icon: Icons.route,
+              kind: ViButtonKind.secondary,
+              onPressed: onNavigationHistory,
+            ),
+          if (onObstacleHistory != null)
+            ViButton(
+              label: 'Obstacle history',
+              detail: 'Near obstacles from the last 30 days',
+              icon: Icons.warning_amber_outlined,
+              kind: ViButtonKind.secondary,
+              onPressed: onObstacleHistory,
+            ),
         ],
       ),
     );
@@ -371,8 +456,8 @@ class _RecentActivity extends StatelessWidget {
     final String? note = !user.sharesActivity
         ? '${user.displayName} is not sharing what the app notices.'
         : rows.isEmpty
-            ? 'Nothing noticed yet.'
-            : null;
+        ? 'Nothing noticed yet.'
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -390,7 +475,10 @@ class _RecentActivity extends StatelessWidget {
           Text(
             note,
             style: const TextStyle(
-                fontSize: 16, height: 1.4, color: AppColors.textSecondary),
+              fontSize: 16,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
           ),
         for (final event in rows)
           Padding(
@@ -415,16 +503,19 @@ class _RecentActivity extends StatelessWidget {
                       child: Text(
                         activityHeadline(event),
                         style: const TextStyle(
-                            fontSize: 16,
-                            height: 1.3,
-                            color: AppColors.textPrimary),
+                          fontSize: 16,
+                          height: 1.3,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       describeAge(now.difference(event.at)),
                       style: const TextStyle(
-                          fontSize: 14, color: AppColors.textSecondary),
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),

@@ -160,6 +160,26 @@ void main() {
       expect(engine.speaking, 'Stop. chair right in front of you');
     });
 
+    test('a direction that finishes was heard', () async {
+      final heard = queue.announceNavigation('Turn left in 50 meters.');
+      await settle();
+      engine.complete();
+      await settle();
+      expect(await heard, isTrue);
+    });
+
+    test('a hazard cutting a direction reports that it was not heard',
+        () async {
+      final heard = queue.announceNavigation('Turn left in 50 meters.');
+      await settle();
+      unawaited(queue.announce('Stop. chair right in front of you',
+          priority: SpeechPriority.hazard));
+      await settle();
+      expect(await heard, isFalse);
+      expect(engine.cutOff, ['Turn left in 50 meters.']);
+      expect(engine.speaking, 'Stop. chair right in front of you');
+    });
+
     test('a hazard cuts off navigation', () async {
       unawaited(queue.announce('In fifty metres, turn right.',
           priority: SpeechPriority.navigation));

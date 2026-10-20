@@ -36,6 +36,14 @@ abstract interface class JourneyStore {
     String? detail,
   });
 
+  /// The walker left the route. [at] is where, [distanceMetres] is how far.
+  Future<void> recordRouteDeviation(
+    String uid, {
+    required String sessionId,
+    required LocationFix at,
+    required double distanceMetres,
+  });
+
   Future<SessionTimeline> timeline(String uid, String sessionId);
 
   Future<void> publishSummary(SessionSummary summary);
@@ -140,6 +148,22 @@ class JourneyRecorder {
     }
     await _quietly(() =>
         store.recordEvent(uid, sessionId: id, kind: kind, detail: detail));
+  }
+
+  /// The off-route check tripped. Nothing is written without a journey, and
+  /// a refused write does not stop the directions. Not throttled: the guide
+  /// calls this once per time the check trips.
+  Future<void> recordRouteDeviation(LocationFix at,
+      {required double distanceMetres}) async {
+    final uid = _uid;
+    final id = _sessionId;
+    if (uid == null || id == null) return;
+    await _quietly(() => store.recordRouteDeviation(
+          uid,
+          sessionId: id,
+          at: at,
+          distanceMetres: distanceMetres,
+        ));
   }
 
   /// Ends the journey and publishes its summary. Nothing happens when none

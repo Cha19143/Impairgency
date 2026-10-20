@@ -25,11 +25,19 @@ class GuardianHomePage extends StatefulWidget {
     required this.onEnterCode,
     required this.onSignOut,
     this.onLiveLocation,
+    this.onNavigationHistory,
+    this.onObstacleHistory,
     this.speaker = const SilentSpeaker(),
     this.reachabilityNote,
   });
 
   final void Function(WatchedUser user)? onLiveLocation;
+
+  /// Their trips from the last 30 days. Null hides the button.
+  final void Function(WatchedUser user)? onNavigationHistory;
+
+  /// Near obstacles from the last 30 days. Null hides the button.
+  final void Function(WatchedUser user)? onObstacleHistory;
 
   final String guardianId;
   final GuardianRepository repository;
@@ -53,22 +61,24 @@ class _GuardianHomePageState extends State<GuardianHomePage> {
   @override
   void initState() {
     super.initState();
-    _sub = widget.repository.watch(widget.guardianId).listen(
-      (users) {
-        for (final u in users) {
-          _names[u.uid] = u.displayName;
-        }
-        if (mounted) {
-          setState(() {
-            _users = users;
-            _loading = false;
-          });
-        }
-      },
-      onError: (_) {
-        if (mounted) setState(() => _loading = false);
-      },
-    );
+    _sub = widget.repository
+        .watch(widget.guardianId)
+        .listen(
+          (users) {
+            for (final u in users) {
+              _names[u.uid] = u.displayName;
+            }
+            if (mounted) {
+              setState(() {
+                _users = users;
+                _loading = false;
+              });
+            }
+          },
+          onError: (_) {
+            if (mounted) setState(() => _loading = false);
+          },
+        );
     _watcher = SosWatcher(
       presenter: widget.presenter,
       nameOf: (uid) => _names[uid],
@@ -110,14 +120,16 @@ class _GuardianHomePageState extends State<GuardianHomePage> {
 
   @override
   Widget build(BuildContext context) => GuardianHomeScreen(
-        users: _users,
-        loading: _loading,
-        speaker: widget.speaker,
-        reachabilityNote: widget.reachabilityNote,
-        onCall: _call,
-        onOpenMap: _openMap,
-        onLiveLocation: widget.onLiveLocation,
-        onEnterCode: widget.onEnterCode,
-        onSignOut: widget.onSignOut,
-      );
+    users: _users,
+    loading: _loading,
+    speaker: widget.speaker,
+    reachabilityNote: widget.reachabilityNote,
+    onCall: _call,
+    onOpenMap: _openMap,
+    onLiveLocation: widget.onLiveLocation,
+    onNavigationHistory: widget.onNavigationHistory,
+    onObstacleHistory: widget.onObstacleHistory,
+    onEnterCode: widget.onEnterCode,
+    onSignOut: widget.onSignOut,
+  );
 }

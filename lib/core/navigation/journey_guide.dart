@@ -59,8 +59,10 @@ class JourneyGuide {
   JourneyGuide({
     required this.destination,
     required this.say,
+    this.sayCountdown,
     this.routing,
     this.onChanged,
+    this.onOffRoute,
     DateTime Function()? now,
   })  : _now = now ?? DateTime.now,
         _status =
@@ -71,11 +73,20 @@ class JourneyGuide {
   /// Says a sentence, behind hazard warnings.
   final void Function(String sentence) say;
 
+  /// A distance countdown. Completes false when a hazard cut it off, so the
+  /// distance can be worked out again. Null means [say], and the line is
+  /// taken as heard.
+  final Future<bool> Function(String sentence)? sayCountdown;
+
   /// Null means straight-line directions only.
   final RoutingService? routing;
 
   /// Something on screen should change.
   final void Function()? onChanged;
+
+  /// The existing off-route check has tripped. Once per time it trips, not
+  /// on every later reading. [metresOff] is how far that reading was.
+  final void Function(LocationFix fix, double metresOff)? onOffRoute;
 
   final DateTime Function() _now;
 
@@ -107,6 +118,13 @@ class JourneyGuide {
   int _retries = 0;
   DateTime? _failedAt;
   MapServiceFailure? _failure;
+
+  /// The off-route check has already been reported for the route in hand.
+  bool _deviationNoted = false;
+
+  /// Bumps each time a countdown is handed to [sayCountdown], so a late
+  /// "not heard" does not undo a newer one.
+  int _spoken = 0;
 
   /// A new position.
   void update(LocationFix fix) {
@@ -193,6 +211,7 @@ class JourneyGuide {
       _route = route;
       _follower =
           RouteFollower(route: route, to: destination.label, now: _now);
+      _deviationNoted = false;
       _mode = JourneyMode.route;
       _failure = null;
       final opening = reroute
@@ -202,7 +221,9 @@ class JourneyGuide {
               : routeSummaryPhrase(route, to: destination.label);
       final latest = _lastFix ?? from;
       final guidance = _follower!.update(latest);
-      say(guidance.say == null ? opening : '$opening ${guidance.say}');
+      final instruction = guidance.say;
+      _speak(instruction == null ? opening : '$opening $instruction',
+          recompute: guidance.recomputeIfCutOff);
       _follow(guidance, latest, alreadySaid: true);
     } on MapServiceException catch (e) {
       if (_stopped || generation != _generation) return;
@@ -222,9 +243,27 @@ class JourneyGuide {
     }
   }
 
+  void _speak(String sentence, {required bool recompute}) {
+    final countdown = sayCountdown;
+    if (!recompute || countdown == null) {
+      say(sentence);
+      return;
+    }
+    final token = ++_spoken;
+    countdown(sentence).then((heard) {
+      if (heard || _stopped || token != _spoken) return;
+      _follower?.retractLastCountdown();
+    }, onError: (_) {
+      if (_stopped || token != _spoken) return;
+      _follower?.retractLastCountdown();
+    });
+  }
+
   void _follow(RouteGuidance guidance, LocationFix fix,
       {bool alreadySaid = false}) {
-    if (!alreadySaid && guidance.say != null) say(guidance.say!);
+    if (!alreadySaid && guidance.say != null) {
+      _speak(guidance.say!, recompute: guidance.recomputeIfCutOff);
+    }
     _show(guidance.status);
 
     if (guidance.arrived) {
@@ -243,6 +282,10 @@ class JourneyGuide {
     }
 
     if (guidance.offRoute) {
+      if (!_deviationNoted) {
+        _deviationNoted = true;
+        onOffRoute?.call(fix, guidance.offMetres);
+      }
       final last = _reroutedAt;
       if (_reroutes >= kMaxReroutes) {
         _mode = JourneyMode.straightLine;

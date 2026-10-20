@@ -96,4 +96,17 @@ void main() {
     ]);
     expect(reports.reasons, isEmpty);
   });
+
+  test('a rate chosen before the first sentence is the one applied', () async {
+    final rates = <Object?>[];
+    platform((call) {
+      if (call.method == 'setSpeechRate') rates.add(call.arguments);
+      return 1;
+    });
+    final engine = TtsEngine(tts: FlutterTts(), problems: reports);
+    await engine.setSpeechRate(0.35);
+    await engine.say('Slow.');
+    expect(engine.speechRate, 0.45);
+    expect(rates, [0.35]);
+  });
 }

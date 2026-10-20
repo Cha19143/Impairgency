@@ -36,6 +36,7 @@ class Destination {
     required this.latitude,
     required this.longitude,
     this.kind = DestinationKind.other,
+    this.address = '',
   });
 
   /// The document id. Home, work and school use their kind as the id so
@@ -47,12 +48,17 @@ class Destination {
   final double longitude;
   final DestinationKind kind;
 
+  /// Street and town, when a search found them. Empty for a saved place
+  /// that was never given one. Kept off the document when empty.
+  final String address;
+
   Map<String, Object?> toJson() => {
-        'label': label,
-        'lat': latitude,
-        'lng': longitude,
-        'kind': kind.name,
-      };
+    'label': label,
+    'lat': latitude,
+    'lng': longitude,
+    'kind': kind.name,
+    if (address.isNotEmpty) 'address': address,
+  };
 
   static Destination? fromJson(String id, Object? raw) {
     if (raw is! Map) return null;
@@ -66,16 +72,18 @@ class Destination {
       latitude: lat.toDouble(),
       longitude: lng.toDouble(),
       kind: destinationKindFromKey(raw['kind'] as String?),
+      address: raw['address'] is String ? raw['address'] as String : '',
     );
   }
 
   Destination copyWith({String? label}) => Destination(
-        id: id,
-        label: label ?? this.label,
-        latitude: latitude,
-        longitude: longitude,
-        kind: kind,
-      );
+    id: id,
+    label: label ?? this.label,
+    latitude: latitude,
+    longitude: longitude,
+    kind: kind,
+    address: address,
+  );
 
   @override
   bool operator ==(Object other) => other is Destination && other.id == id;
@@ -86,8 +94,10 @@ class Destination {
 
 /// The id a new place gets: the kind's name for the fixed three, so saving
 /// Home twice replaces Home rather than making a second one.
-String destinationIdFor(DestinationKind kind, {required String Function() fresh}) =>
-    kind == DestinationKind.other ? fresh() : kind.name;
+String destinationIdFor(
+  DestinationKind kind, {
+  required String Function() fresh,
+}) => kind == DestinationKind.other ? fresh() : kind.name;
 
 /// Ready-made first, in their fixed order, then everything else by label.
 List<Destination> orderForButtons(List<Destination> places) {
@@ -112,7 +122,10 @@ String shortPlaceLabel(String label) {
 }
 
 /// Why a place cannot be saved, or null if it can.
-String? validateDestinationLabel(String label, {required DestinationKind kind}) {
+String? validateDestinationLabel(
+  String label, {
+  required DestinationKind kind,
+}) {
   if (kind != DestinationKind.other) return null;
   if (label.trim().isEmpty) return 'Give this place a name.';
   if (label.trim().length > 40) return 'Use a shorter name.';

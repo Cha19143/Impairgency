@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../core/reading/reading_session.dart';
+import '../../core/speech/screen_reading.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/voice/voice_commands.dart';
 import '../../data/text_reader.dart';
@@ -142,20 +143,45 @@ class _ReadTextScreenState extends State<ReadTextScreen> {
         _refused = true;
         _status = 'The camera is off.';
       });
-      await widget.speaker.speak(
-          'The camera is turned off for this app. Turn it on in Settings to '
-          'read text.');
+      await _announce(
+        'The camera is turned off for this app. Turn it on in Settings to '
+        'read text.',
+        sentenceFirst: false,
+      );
       return;
     }
     setState(() {
       _ready = true;
       _status = 'Point the camera at the text and press Read.';
     });
-    await widget.speaker.speak(widget.voice == null
-        ? 'Reading text. Hold the phone about thirty centimetres above the '
-            'page, then press Read, or tap anywhere on the picture.'
-        : 'Reading text. Hold the phone about thirty centimetres above the '
-            'page, then say read, or press Read.');
+    await _announce(
+      widget.voice == null
+          ? 'Reading text. Hold the phone about thirty centimetres above the '
+              'page, then press Read, or tap anywhere on the picture.'
+          : 'Reading text. Hold the phone about thirty centimetres above the '
+              'page, then say read, or press Read.',
+      sentenceFirst: true,
+    );
+  }
+
+  /// The sentence this screen already says, plus the buttons that are on
+  /// screen before a page has been read. [sentenceFirst] keeps that sentence
+  /// as the first line; otherwise it stays last, which is how a failure is
+  /// still the thing a test and a repeat hear at the end.
+  Future<void> _announce(String sentence, {required bool sentenceFirst}) {
+    final controls = [
+      'Read',
+      'Photographs the page and reads it aloud',
+      if (widget.voice != null)
+        ...openingMicLines(
+          handsFree: widget.voice!.handsFree,
+          detail: 'Say read or basahin, pause, next, again',
+        ),
+      'Back',
+    ];
+    return widget.speaker.speakLines(screenReadingLines(
+      sentenceFirst ? [sentence, ...controls] : [...controls, sentence],
+    ));
   }
 
   Future<void> _read() async {

@@ -223,7 +223,8 @@ class _GuardianRegisterScreenState extends State<GuardianRegisterScreen> {
             'where they are - if they choose to share it.',
       ],
       spokenSuffix: 'Five fields: name, email, password, phone number, and '
-          'the eight-character code read out from their phone.',
+          'the eight-character code read out from their phone. '
+          'Create account. I already have an account.',
       extra: AutofillGroup(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

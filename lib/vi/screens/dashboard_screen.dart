@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/speech/screen_reading.dart';
 import '../../core/speech/speaker.dart';
 import '../voice_controller.dart';
 import '../widgets/press_by_voice.dart';
@@ -82,7 +83,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// open, and the prompt is all that is needed.
   Future<void> _promptThenListen() async {
     if (!mounted) return;
-    await widget.speaker.speak(kDashboardPrompt);
+    await widget.speaker.speakLines(screenReadingLines([
+      'ImpairGency',
+      kDashboardPrompt,
+      'SCAN ENVIRONMENT',
+      'SMART ASSISTANCE',
+      if (widget.onReadText != null) 'READ TEXT',
+      if (widget.onReadText != null) 'Books, labels, documents, small print',
+      'EMERGENCY SOS',
+      for (final entry in widget.consent.entries)
+        '${entry.key} ${entry.value ? 'on' : 'off'}',
+      if (widget.consent.isEmpty) 'nothing shared off',
+      if (widget.voice != null)
+        ...openingMicLines(handsFree: widget.voice!.handsFree),
+      'What can I say?',
+      'Settings',
+    ]));
     if (!mounted) return;
     final voice = widget.voice;
     if (voice == null || voice.handsFree) return;

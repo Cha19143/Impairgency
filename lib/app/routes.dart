@@ -79,6 +79,17 @@ abstract final class Routes {
   /// The map that follows one watched person. `?uid=` says who.
   static const guardianLive = '/guardian/live';
 
+  /// Trips that person started in the last 30 days. `?uid=` says who.
+  static const guardianHistory = '/guardian/history';
+
+  /// One of those trips, from where it started to where it was going.
+  /// `?uid=` and `?entry=` say which.
+  static const guardianHistoryMap = '/guardian/history/map';
+
+  /// Near obstacles that person was warned about, for the last 30 days.
+  /// `?uid=` says who.
+  static const guardianObstacles = '/guardian/obstacles';
+
   /// The guardian's own door in. Reachable signed out, like [createAccount].
   static const guardianRegister = '/guardian/register';
 
@@ -137,21 +148,20 @@ class SessionState {
     List<EmergencyContact>? contacts,
     int? guardianCount,
     bool? needsEmailVerification,
-  }) =>
-      SessionState(
-        uid: uid ?? this.uid,
-        signedIn: signedIn ?? this.signedIn,
-        isAdmin: isAdmin ?? this.isAdmin,
-        adminCheckPending: adminCheckPending ?? this.adminCheckPending,
-        isGuardian: isGuardian ?? this.isGuardian,
-        safetyAcknowledged: safetyAcknowledged ?? this.safetyAcknowledged,
-        completedSteps: completedSteps ?? this.completedSteps,
-        consent: consent ?? this.consent,
-        contacts: contacts ?? this.contacts,
-        guardianCount: guardianCount ?? this.guardianCount,
-        needsEmailVerification:
-            needsEmailVerification ?? this.needsEmailVerification,
-      );
+  }) => SessionState(
+    uid: uid ?? this.uid,
+    signedIn: signedIn ?? this.signedIn,
+    isAdmin: isAdmin ?? this.isAdmin,
+    adminCheckPending: adminCheckPending ?? this.adminCheckPending,
+    isGuardian: isGuardian ?? this.isGuardian,
+    safetyAcknowledged: safetyAcknowledged ?? this.safetyAcknowledged,
+    completedSteps: completedSteps ?? this.completedSteps,
+    consent: consent ?? this.consent,
+    contacts: contacts ?? this.contacts,
+    guardianCount: guardianCount ?? this.guardianCount,
+    needsEmailVerification:
+        needsEmailVerification ?? this.needsEmailVerification,
+  );
 
   /// The signed-in account, or null. Present so screens that write on the
   /// user's behalf do not have to reach for FirebaseAuth themselves.
@@ -184,8 +194,7 @@ class SessionState {
 
   /// The first contact - the one rung first - for anything that wants one.
   String? get contactName => contacts.isEmpty ? null : contacts.first.name;
-  String? get contactNumber =>
-      contacts.isEmpty ? null : contacts.first.number;
+  String? get contactNumber => contacts.isEmpty ? null : contacts.first.number;
 
   /// How many guardians are paired. Zero means the SOS receipt says so rather
   /// than reporting a failure that was never attempted.
@@ -200,9 +209,9 @@ class SessionState {
 
   /// The first onboarding step not yet finished.
   String get resumeAt => Routes.onboardingFlow.firstWhere(
-        (step) => !completedSteps.contains(step),
-        orElse: () => Routes.home,
-      );
+    (step) => !completedSteps.contains(step),
+    orElse: () => Routes.home,
+  );
 }
 
 bool _isAdminRoute(String location) => location.startsWith(Routes.adminRoot);

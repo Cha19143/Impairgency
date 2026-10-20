@@ -4,10 +4,11 @@
 /// say. The rules are about a person walking with a phone that is often ten
 /// metres wrong:
 ///
-/// * A turn is said twice at most: once ahead ("In about 50 metres, turn
-///   left"), and once at it ("Now, turn left"). A second turn close behind
-///   the first rides along with it, because there is no time to say it
-///   separately.
+/// * Each turn is counted down once per stage, at about 50, 20, and 10
+///   metres ("Turn left in 50 meters"), then "Turn left now" within
+///   [kTurnNowMetres]. A stage already passed — a short segment, or a
+///   reading that jumped — is skipped, so nothing is said late or twice.
+///   The next turn is prepared in the same reading the previous one ends.
 /// * Left and right come from the route, not a compass. Only the start needs
 ///   to know which way the person is facing, and GPS only knows that once
 ///   they are moving.
@@ -32,15 +33,33 @@ import 'route_phrases.dart';
 /// someone is on, so they move nothing.
 const double kPoorFixMetres = 50;
 
-/// How far ahead of a turn it is first mentioned.
+/// How far ahead of a turn the 50-metre call is made. Arrival is also first
+/// mentioned inside this distance.
 const double kUpcomingMetres = 50;
 
-/// Nearer than this, "in about N metres" is too close to be worth saying
-/// before "now".
+/// Nearer than this, arrival is not previewed; it is left until arrival
+/// itself.
 const double kUpcomingFloorMetres = 20;
 
-/// A turn this soon after the one before rides along with it: "Now, turn
-/// left, then turn right."
+/// The 50-metre call is only made from here out to [kUpcomingMetres]. Closer
+/// than this, that call would be late.
+const double kCountdown50InnerMetres = 42;
+
+/// The 20-metre call covers from just outside the 10-metre call up to here.
+const double kCountdown20OuterMetres = 22;
+
+/// The 10-metre call covers from just outside [kTurnNowMetres] up to here,
+/// so a turn only 15 metres ahead is "in 10 meters", not a late "in 20".
+const double kCountdown10OuterMetres = 16;
+
+/// "Turn left now" once the corner is this close. A phone is often several
+/// metres wrong, so this is not one metre.
+const double kTurnNowMetres = 8;
+
+/// Already this far past a corner, "now" would be late, so it is skipped.
+const double kTurnNowLateMetres = 4;
+
+/// A manoeuvre this far behind has been walked past, and is not said.
 const double kThenMetres = 25;
 
 /// Off the line by more than this - or one and a half times the accuracy,
@@ -74,7 +93,9 @@ class RouteGuidance {
     required this.status,
     this.say,
     this.offRoute = false,
+    this.offMetres = 0,
     this.arrived = false,
+    this.recomputeIfCutOff = false,
   });
 
   /// What the screen shows. Always current.
@@ -86,8 +107,16 @@ class RouteGuidance {
   /// The person has left the route: another one is needed.
   final bool offRoute;
 
+  /// How far off the line this reading is, when [offRoute] is set.
+  final double offMetres;
+
   /// The end of the route has been reached, and said.
   final bool arrived;
+
+  /// [say] includes a distance countdown. If a hazard cuts it off, the
+  /// distance has to be worked out again; the line must not be repeated
+  /// as it was.
+  final bool recomputeIfCutOff;
 }
 
 class RouteFollower {
@@ -131,6 +160,11 @@ class RouteFollower {
   double? _along;
   int _next = 1;
   final Set<int> _saidUpcoming = {};
+  final Map<int, _Approach> _approaches = {};
+
+  /// The turn whose distance call is waiting to be heard. Cleared if a
+  /// hazard cuts that sentence off.
+  int? _openCountdown;
 
   bool _started = false;
   bool _onRoute = false;
@@ -214,6 +248,7 @@ class RouteFollower {
           status: _status,
           say: said.isEmpty ? null : said.join(' '),
           offRoute: true,
+          offMetres: projection.offMetres,
         );
       }
       return RouteGuidance(
@@ -231,68 +266,133 @@ class RouteFollower {
 
     // Anything already walked past - a shortcut, a reading that jumped - is
     // not said late.
-    while (_next < route.steps.length - 1 &&
-        _manoeuvreAt[_next] + kThenMetres < along) {
-      _next++;
-    }
-
-    final step = route.steps[_next];
-    final distance = _manoeuvreAt[_next] - along;
-    final last = _next == route.steps.length - 1;
-
-    if (last) {
-      final arriveWithin =
-          math.max(kArrivedMetres, fix.accuracyMetres * 0.8).toDouble();
-      final end = route.geometry.last;
-      final straight = metresBetween(
-          fix.latitude, fix.longitude, end.latitude, end.longitude);
-      if (distance <= arriveWithin || straight <= arriveWithin) {
-        _arrived = true;
-        _status = route.endSnapMetres > kArrivedMetres
-            ? '$to is ${describeDistance(route.endSnapMetres)} further.'
-            : 'You have arrived at $to.';
-        said.add(arrivalPhrase(to,
-            side: step.modifier, endSnapMetres: route.endSnapMetres));
-        return RouteGuidance(
-            status: _status, say: said.join(' '), arrived: true);
-      }
-    } else {
-      final nowWithin =
-          math.max(6.0, math.min(fix.accuracyMetres, 12.0)).toDouble();
-      if (distance <= nowWithin) {
-        final following = route.steps[_next + 1];
-        final gap = _manoeuvreAt[_next + 1] - _manoeuvreAt[_next];
-        final ridesAlong = gap <= kThenMetres;
-        said.add(nowPhrase(step, then: ridesAlong ? following : null));
+    var recompute = false;
+    var guard = 0;
+    while (guard++ < 8 && _next < route.steps.length) {
+      while (_next < route.steps.length - 1 &&
+          _manoeuvreAt[_next] + kThenMetres < along) {
         _next++;
-        // The one that rode along was a warning. It is still said when it
-        // comes: twenty metres is long enough to lose count of which turn
-        // was next.
-        if (ridesAlong) _saidUpcoming.add(_next);
-        final upcoming = route.steps[_next];
-        _status = nextStatus(upcoming, math.max(0, _manoeuvreAt[_next] - along),
-            to: to);
-        _spoke(along);
-        return RouteGuidance(status: _status, say: said.join(' '));
       }
+      if (_next >= route.steps.length) break;
+
+      final step = route.steps[_next];
+      final distance = _manoeuvreAt[_next] - along;
+      final last = _next == route.steps.length - 1;
+
+      if (last) {
+        final arriveWithin =
+            math.max(kArrivedMetres, fix.accuracyMetres * 0.8).toDouble();
+        final end = route.geometry.last;
+        final straight = metresBetween(
+            fix.latitude, fix.longitude, end.latitude, end.longitude);
+        if (distance <= arriveWithin || straight <= arriveWithin) {
+          _arrived = true;
+          _status = route.endSnapMetres > kArrivedMetres
+              ? '$to is ${describeDistance(route.endSnapMetres)} further.'
+              : 'You have arrived at $to.';
+          said.add(arrivalPhrase(to,
+              side: step.modifier, endSnapMetres: route.endSnapMetres));
+          return RouteGuidance(
+              status: _status, say: said.join(' '), arrived: true);
+        }
+        if (distance <= kUpcomingMetres &&
+            distance > kUpcomingFloorMetres &&
+            _saidUpcoming.add(_next)) {
+          said.add(upcomingPhrase(step, distance, to: to));
+        }
+        break;
+      }
+
+      final approach = _approachFor(_next);
+      if (distance <= kTurnNowMetres) {
+        if (distance > -kTurnNowLateMetres && !approach.saidNow) {
+          approach.saidNow = true;
+          approach.said50 = true;
+          approach.said20 = true;
+          approach.said10 = true;
+          said.add(turnNowPhrase(step));
+          _openCountdown = null;
+        }
+        _next++;
+        continue;
+      }
+
+      final stage = _distanceStage(_next, approach, step, distance);
+      if (stage != null) {
+        said.add(stage);
+        recompute = true;
+      }
+      break;
     }
 
-    if (distance <= kUpcomingMetres &&
-        distance > kUpcomingFloorMetres &&
-        _saidUpcoming.add(_next)) {
-      said.add(upcomingPhrase(step, distance, to: to));
-    }
-    _status = nextStatus(step, math.max(0, distance), to: to);
-    // Not within a stretch of the turn's own warning, which is about to be
-    // said anyway.
-    if (said.isEmpty &&
-        distance > kUpcomingMetres + kProgressMetres &&
-        _progressDue(along)) {
-      said.add(progressPhrase(step, distance, to: to));
+    if (_next < route.steps.length) {
+      final step = route.steps[_next];
+      final distance = math.max(0.0, _manoeuvreAt[_next] - along);
+      _status = nextStatus(step, distance, to: to);
+      // Not within a stretch of the turn's own warning, which is about to be
+      // said anyway.
+      if (said.isEmpty &&
+          distance > kUpcomingMetres + kProgressMetres &&
+          _progressDue(along)) {
+        said.add(progressPhrase(step, distance, to: to));
+      }
     }
     if (said.isNotEmpty) _spoke(along);
     return RouteGuidance(
-        status: _status, say: said.isEmpty ? null : said.join(' '));
+      status: _status,
+      say: said.isEmpty ? null : said.join(' '),
+      recomputeIfCutOff: recompute,
+    );
+  }
+
+  /// The distance call for [step] at [distance], or null when this reading
+  /// is between stages or that stage was already said.
+  ///
+  /// A nearer stage marks the coarser ones skipped, so a short segment does
+  /// not say "in 50 meters" after the walker is already at 12.
+  String? _distanceStage(
+      int index, _Approach approach, RouteStep step, double distance) {
+    if (distance <= kCountdown10OuterMetres &&
+        distance > kTurnNowMetres &&
+        !approach.said10) {
+      approach.said10 = true;
+      approach.said20 = true;
+      approach.said50 = true;
+      _openCountdown = index;
+      return turnCountdownPhrase(step, 10);
+    }
+    if (distance <= kCountdown20OuterMetres &&
+        distance > kCountdown10OuterMetres &&
+        !approach.said20) {
+      approach.said20 = true;
+      approach.said50 = true;
+      _openCountdown = index;
+      return turnCountdownPhrase(step, 20);
+    }
+    if (distance <= kUpcomingMetres &&
+        distance >= kCountdown50InnerMetres &&
+        !approach.said50) {
+      approach.said50 = true;
+      _openCountdown = index;
+      return turnCountdownPhrase(step, 50);
+    }
+    return null;
+  }
+
+  _Approach _approachFor(int index) =>
+      _approaches.putIfAbsent(index, _Approach.new);
+
+  /// The last distance call was not heard. The next reading picks the stage
+  /// for wherever the walker is then.
+  void retractLastCountdown() {
+    final index = _openCountdown;
+    _openCountdown = null;
+    if (index == null) return;
+    final approach = _approaches[index];
+    if (approach == null || approach.saidNow) return;
+    approach.said50 = false;
+    approach.said20 = false;
+    approach.said10 = false;
   }
 
   void _spoke(double along) {
@@ -452,4 +552,12 @@ class RouteFollower {
     final b = line.points[segment + 1];
     return bearingDegrees(a.latitude, a.longitude, b.latitude, b.longitude);
   }
+}
+
+/// Which countdown stages have been said for one turn.
+class _Approach {
+  bool said50 = false;
+  bool said20 = false;
+  bool said10 = false;
+  bool saidNow = false;
 }

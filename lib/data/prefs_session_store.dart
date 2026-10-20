@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/contacts/emergency_contact.dart';
 import '../core/navigation/destination.dart';
 import '../core/session_store.dart';
+import '../core/speech/speech_pace.dart';
 
 /// [SessionStore] backed by the device.
 ///
@@ -17,6 +18,7 @@ class PrefsSessionStore implements SessionStore {
   static const _profileKey = 'cached_profile';
   static const _placesKey = 'saved_places';
   static const _handsFreeKey = 'hands_free_voice';
+  static const _speechPaceKey = 'speech_pace';
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
@@ -109,6 +111,14 @@ class PrefsSessionStore implements SessionStore {
   @override
   Future<void> setHandsFree(bool on) async =>
       (await _prefs).setBool(_handsFreeKey, on);
+
+  @override
+  Future<SpeechPace?> speechPace() async =>
+      SpeechPaceValue.parse((await _prefs).getString(_speechPaceKey));
+
+  @override
+  Future<void> setSpeechPace(SpeechPace pace) async =>
+      (await _prefs).setString(_speechPaceKey, pace.name);
 
   /// Removes its own keys rather than calling `clear()`, which would also
   /// take anything another part of the app has stored under its own name.

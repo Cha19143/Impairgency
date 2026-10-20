@@ -74,6 +74,15 @@ abstract interface class SpeechEngine {
   Future<void> stop();
 }
 
+/// An engine whose speed can change after it has been created.
+///
+/// Kept off [SpeechEngine] so a test double that only records sentences does
+/// not have to implement it. The queue applies a rate only when the engine
+/// offers this.
+abstract interface class AdjustableSpeech {
+  Future<void> setSpeechRate(double rate);
+}
+
 /// Does nothing. Used where speech is not wanted and as a widget-test default,
 /// so a screen never fails to build for want of a real engine.
 class SilentSpeaker implements PrioritySpeaker {

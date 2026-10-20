@@ -21,16 +21,22 @@ import 'crash_reporting.dart';
 /// For this app silence is close to fatal, but it has to be silence with the
 /// screen still there: someone who can read it can still help. The failure
 /// is reported once, not with every sentence (first found in #77).
-class TtsEngine implements SpeechEngine {
+class TtsEngine implements SpeechEngine, AdjustableSpeech {
   TtsEngine({FlutterTts? tts, this.speechRate = 0.45, CrashRecorder? problems})
       : _tts = tts ?? FlutterTts(),
+        _rate = speechRate,
         _problems = problems;
 
   final FlutterTts _tts;
 
   /// Slower than the platform default. The default is tuned for people
   /// glancing at a screen while it talks; here it is the only channel.
+  ///
+  /// This stays 0.45 unless a caller passes something else. A change from
+  /// Settings is stored in [_rate] and does not rewrite this default.
   final double speechRate;
+
+  double _rate;
 
   /// Null means whatever `crashRecorder` is when something fails.
   final CrashRecorder? _problems;
@@ -49,7 +55,7 @@ class TtsEngine implements SpeechEngine {
     if (_unavailable) return false;
     try {
       await _tts.setLanguage('en-US');
-      await _tts.setSpeechRate(speechRate);
+      await _tts.setSpeechRate(_rate);
       await _tts.setVolume(1.0);
       await _tts.awaitSpeakCompletion(true);
     } catch (error, stack) {
@@ -91,6 +97,17 @@ class TtsEngine implements SpeechEngine {
   /// second, and this allows six.
   static Duration budgetFor(String text) => Duration(
       milliseconds: math.max(4000, 170 * text.length));
+
+  @override
+  Future<void> setSpeechRate(double rate) async {
+    _rate = rate;
+    if (!_ready || _unavailable) return;
+    try {
+      await _tts.setSpeechRate(_rate);
+    } catch (error, stack) {
+      _report(error, stack, 'changing the speech rate');
+    }
+  }
 
   @override
   Future<void> say(String text) async {

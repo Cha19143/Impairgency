@@ -7,6 +7,7 @@ library;
 
 import 'contacts/emergency_contact.dart';
 import 'navigation/destination.dart';
+import 'speech/speech_pace.dart';
 
 /// The handful of facts the app needs before it can reach the network.
 class CachedProfile {
@@ -81,6 +82,13 @@ abstract interface class SessionStore {
   Future<bool?> handsFree();
   Future<void> setHandsFree(bool on);
 
+  /// Slow, normal, or fast, or null if the user has never chosen.
+  ///
+  /// Normal is the engine's existing 0.45. Like hands-free, this belongs to
+  /// the phone, so [forgetAccount] leaves it alone.
+  Future<SpeechPace?> speechPace();
+  Future<void> setSpeechPace(SpeechPace pace);
+
   /// Returns the device to how it was before anyone signed in.
   ///
   /// Everything this store holds is about a person, and none of it is scoped to
@@ -109,12 +117,19 @@ class InMemorySessionStore implements SessionStore {
   CachedProfile _profile;
   List<Destination> _places = const [];
   bool? _handsFree;
+  SpeechPace? _speechPace;
 
   @override
   Future<bool?> handsFree() async => _handsFree;
 
   @override
   Future<void> setHandsFree(bool on) async => _handsFree = on;
+
+  @override
+  Future<SpeechPace?> speechPace() async => _speechPace;
+
+  @override
+  Future<void> setSpeechPace(SpeechPace pace) async => _speechPace = pace;
 
   @override
   Future<CachedProfile> cachedProfile() async => _profile;

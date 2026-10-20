@@ -6,13 +6,16 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
+import '../../core/guardian/obstacle_event.dart';
 import '../../core/location/course_tracker.dart';
 import '../../core/location/location_fix.dart';
 import '../../core/navigation/destination.dart';
 import '../../core/navigation/journey_guide.dart';
 import '../../core/navigation/map_services.dart';
 import '../../core/navigation/route.dart';
+import '../../core/speech/screen_reading.dart';
 import '../../core/speech/speaker.dart';
+import '../../core/speech/speech_queue.dart';
 import '../../core/vision/friend_recognition.dart';
 import '../../core/voice/voice_commands.dart';
 import '../../data/scan_service.dart';
@@ -71,9 +74,11 @@ class JourneyScreen extends StatefulWidget {
     this.voice,
     this.friends,
     this.onObstacle,
+    this.onImportantObstacle,
     this.onFix,
     this.onGuidance,
     this.onArrived,
+    this.onOffRoute,
     this.mapBuilder,
   });
 
@@ -98,6 +103,9 @@ class JourneyScreen extends StatefulWidget {
   final FriendRecognition? friends;
   final void Function(String label)? onObstacle;
 
+  /// An urgent obstacle, for the guardian's history.
+  final void Function(ObstacleNotice notice)? onImportantObstacle;
+
   /// Each position the directions used, for the journey's record.
   final void Function(LocationFix fix)? onFix;
 
@@ -106,6 +114,9 @@ class JourneyScreen extends StatefulWidget {
 
   /// The destination was reached. Called once.
   final VoidCallback? onArrived;
+
+  /// The walker left the route. [metresOff] is how far that reading was.
+  final void Function(LocationFix fix, double metresOff)? onOffRoute;
 
   final JourneyMapBuilder? mapBuilder;
 
@@ -120,6 +131,7 @@ class _JourneyScreenState extends State<JourneyScreen> {
     voice: widget.voice,
     friends: widget.friends,
     onObstacle: (label) => widget.onObstacle?.call(label),
+    onImportantObstacle: widget.onImportantObstacle,
   );
 
   JourneyGuide? _guide;
@@ -149,6 +161,18 @@ class _JourneyScreenState extends State<JourneyScreen> {
           : 'Guidance ready. Heading for ${to.label}. Finding a walking route; '
               'obstacle warnings come first. Hold the phone up and walk '
               'slowly.',
+      also: [
+        'Repeat',
+        'Say the directions and what is ahead again',
+        if (widget.voice != null)
+          ...openingMicLines(
+            handsFree: widget.voice!.handsFree,
+            detail: 'Say repeat, stop directions, where am I, or help',
+          ),
+        'Stop directions to ${to.label}',
+        'Scan carries on warning you about obstacles',
+        'Back',
+      ],
     );
     _beginDirections();
   }
@@ -174,6 +198,14 @@ class _JourneyScreenState extends State<JourneyScreen> {
         widget.onGuidance?.call(sentence);
         widget.speaker.announce(sentence, priority: SpeechPriority.navigation);
       },
+      sayCountdown: (sentence) {
+        widget.onGuidance?.call(sentence);
+        final speaker = widget.speaker;
+        if (speaker is SpeechQueue) return speaker.announceNavigation(sentence);
+        speaker.announce(sentence, priority: SpeechPriority.navigation);
+        return Future<bool>.value(true);
+      },
+      onOffRoute: widget.onOffRoute,
       onChanged: () {
         if (mounted && _guide != null) {
           setState(() => _direction = _guide!.status);

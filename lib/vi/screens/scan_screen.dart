@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/guardian/obstacle_event.dart';
+import '../../core/speech/screen_reading.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/vision/friend_recognition.dart';
 import '../../core/voice/voice_commands.dart';
@@ -31,6 +33,7 @@ class ScanScreen extends StatefulWidget {
     this.service,
     this.voice,
     this.onObstacle,
+    this.onImportantObstacle,
     this.friends,
     this.meetFriend,
   });
@@ -39,6 +42,10 @@ class ScanScreen extends StatefulWidget {
 
   /// Something close enough to walk into was warned about, by name.
   final void Function(String label)? onObstacle;
+
+  /// An urgent obstacle, for the guardian's history. Separate from
+  /// [onObstacle], which still feeds the activity card.
+  final void Function(ObstacleNotice notice)? onImportantObstacle;
 
   /// Takes priorities, because this is a screen where two things can need
   /// saying at once and one of them is a hazard.
@@ -72,6 +79,7 @@ class _ScanScreenState extends State<ScanScreen> {
     // a new one, and the faces watched belong to this.
     friends: widget.friends,
     onObstacle: (label) => widget.onObstacle?.call(label),
+    onImportantObstacle: widget.onImportantObstacle,
   );
 
   VoiceScopeHandle? _voiceScope;
@@ -86,6 +94,16 @@ class _ScanScreenState extends State<ScanScreen> {
     _watch.start(
       readyPhrase: 'Guidance ready. Hold the phone up and walk slowly.',
       meetFriend: widget.meetFriend,
+      also: [
+        'Repeat',
+        'Say the last guidance again',
+        if (widget.voice != null)
+          ...openingMicLines(
+            handsFree: widget.voice!.handsFree,
+            detail: 'Say repeat, where am I, hello friend and a name, or help',
+          ),
+        'Back',
+      ],
     );
   }
 

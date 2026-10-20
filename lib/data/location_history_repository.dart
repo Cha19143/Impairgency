@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/location/location_fix.dart';
+import '../core/navigation/route_deviation.dart';
 import '../core/places/journey.dart';
 import '../core/places/place.dart';
 import '../core/places/session_event.dart';
@@ -70,6 +71,27 @@ class LocationHistoryRepository {
         'lng': at.longitude,
       },
       'at': Timestamp.fromDate(at?.at ?? DateTime.now()),
+    });
+  }
+
+  /// The walker left the route. Same collection as other session events, so
+  /// the existing owner-and-consent create rule covers it. [at] is the
+  /// position and the timestamp.
+  Future<void> recordRouteDeviation(
+    String uid, {
+    required String sessionId,
+    required LocationFix at,
+    required double distanceMetres,
+  }) async {
+    final deviation = RouteDeviation(
+      at: at.at,
+      latitude: at.latitude,
+      longitude: at.longitude,
+      distanceMetres: distanceMetres,
+    );
+    await _events(uid).add({
+      ...deviation.documentFields(sessionId: sessionId),
+      'at': Timestamp.fromDate(deviation.at),
     });
   }
 

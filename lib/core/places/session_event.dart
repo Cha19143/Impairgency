@@ -14,6 +14,11 @@ enum SessionEventKind {
   /// The user said where they were going before they left - §2.A.7's
   /// travel recording, with a destination on it.
   destinationSet,
+
+  /// The walker left the route. Same moment as the existing off-route
+  /// detection. A later step can notify a guardian from this, without
+  /// another detector.
+  routeDeviation,
 }
 
 class SessionEvent {
@@ -90,5 +95,7 @@ String describeEvent(SessionEvent event) {
       detail == null ? 'Place recognised' : 'Place recognised — $detail',
     SessionEventKind.destinationSet =>
       detail == null ? 'Destination set' : 'Heading for $detail',
+    SessionEventKind.routeDeviation =>
+      detail == null ? 'Left the route' : 'Left the route — $detail',
   };
 }

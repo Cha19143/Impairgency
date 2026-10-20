@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/admin/admin_user.dart';
+import '../../core/speech/screen_reading.dart';
+import '../../core/speech/speaker.dart';
 import '../admin_theme.dart';
 import '../admin_ui.dart';
 import 'admin_shell.dart';
@@ -35,6 +37,8 @@ class AdminPage<T> extends StatefulWidget {
     this.onSelect,
     this.onSignOut,
     this.account,
+    this.speaker = const SilentSpeaker(),
+    this.spoken = const [],
   });
 
   final String route;
@@ -55,12 +59,36 @@ class AdminPage<T> extends StatefulWidget {
   /// Who is signed in. Shown in the sidebar, not used for anything else.
   final String? account;
 
+  /// Reads the title, the sidebar, and [spoken] once when the page opens.
+  final Speaker speaker;
+
+  /// Labels and buttons on this page, besides the title and the sidebar.
+  final List<String> spoken;
+
   @override
   State<AdminPage<T>> createState() => _AdminPageState<T>();
 }
 
 class _AdminPageState<T> extends State<AdminPage<T>> {
   late Future<T> _future = _load();
+  bool _said = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _said) return;
+      _said = true;
+      widget.speaker.speakLines(screenReadingLines([
+        widget.title,
+        widget.subtitle,
+        for (final section in adminSections) section.label,
+        widget.account,
+        if (widget.onSignOut != null) 'Sign out',
+        ...widget.spoken,
+      ]));
+    });
+  }
 
   /// The last page that loaded, kept on screen while the next one loads.
   /// Otherwise every edit would blank the table to a spinner and back, and

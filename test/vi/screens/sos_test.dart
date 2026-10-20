@@ -201,6 +201,13 @@ void main() {
     engine.finish();
     await tester.pump();
     expect(engine.started, ['Calling Mum in 3.', ...kArmingHintLines]);
+    // The rest of the writing on the screen, still before the count talks.
+    engine.finish();
+    await tester.pump();
+    expect(engine.started.last, 'Nothing has been sent yet.');
+    engine.finish();
+    await tester.pump();
+    expect(engine.started.last, 'Or say "cancel", "teka", or "tigil".');
     engine.finish();
     await tester.pump(const Duration(seconds: 1));
     expect(engine.started.last, 'Calling Mum in 1.');
@@ -461,7 +468,8 @@ void main() {
         speaker: speaker,
       )));
       await tester.pump();
-      expect(speaker.said.single, receipt().spoken);
+      expect(speaker.said.first, receipt().spoken);
+      expect(speaker.said, contains('Done'));
     });
 
     testWidgets('a failed leg is shown as failed, in the words it speaks',

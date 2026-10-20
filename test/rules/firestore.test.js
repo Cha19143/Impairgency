@@ -1044,3 +1044,153 @@ describe('account management from the dashboard', () => {
     });
   });
 });
+
+describe('navigation history', () => {
+  const trip = (db, id = 'trip-1') =>
+    doc(db, 'navigation_history', VI, 'entries', id);
+
+  const daysFromNow = (days) => new Date(Date.now() + days * 24 * 3600_000);
+
+  const entry = (overrides = {}) => ({
+    destinationName: 'Home',
+    destinationAddress: 'Rizal Street, Malolos',
+    destinationLat: 14.8,
+    destinationLng: 120.9,
+    originLat: 14.79,
+    originLng: 120.92,
+    startedAt: serverTimestamp(),
+    endedAt: null,
+    status: 'ongoing',
+    expiresAt: daysFromNow(30),
+    ...overrides,
+  });
+
+  it('the user can open a trip and read it back', async () => {
+    const db = as(VI);
+    await assertSucceeds(setDoc(trip(db), entry()));
+    await assertSucceeds(getDoc(trip(db)));
+  });
+
+  it('a paired guardian can read it without location consent', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(trip(ctx.firestore()), entry({
+        startedAt: new Date(),
+        expiresAt: daysFromNow(30),
+      }));
+    });
+    await assertSucceeds(getDoc(trip(as(GUARDIAN))));
+    await assertSucceeds(
+      getDocs(query(
+        collection(as(GUARDIAN), 'navigation_history', VI, 'entries'),
+        orderBy('startedAt', 'desc'),
+      )),
+    );
+  });
+
+  it('a stranger, and an admin, cannot read it', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(trip(ctx.firestore()), entry({ startedAt: new Date() }));
+    });
+    await assertFails(getDoc(trip(as(STRANGER))));
+    await makeAdmin();
+    await assertFails(getDoc(trip(asAdmin())));
+  });
+
+  it('nobody else can open a trip, and it has to be ongoing', async () => {
+    await assertFails(setDoc(trip(as(GUARDIAN)), entry()));
+    await assertFails(setDoc(trip(as(STRANGER)), entry()));
+    await assertFails(setDoc(trip(as(VI)), entry({ status: 'completed' })));
+    await assertFails(setDoc(trip(as(VI)), entry({ expiresAt: daysFromNow(10) })));
+  });
+
+  it('the user can mark their own trip completed or cancelled, and nothing else', async () => {
+    const db = as(VI);
+    await assertSucceeds(setDoc(trip(db), entry()));
+    await assertSucceeds(updateDoc(trip(db), {
+      status: 'completed',
+      endedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(trip(db), { status: 'cancelled' }));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(trip(ctx.firestore(), 'trip-2'), entry({ startedAt: new Date() }));
+    });
+    await assertSucceeds(updateDoc(trip(db, 'trip-2'), {
+      status: 'cancelled',
+      endedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(trip(db, 'trip-2'), { destinationLat: 0 }));
+    await assertFails(updateDoc(trip(as(GUARDIAN), 'trip-2'), {
+      status: 'completed',
+      endedAt: serverTimestamp(),
+    }));
+  });
+
+  it('the user can delete their own trips, and a guardian cannot', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(trip(ctx.firestore()), entry({ startedAt: new Date() }));
+    });
+    await assertFails(deleteDoc(trip(as(GUARDIAN))));
+    await assertSucceeds(deleteDoc(trip(as(VI))));
+  });
+});
+
+describe('obstacle history', () => {
+  const event = (db, id = 'obs-1') =>
+    doc(db, 'users', VI, 'obstacle_events', id);
+
+  const row = () => ({
+    type: 'car',
+    lat: 14.84,
+    lng: 120.81,
+    distanceMetres: 1.5,
+    distanceApproximate: true,
+    at: new Date(),
+  });
+
+  const allowActivity = () =>
+    env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', VI), {
+        consent: {
+          location: false,
+          history: false,
+          recording: false,
+          faces: false,
+          activity: true,
+        },
+      }, { merge: true });
+    });
+
+  it('the user cannot write one without activity consent', async () => {
+    await assertFails(setDoc(event(as(VI)), row()));
+  });
+
+  it('the user writes and reads their own, and a paired guardian reads only with consent', async () => {
+    await allowActivity();
+    const db = as(VI);
+    await assertSucceeds(setDoc(event(db), row()));
+    await assertSucceeds(getDoc(event(db)));
+    await assertSucceeds(
+      getDocs(query(
+        collection(as(GUARDIAN), 'users', VI, 'obstacle_events'),
+        orderBy('at', 'desc'),
+      )),
+    );
+  });
+
+  it('a paired guardian cannot read it when activity consent is off', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(event(ctx.firestore()), row());
+    });
+    await assertFails(getDoc(event(as(GUARDIAN))));
+  });
+
+  it('a guardian cannot write, a stranger cannot read, and nobody can edit', async () => {
+    await allowActivity();
+    await assertFails(setDoc(event(as(GUARDIAN)), row()));
+    await assertSucceeds(setDoc(event(as(VI)), row()));
+    await assertFails(getDoc(event(as(STRANGER))));
+    await assertFails(updateDoc(event(as(VI)), { type: 'bus' }));
+    await assertFails(deleteDoc(event(as(GUARDIAN))));
+    await assertSucceeds(deleteDoc(event(as(VI))));
+  });
+});

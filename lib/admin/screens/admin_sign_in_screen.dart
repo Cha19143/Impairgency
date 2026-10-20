@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../admin_theme.dart';
+import '../../core/speech/screen_reading.dart';
+import '../../core/speech/speaker.dart';
 import 'admin_shell.dart';
 
 /// Returns null on success, or a message to show.
@@ -30,6 +32,7 @@ class AdminSignInScreen extends StatefulWidget {
     this.checkingRoster = false,
     this.onCheckAgain,
     this.onSignOut,
+    this.speaker = const SilentSpeaker(),
   });
 
   final SignInHandler onSignIn;
@@ -55,6 +58,8 @@ class AdminSignInScreen extends StatefulWidget {
 
   final VoidCallback? onSignOut;
 
+  final Speaker speaker;
+
   @override
   State<AdminSignInScreen> createState() => _AdminSignInScreenState();
 }
@@ -67,6 +72,16 @@ class _AdminSignInScreenState extends State<AdminSignInScreen> {
   bool _busy = false;
   bool _revealPassword = false;
   bool _checking = false;
+  String? _saidMode;
+
+  void _announce(String mode, List<String?> lines) {
+    if (_saidMode == mode) return;
+    _saidMode = mode;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _saidMode != mode) return;
+      widget.speaker.speakLines(screenReadingLines(lines));
+    });
+  }
 
   Future<void> _checkAgain() async {
     final check = widget.onCheckAgain;
@@ -77,6 +92,51 @@ class _AdminSignInScreenState extends State<AdminSignInScreen> {
     } finally {
       if (mounted) setState(() => _checking = false);
     }
+  }
+
+  List<String?> _openingLines(bool wide) {
+    const panel = [
+      'The dashboard behind the app.',
+      'Who is using ImpairGency, what the service is doing right now, and '
+          'the evidence behind what it claims.',
+    ];
+    if (widget.signedInAs == null) {
+      return [
+        'ImpairGency admin',
+        if (wide) ...panel,
+        'Sign in',
+        'Staff access to the ImpairGency dashboard.',
+        'Email',
+        'Password',
+        _revealPassword ? 'Hide password' : 'Show password',
+        'Sign in',
+      ];
+    }
+    if (widget.checkingRoster) {
+      return [
+        'ImpairGency admin',
+        if (wide) ...panel,
+        'Checking the admin roster…',
+        'You are signed in as ${widget.signedInAs}, but the database has '
+            'not answered whether that account is an administrator. This '
+            'usually means the connection is slow or down. The dashboard '
+            'opens as soon as it answers.',
+        'Check again',
+        'Sign out',
+      ];
+    }
+    final uid = widget.signedInUid ?? '';
+    return [
+      'ImpairGency admin',
+      if (wide) ...panel,
+      'Signed in, but not an administrator',
+      'You are signed in as ${widget.signedInAs}. That account is not on '
+          'the admin roster, so the dashboard will not open.',
+      'To grant it, create a document in Firestore with this exact ID:',
+      if (uid.isNotEmpty) 'admins/$uid',
+      'Check again',
+      'Sign out',
+    ];
   }
 
   @override
@@ -103,12 +163,21 @@ class _AdminSignInScreenState extends State<AdminSignInScreen> {
       _busy = false;
       _error = failure;
     });
+    if (failure != null) widget.speaker.speak(failure);
   }
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= kAdminSidebarBreakpoint;
     final onRoster = widget.signedInAs == null;
+    _announce(
+      onRoster
+          ? 'form'
+          : widget.checkingRoster
+              ? 'checking'
+              : 'refused',
+      _openingLines(wide),
+    );
 
     return Scaffold(
       backgroundColor: AdminColors.canvas,

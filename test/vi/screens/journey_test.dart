@@ -282,7 +282,7 @@ void main() {
       positions.add(fixAt(map.moved(map.a, east: 72), heading: 90));
       await tester.pump();
       expect(speaker.said.last.$1,
-          'In about 50 metres, turn left onto Mabini Street.');
+          'Turn left onto Mabini Street in 50 meters.');
       expect(find.textContaining('Next: turn left onto Mabini Street'),
           findsOneWidget);
     });

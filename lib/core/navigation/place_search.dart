@@ -109,6 +109,18 @@ class PlaceCandidate {
 
   RoutePoint get point => RoutePoint(latitude, longitude);
 
+  /// Street and town, for a history entry. Empty when the map named neither.
+  String get addressLine {
+    final streetLine = [
+      if (houseNumber.isNotEmpty) houseNumber,
+      if (street.isNotEmpty) street,
+    ].join(' ');
+    return [
+      if (streetLine.isNotEmpty) streetLine,
+      if (area.isNotEmpty) area,
+    ].join(', ');
+  }
+
   /// What to call it: its name, else its address, else its area.
   String get label {
     if (name.isNotEmpty) return name;
@@ -119,11 +131,12 @@ class PlaceCandidate {
   }
 
   Destination toDestination() => Destination(
-        id: 'search-$id',
-        label: label,
-        latitude: latitude,
-        longitude: longitude,
-      );
+    id: 'search-$id',
+    label: label,
+    latitude: latitude,
+    longitude: longitude,
+    address: addressLine,
+  );
 }
 
 /// Places in a Photon answer - GeoJSON features, coordinates `[lon, lat]` -
@@ -132,12 +145,16 @@ class PlaceCandidate {
 List<PlaceCandidate> parsePhoton(Object? json) {
   if (json is! Map) {
     throw const MapServiceException(
-        MapServiceFailure.unavailable, 'not a JSON object');
+      MapServiceFailure.unavailable,
+      'not a JSON object',
+    );
   }
   final features = json['features'];
   if (features is! List) {
     throw const MapServiceException(
-        MapServiceFailure.unavailable, 'no features');
+      MapServiceFailure.unavailable,
+      'no features',
+    );
   }
   final found = <PlaceCandidate>[];
   for (final feature in features) {
@@ -178,11 +195,17 @@ List<PlaceCandidate> parsePhoton(Object? json) {
     // apart, and both are worth offering - the recorded search found two
     // Jollibees on MacArthur Highway, in different towns.
     final label = candidate.label.toLowerCase();
-    if (found.any((f) =>
-        f.label.toLowerCase() == label &&
-        metresBetween(f.latitude, f.longitude, candidate.latitude,
-                candidate.longitude) <
-            kSamePlaceMetres)) {
+    if (found.any(
+      (f) =>
+          f.label.toLowerCase() == label &&
+          metresBetween(
+                f.latitude,
+                f.longitude,
+                candidate.latitude,
+                candidate.longitude,
+              ) <
+              kSamePlaceMetres,
+    )) {
       continue;
     }
     found.add(candidate);
@@ -199,14 +222,14 @@ const double kSearchRadiusMetres = 30000;
 /// [candidates] within [kSearchRadiusMetres] of [from], in the order the
 /// service ranked them.
 List<PlaceCandidate> nearbyCandidates(
-        List<PlaceCandidate> candidates, RoutePoint from) =>
-    [
-      for (final c in candidates)
-        if (metresBetween(
-                from.latitude, from.longitude, c.latitude, c.longitude) <=
-            kSearchRadiusMetres)
-          c,
-    ];
+  List<PlaceCandidate> candidates,
+  RoutePoint from,
+) => [
+  for (final c in candidates)
+    if (metresBetween(from.latitude, from.longitude, c.latitude, c.longitude) <=
+        kSearchRadiusMetres)
+      c,
+];
 
 /// A position older than this is said to be old when a search uses it.
 const Duration kStaleSearchFix = Duration(minutes: 2);
@@ -237,13 +260,20 @@ String describeCandidate(PlaceCandidate candidate, {RoutePoint? from}) {
   final where = parts.join(', ');
   if (from == null) return '$where.';
   final metres = metresBetween(
-      from.latitude, from.longitude, candidate.latitude, candidate.longitude);
+    from.latitude,
+    from.longitude,
+    candidate.latitude,
+    candidate.longitude,
+  );
   return '$where, ${describeDistance(metres)} away.';
 }
 
 /// Asked about each place found, one at a time.
-String candidateQuestion(PlaceCandidate candidate,
-        {RoutePoint? from, required bool more}) =>
+String candidateQuestion(
+  PlaceCandidate candidate, {
+  RoutePoint? from,
+  required bool more,
+}) =>
     '${describeCandidate(candidate, from: from)} '
     '${more ? 'Say yes to go there, next for another, or no.' : 'Say yes to go there, or no.'}';
 

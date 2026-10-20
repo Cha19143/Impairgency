@@ -4,8 +4,11 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../core/guardian/obstacle_event.dart';
+import '../core/speech/screen_reading.dart';
 import '../core/speech/speaker.dart';
 import '../core/vision/detection.dart';
+import '../core/vision/obstacle_distance.dart';
 import '../core/vision/faces.dart';
 import '../core/vision/friend_recognition.dart';
 import '../core/vision/stairs.dart' show kStairsLabel;
@@ -32,6 +35,7 @@ class SurroundingsWatch extends ChangeNotifier {
     this.voice,
     FriendRecognition? friends,
     this.onObstacle,
+    this.onImportantObstacle,
     Future<void> Function(Duration delay)? wait,
   })  : service = service ?? ScanService(),
         _friends = friends,
@@ -46,6 +50,10 @@ class SurroundingsWatch extends ChangeNotifier {
   /// Something close enough to walk into was warned about, by name. The
   /// session tells the guardian, if the user said it may.
   final void Function(String label)? onObstacle;
+
+  /// An urgent warning, with a distance estimated from the box. The activity
+  /// row stays on [onObstacle].
+  final void Function(ObstacleNotice notice)? onImportantObstacle;
 
   final FriendRecognition? _friends;
   final Future<void> Function(Duration delay) _wait;
@@ -81,13 +89,20 @@ class SurroundingsWatch extends ChangeNotifier {
 
   /// Starts the model and the camera, then says [readyPhrase] - and meets
   /// [meetFriend], if someone asked to be remembered on another screen.
-  Future<void> start({required String readyPhrase, String? meetFriend}) async {
+  ///
+  /// [also] is said in the same announcement, before [readyPhrase], so the
+  /// guidance line is not cut off by a second one. Failure lines stay last.
+  Future<void> start({
+    required String readyPhrase,
+    String? meetFriend,
+    List<String> also = const [],
+  }) async {
     final modelOk = await service.loadModel();
     if (_disposed) return;
     if (!modelOk) {
       _show('Guidance is not available.');
-      await speaker.speak(
-          'Sorry, guidance could not start. Everything else still works.');
+      await _say('Sorry, guidance could not start. Everything else still works.',
+          before: const ['Back']);
       return;
     }
 
@@ -99,16 +114,18 @@ class SurroundingsWatch extends ChangeNotifier {
       if (_disposed) return;
       _failed = true;
       _show('The camera could not start.');
-      await speaker.speak('The camera could not start. Go back, and open '
-          'this screen again.');
+      await _say('The camera could not start. Go back, and open '
+          'this screen again.',
+          before: const ['Back']);
       return;
     }
     if (_disposed) return;
     if (!cameraOk) {
       _refused = true;
       _show('The camera is off.');
-      await speaker.speak('The camera is turned off for this app. Turn it on '
-          'in Settings to use guidance.');
+      await _say('The camera is turned off for this app. Turn it on '
+          'in Settings to use guidance.',
+          before: const ['Back']);
       return;
     }
 
@@ -124,8 +141,18 @@ class SurroundingsWatch extends ChangeNotifier {
       _facesTried = true;
       if (_disposed) return;
     }
-    await speaker.speak(readyPhrase);
+    await _say(readyPhrase, before: also);
     if (meetFriend != null && !_disposed) unawaited(meet(meetFriend));
+  }
+
+  /// [before], then [phrase], as one announcement. One line stays a single
+  /// [Speaker.speak], which is what the existing guidance phrase is.
+  Future<void> _say(String phrase, {List<String> before = const []}) {
+    final lines = screenReadingLines([...before, phrase]);
+    if (lines.length <= 1) {
+      return speaker.speak(lines.isEmpty ? phrase : lines.single);
+    }
+    return speaker.speakLines(lines);
   }
 
   /// The camera, asked for once more after [kCameraRetryGap] if it throws.
@@ -179,6 +206,12 @@ class SurroundingsWatch extends ChangeNotifier {
     if ((guidance.urgent || stairs) && guidance.label != null) {
       onObstacle?.call(guidance.label!);
     }
+    final important = urgentObstacleNotice(
+      guidance: guidance,
+      detections: frame.detections,
+      depth: frame.depth,
+    );
+    if (important != null) onImportantObstacle?.call(important);
     // Hazards preempt whatever else is being said and are never restarted
     // while still in progress; ordinary descriptions wait their turn. The
     // queue holds that rule, not this. Stairs short of a "Stop" wait too, but

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:impairgency/core/location/location_fix.dart';
+import 'package:impairgency/core/navigation/route_deviation.dart';
 import 'package:impairgency/core/places/journey_recorder.dart';
 import 'package:impairgency/core/places/session_event.dart';
 
@@ -130,7 +131,30 @@ void main() {
   test('outside a journey, events are not recorded', () async {
     await recorder.recordEvent(SessionEventKind.sosFired);
     await recorder.recordFix(fix(14.788));
+    await recorder.recordRouteDeviation(fix(14.788), distanceMetres: 40);
     expect(store.events, isEmpty);
     expect(store.fixes, isEmpty);
+    expect(store.deviations, isEmpty);
+  });
+
+  test('a route deviation keeps where and how far, for a later notice',
+      () async {
+    await recorder.start(uid: 'u1', consent: true, destination: 'Home');
+    final at = fix(14.79, seconds: 12);
+    await recorder.recordRouteDeviation(at, distanceMetres: 37.4);
+
+    final saved = store.deviations.single;
+    expect(saved.$1, 'u1');
+    expect(saved.$2, recorder.sessionId);
+    final fields = saved.$3.documentFields(sessionId: saved.$2);
+    expect(fields['type'], RouteDeviation.type);
+    expect(fields['kind'], SessionEventKind.routeDeviation.name);
+    expect(fields['lat'], 14.79);
+    expect(fields['lng'], 120.92);
+    expect(fields['distanceMetres'], 37.4);
+    expect(fields['detail'], '37 m off the route');
+    expect(saved.$3.at, at.at);
+    expect(store.kindsIn(recorder.sessionId!),
+        contains(SessionEventKind.routeDeviation));
   });
 }

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/places/session_event.dart';
 import '../../core/places/session_summary.dart';
+import '../../core/speech/speaker.dart';
 import '../admin_theme.dart';
 import '../admin_ui.dart';
+import 'analytics_screen.dart';  
+
 
 /// §1.3's five metrics.
 ///
@@ -16,16 +19,33 @@ class OverviewScreen extends StatelessWidget {
     super.key,
     required this.overview,
     this.periodLabel = 'Last 30 days',
+    this.speaker = const SilentSpeaker(),
   });
 
   final UsageOverview overview;
   final String periodLabel;
+  final Speaker speaker;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.analytics_outlined),
+            label: const Text('Open Analytics'),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => AnalyticsScreen(speaker: speaker)),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 14),
         LayoutBuilder(builder: (context, constraints) {
           // Cards fill the row rather than sitting at a fixed 208 px with dead
           // space beside them. Four across on a desktop, two on a tablet, one
@@ -162,6 +182,7 @@ String _pretty(String kindName) {
     SessionEventKind.sosCancelled => 'SOS cancelled',
     SessionEventKind.placeLearned => 'Places recognised',
     SessionEventKind.destinationSet => 'Destinations set',
+    SessionEventKind.routeDeviation => 'Route deviations',
     null => kindName,
   };
 }

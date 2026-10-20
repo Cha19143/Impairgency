@@ -69,6 +69,46 @@ service cloud.firestore {
              && codeDoc(code).usedBy == request.auth.uid;
     }
 
+    // A new navigation-history row: one trip, opened as ongoing, with an
+    // expiry about 30 days out. The window is wide on purpose — the phone's
+    // clock and request.time are not the same instant.
+    function navigationEntryCreate() {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+               'destinationName', 'destinationAddress',
+               'destinationLat', 'destinationLng',
+               'originLat', 'originLng',
+               'startedAt', 'endedAt', 'status', 'expiresAt'])
+             && data.keys().hasOnly([
+               'destinationName', 'destinationAddress',
+               'destinationLat', 'destinationLng',
+               'originLat', 'originLng',
+               'startedAt', 'endedAt', 'status', 'expiresAt'])
+             && data.destinationName is string
+             && data.destinationName.size() > 0
+             && data.destinationName.size() <= 300
+             && data.destinationAddress is string
+             && data.destinationAddress.size() <= 300
+             && data.destinationLat is number
+             && data.destinationLat >= -90
+             && data.destinationLat <= 90
+             && data.destinationLng is number
+             && data.destinationLng >= -180
+             && data.destinationLng <= 180
+             && data.originLat is number
+             && data.originLat >= -90
+             && data.originLat <= 90
+             && data.originLng is number
+             && data.originLng >= -180
+             && data.originLng <= 180
+             && data.status == 'ongoing'
+             && data.startedAt == request.time
+             && data.endedAt == null
+             && data.expiresAt is timestamp
+             && data.expiresAt > request.time + duration.value(29, 'd')
+             && data.expiresAt < request.time + duration.value(31, 'd');
+    }
+
     // Consent is stored on the user document as a map of booleans. Absent means
     // withheld - never assume consent from a missing field.
     function hasConsent(userId, key) {
@@ -151,6 +191,19 @@ service cloud.firestore {
       allow create: if isOwner(userId) && hasConsent(userId, 'activity');
       allow update: if false;
       allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Near obstacles the app warned about: type, time, position, distance.
+    // The same consent as the activity card. A paired guardian may read.
+    // Only the user may write, and only the user may delete — the phone
+    // removes rows older than 30 days itself. Nothing here changes the
+    // activity rules above.
+    match /users/{userId}/obstacle_events/{eventId} {
+      allow read: if isOwner(userId)
+                  || (isPairedGuardianOf(userId) && hasConsent(userId, 'activity'));
+      allow create: if isOwner(userId) && hasConsent(userId, 'activity');
+      allow update: if false;
+      allow delete: if isOwner(userId);
     }
 
     // ---- pairing -------------------------------------------------------
@@ -252,6 +305,40 @@ service cloud.firestore {
       allow create: if isOwner(userId) && hasConsent(userId, 'history');
       allow update: if false;
       allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ---- navigation history ------------------------------------------------
+
+    // A trip the user started. The user writes their own rows and reads them.
+    // A paired guardian reads, and does not write. Nobody else reads.
+    //
+    // Not gated on location consent. Sharing where you are right now, and
+    // keeping a list of trips you asked the app to guide, are different
+    // questions. The pairing is the consent for this list: the guardian was
+    // given a code, and the user can break the link.
+    //
+    // An ongoing row that the phone never closed — the app was killed on the
+    // way — stays ongoing here. The guardian's screen shows one older than
+    // two hours as cancelled. expiresAt is for the time-to-live policy on
+    // this collection group; the phone also deletes its own expired rows.
+    match /navigation_history/{userId}/entries/{entryId} {
+      allow read: if isOwner(userId) || isPairedGuardianOf(userId);
+
+      allow create: if isOwner(userId)
+                    && !isRemoved(userId)
+                    && navigationEntryCreate();
+
+      // The only edit is how the trip ended. Coordinates, the destination
+      // and the clock it started are fixed at creation.
+      allow update: if isOwner(userId)
+                    && !isRemoved(userId)
+                    && resource.data.status == 'ongoing'
+                    && request.resource.data.status in ['completed', 'cancelled']
+                    && request.resource.data.endedAt == request.time
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['status', 'endedAt']);
+
+      allow delete: if isOwner(userId);
     }
 
     // ---- SOS -------------------------------------------------------------

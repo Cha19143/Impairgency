@@ -102,6 +102,7 @@ dependencies:
   # Where saved friends' faces are kept: the app's own support folder, on the
   # phone, excluded from backup. Already in the lock file through Firebase.
   path_provider: ^2.1.5
+  fl_chart: ^1.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

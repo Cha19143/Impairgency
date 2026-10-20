@@ -5,6 +5,16 @@ import '../../core/a11y/contrast.dart';
 import '../admin_theme.dart';
 import '../admin_ui.dart';
 
+/// The sentence at the top of the accessibility page.
+String accessibilitySpokenLine() {
+  final failing = kContrastPairs.values
+      .where((pair) => contrastRatio(pair.$1, pair.$2) < kAaNormalText)
+      .length;
+  return failing == 0
+      ? 'Every rendered colour pair meets WCAG AA'
+      : '$failing colour pair${failing == 1 ? '' : 's'} below WCAG AA';
+}
+
 /// §1.4's button, renamed to what it can actually show.
 ///
 /// `ui.pdf` called this "Accessibility Audits" and defined it nowhere. A button
@@ -62,10 +72,7 @@ class AccessibilityScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      failing == 0
-                          ? 'Every rendered colour pair meets WCAG AA'
-                          : '$failing colour pair${failing == 1 ? '' : 's'} '
-                              'below WCAG AA',
+                      accessibilitySpokenLine(),
                       style: TextStyle(
                         fontSize: 16,
                         height: 1.3,

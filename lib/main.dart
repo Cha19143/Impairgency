@@ -45,6 +45,7 @@ Future<void> main() async {
     FirebaseFirestore.instance
         .useFirestoreEmulator(kEmulatorHost, kFirestoreEmulatorPort);
 
+
     // Build the semantics tree from the first frame.
     //
     // Flutter web paints to a canvas, so the accessibility tree is the only

@@ -50,6 +50,21 @@ void main() {
         'follow the path round to the left');
   });
 
+  test('a turn is counted down in exact numbers, then said at the corner', () {
+    final left = step(ManeuverType.turn,
+        modifier: ManeuverModifier.left, name: 'Mabini Street');
+    expect(turnCountdownPhrase(left, 50),
+        'Turn left onto Mabini Street in 50 meters.');
+    expect(turnCountdownPhrase(left, 20),
+        'Turn left onto Mabini Street in 20 meters.');
+    expect(turnCountdownPhrase(left, 10),
+        'Turn left onto Mabini Street in 10 meters.');
+    expect(turnNowPhrase(left), 'Turn left onto Mabini Street now.');
+    expect(turnCountdownPhrase(
+            step(ManeuverType.turn, modifier: ManeuverModifier.right), 10),
+        'Turn right in 10 meters.');
+  });
+
   test('ahead, then at it', () {
     final left = step(ManeuverType.turn,
         modifier: ManeuverModifier.left, name: 'Mabini Street');

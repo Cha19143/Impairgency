@@ -1,17 +1,4 @@
-/// "Turn left", "keep going", "you have arrived" - from a position, a
-/// heading and a destination.
-///
-/// This is straight-line guidance and it says so. There is no road network
-/// on the free tier and no routing service that does not need a key and a
-/// card, so the app does what a compass and a distance do: it tells the
-/// user which way the destination lies relative to the way they are walking,
-/// and how far it is. That is honest, useful on a campus or a street grid,
-/// and wrong across a river - which is why the scan screen introduces it as
-/// "the direction of" rather than "the way to", and why hazards outrank it
-/// in the speech queue.
-///
-/// Pure, so the turn rule and the do-not-nag rule are asserted without a
-/// satellite.
+
 library;
 
 import 'dart:math' as math;

@@ -10,6 +10,8 @@ import '../../core/guardian/watched_user.dart';
 import '../../core/location/location_fix.dart';
 import '../../core/location/location_policy.dart' show describeAge;
 import '../../core/navigation/map_services.dart' show kOsmCopyrightUrl;
+import '../../core/speech/screen_reading.dart';
+import '../../core/speech/speaker.dart';
 import '../../vi/widgets/vi_button.dart';
 
 /// Builds the map for a fix. Injected so a widget test does not fetch tiles.
@@ -31,6 +33,7 @@ class LiveLocationScreen extends StatefulWidget {
     this.onOpenMap,
     this.now = DateTime.now,
     this.mapBuilder,
+    this.speaker = const SilentSpeaker(),
   });
 
   /// The person, kept live by whoever built this screen.
@@ -41,6 +44,7 @@ class LiveLocationScreen extends StatefulWidget {
   final void Function(LocationFix fix)? onOpenMap;
   final DateTime Function() now;
   final LiveMapBuilder? mapBuilder;
+  final Speaker speaker;
 
   @override
   State<LiveLocationScreen> createState() => _LiveLocationScreenState();
@@ -50,12 +54,17 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
   StreamSubscription<WatchedUser?>? _sub;
   WatchedUser? _user;
   Timer? _clock;
+  bool _opened = false;
 
   @override
   void initState() {
     super.initState();
     _sub = widget.user.listen((u) {
-      if (mounted) setState(() => _user = u);
+      if (!mounted) return;
+      setState(() {
+        _user = u;
+        _opened = true;
+      });
     });
     // The age line has to move on its own: a guardian leaves this screen
     // open and glances at it.
@@ -77,8 +86,26 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
     final fix = user?.fix;
     final now = widget.now();
     final title = user?.displayName ?? 'Live location';
+    final lines = <String?>[
+      title,
+      'Back',
+      if (user == null)
+        'Loading…'
+      else if (fix == null)
+        describeWatchedLocation(user, now: now)
+      else ...[
+        'Updated ${describeAge(now.difference(fix.at))}, '
+            'to within ${fix.accuracyMetres.round()} metres.',
+        if (widget.onOpenMap != null) 'Open in your maps app',
+        if (widget.onOpenMap != null) 'For directions to them',
+      ],
+    ];
 
-    return Scaffold(
+    return AnnounceOnce(
+      speaker: widget.speaker,
+      ready: _opened,
+      lines: lines,
+      child: Scaffold(
       backgroundColor: AppColors.navy,
       appBar: AppBar(
         title: Text(title),
@@ -146,6 +173,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 }
