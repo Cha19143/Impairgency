@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
+import '../core/clips/event_clip.dart';
 import '../core/vision/depth.dart';
 import '../core/vision/detection.dart';
 import '../core/vision/faces.dart';
@@ -33,6 +34,20 @@ import 'stairs_detector.dart';
 /// `core/vision/detection.dart`, and the arithmetic that produces the boxes is
 /// in `core/vision/yolo.dart`, where both can be tested without a camera.
 class ScanService {
+  ScanService({
+    this.captureClipFrames,
+    this.onClipFrame,
+  });
+
+  /// When this returns true, one small gray frame is copied after this
+  /// inference. Null or false leaves the frame alone. Detection does not
+  /// wait on it, and does not run it on the frames it skips.
+  final bool Function()? captureClipFrames;
+
+  /// The copied frame. Called only after the detection result has been
+  /// handed on, so speech is already queued.
+  final void Function(GrayFrame)? onClipFrame;
+
   /// One inference every 350 ms. Faster than a walking pace needs, and slow
   /// enough that the phone does not cook in a pocket.
   static const Duration _inferenceGap = Duration(milliseconds: 350);
@@ -341,6 +356,10 @@ class ScanService {
         depth: depth,
         notice: notice,
       ));
+      // After the result is handed on, so the warning is already queued.
+      // A tight Y subsample, and only when a clip is allowed. The JPEG is
+      // not made here.
+      _keepClipFrame(frame);
       // Inside the same busy window as the objects, so dispose() waits for
       // the face models too before closing anything.
       await _lookForFaces(frame, detections);
@@ -348,6 +367,23 @@ class ScanService {
       debugPrint('Detection failed: $e');
     } finally {
       _busy = false;
+    }
+  }
+
+  /// Copies a small upright gray frame, when a clip is allowed.
+  ///
+  /// A failure here is a missed picture, not a missed warning.
+  void _keepClipFrame(YuvFrame frame) {
+    try {
+      if (captureClipFrames?.call() != true) return;
+      onClipFrame?.call(GrayFrame(
+        at: DateTime.now(),
+        width: kClipWidth,
+        height: kClipHeight,
+        pixels: subsampleGray(frame),
+      ));
+    } catch (e) {
+      debugPrint('Clip frame skipped: $e');
     }
   }
 

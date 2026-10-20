@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/location/location_fix.dart';
+import '../core/motion/fall_event.dart';
 import '../core/navigation/route_deviation.dart';
 import '../core/places/journey.dart';
 import '../core/places/place.dart';
@@ -92,6 +93,20 @@ class LocationHistoryRepository {
     await _events(uid).add({
       ...deviation.documentFields(sessionId: sessionId),
       'at': Timestamp.fromDate(deviation.at),
+    });
+  }
+
+  /// A fall check-in finished. Same collection and the same history-consent
+  /// rule as [recordRouteDeviation]. The session does not call this unless
+  /// that consent is on.
+  Future<void> recordFall(
+    String uid,
+    FallMoment moment, {
+    required String sessionId,
+  }) async {
+    await _events(uid).add({
+      ...fallEventFields(moment, sessionId: sessionId),
+      'at': Timestamp.fromDate(moment.at),
     });
   }
 

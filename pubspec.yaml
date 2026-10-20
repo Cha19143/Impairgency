@@ -37,6 +37,10 @@ dependencies:
   # location_history collection Phase 2 aggregates for the learning features.
   geolocator: ^13.0.0
 
+  # Accelerometer for a sudden stop or fall, and only while Scan or a
+  # journey is open. No extra permission: this is motion, not location.
+  sensors_plus: ^6.1.1
+
   # Voice
   speech_to_text: ^7.4.0
   flutter_tts: ^4.0.2

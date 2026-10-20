@@ -115,8 +115,15 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
   /// What is waiting, in the order it will be said.
   List<String> get pending => _pending.map((r) => r.text).toList();
 
+  /// While a fall check-in is asking its question, directions and ordinary
+  /// speech wait. A hazard, including that question, is still said.
+  bool holdRoutineSpeech = false;
+
   @override
   Future<void> announce(String text, {required SpeechPriority priority}) {
+    if (holdRoutineSpeech && priority != SpeechPriority.hazard) {
+      return Future.value();
+    }
     final request = _start(text, priority);
     if (request == null) return Future.value();
     return request.done.future;
@@ -124,8 +131,10 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
 
   /// A direction. Completes false when a hazard cut the sentence off, so
   /// the caller can say the distance that is true now rather than the one
-  /// that was queued.
+  /// that was queued. Also false while [holdRoutineSpeech] is set, so the
+  /// distance can be said once the check-in is over.
   Future<bool> announceNavigation(String text) {
+    if (holdRoutineSpeech) return Future<bool>.value(false);
     final request = _start(text, SpeechPriority.navigation);
     if (request == null) return Future<bool>.value(true);
     return request.done.future.then((_) => !request.interrupted);

@@ -27,6 +27,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  Bytes,
 } from 'firebase/firestore';
 
 const VI = 'vi-user-1';
@@ -1259,5 +1260,109 @@ describe('guardian alerts', () => {
     await assertSucceeds(setDoc(alert(as(VI)), row()));
     await makeAdmin();
     await assertFails(getDoc(alert(asAdmin())));
+  });
+});
+
+describe('event clips', () => {
+  const clip = (db, id = 'clip-1') => doc(db, 'event_clips', id);
+  const frame = (db, id = 'clip-1', frameId = '0') =>
+    doc(db, 'event_clips', id, 'frames', frameId);
+
+  const row = (userId = VI) => ({
+    userId,
+    triggers: ['obstacle'],
+    at: new Date(),
+    endedAt: new Date(),
+    frameCount: 1,
+    hasFrames: true,
+    expiresAt: hoursFromNow(24 * 7),
+    lat: 14.6,
+    lng: 120.98,
+  });
+
+  const picture = (userId = VI) => ({
+    userId,
+    i: 0,
+    at: new Date(),
+    jpeg: Bytes.fromUint8Array(new Uint8Array([0xff, 0xd8, 0xff, 0xd9])),
+    w: 160,
+    h: 120,
+  });
+
+  const allowRecording = () =>
+    env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', VI), {
+        consent: {
+          location: false,
+          history: false,
+          recording: true,
+          faces: false,
+        },
+      }, { merge: true });
+    });
+
+  it('the owner with recording consent can create a clip and its frames', async () => {
+    await allowRecording();
+    await assertSucceeds(setDoc(clip(as(VI)), row()));
+    await assertSucceeds(setDoc(frame(as(VI)), picture()));
+  });
+
+  it('recording consent off cannot create', async () => {
+    await assertFails(setDoc(clip(as(VI)), row()));
+    await assertFails(setDoc(frame(as(VI)), picture()));
+  });
+
+  it('a removed account cannot create', async () => {
+    await allowRecording();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'removed_accounts', VI), {
+        removedBy: ADMIN,
+      });
+    });
+    await assertFails(setDoc(clip(as(VI)), row()));
+  });
+
+  it('the owner can list and delete their own, and cannot edit', async () => {
+    await allowRecording();
+    await assertSucceeds(setDoc(clip(as(VI)), row()));
+    await assertSucceeds(setDoc(frame(as(VI)), picture()));
+    await assertSucceeds(
+      getDocs(query(collection(as(VI), 'event_clips'), orderBy('at', 'desc'))),
+    );
+    await assertSucceeds(getDoc(frame(as(VI))));
+    await assertFails(updateDoc(clip(as(VI)), { triggers: ['sos'] }));
+    await assertFails(updateDoc(frame(as(VI)), { i: 1 }));
+    await assertSucceeds(deleteDoc(frame(as(VI))));
+    await assertSucceeds(deleteDoc(clip(as(VI))));
+  });
+
+  it('a guardian cannot read or delete, and a stranger cannot read', async () => {
+    await allowRecording();
+    await assertSucceeds(setDoc(clip(as(VI)), row()));
+    await assertSucceeds(setDoc(frame(as(VI)), picture()));
+    await assertFails(getDoc(clip(as(GUARDIAN))));
+    await assertFails(getDoc(frame(as(GUARDIAN))));
+    await assertFails(deleteDoc(clip(as(GUARDIAN))));
+    await assertFails(getDoc(clip(as(STRANGER))));
+    await assertFails(setDoc(clip(as(STRANGER)), row(STRANGER)));
+  });
+
+  it('an admin can read and cannot delete or write', async () => {
+    await allowRecording();
+    await assertSucceeds(setDoc(clip(as(VI)), row()));
+    await assertSucceeds(setDoc(frame(as(VI)), picture()));
+    await makeAdmin();
+    await assertSucceeds(getDoc(clip(asAdmin())));
+    await assertSucceeds(getDoc(frame(asAdmin())));
+    await assertSucceeds(
+      getDocs(query(collection(asAdmin(), 'event_clips'), orderBy('at', 'desc'))),
+    );
+    await assertFails(deleteDoc(clip(asAdmin())));
+    await assertFails(setDoc(clip(asAdmin()), row(ADMIN)));
+  });
+
+  it('a frame without the owner id is refused', async () => {
+    await allowRecording();
+    await assertFails(setDoc(frame(as(VI)), picture(GUARDIAN)));
   });
 });

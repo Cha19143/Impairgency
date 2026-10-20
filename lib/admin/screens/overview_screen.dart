@@ -183,6 +183,7 @@ String _pretty(String kindName) {
     SessionEventKind.placeLearned => 'Places recognised',
     SessionEventKind.destinationSet => 'Destinations set',
     SessionEventKind.routeDeviation => 'Route deviations',
+    SessionEventKind.fallDetected => 'Falls',
     null => kindName,
   };
 }

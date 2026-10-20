@@ -485,6 +485,53 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ---- event clips ----------------------------------------------------
+
+    // A few seconds around an obstacle, a fall, an SOS, an hour of standing
+    // still, or leaving the route. Not the walk. The admin site plays them.
+    // The owner can list their own so the phone can delete them after 7 days;
+    // a list is a read, and delete-by-query needs it. A guardian cannot.
+    // Frames repeat userId so a batched write does not have to read the parent.
+    match /event_clips/{clipId} {
+      allow read: if isAdmin()
+                  || (signedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && hasConsent(request.auth.uid, 'recording')
+                    && !isRemoved(request.auth.uid)
+                    && request.resource.data.triggers is list
+                    && request.resource.data.at is timestamp
+                    && request.resource.data.endedAt is timestamp
+                    && request.resource.data.frameCount is int
+                    && request.resource.data.hasFrames is bool
+                    && request.resource.data.expiresAt is timestamp;
+
+      allow update: if false;
+
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+
+      match /frames/{frameId} {
+        allow read: if isAdmin()
+                    || (signedIn() && resource.data.userId == request.auth.uid);
+
+        allow create: if signedIn()
+                      && request.resource.data.userId == request.auth.uid
+                      && hasConsent(request.auth.uid, 'recording')
+                      && !isRemoved(request.auth.uid)
+                      && request.resource.data.i is int
+                      && request.resource.data.jpeg is bytes
+                      && request.resource.data.jpeg.size() < 200000
+                      && request.resource.data.w is int
+                      && request.resource.data.h is int;
+
+        allow update: if false;
+
+        allow delete: if signedIn()
+                      && resource.data.userId == request.auth.uid;
+      }
+    }
+
     // ---- default deny ----------------------------------------------------
 
     match /{document=**} {

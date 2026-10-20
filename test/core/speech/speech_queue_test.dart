@@ -314,6 +314,19 @@ void main() {
       await q.announce('Stop.', priority: SpeechPriority.hazard);
       expect(broken.attempts, ['one', 'Stop.']);
     });
+
+    test('a fall check-in holds a direction and still says the question', () async {
+      final engine = FakeEngine();
+      final queue = SpeechQueue(engine: engine);
+      queue.holdRoutineSpeech = true;
+      expect(await queue.announceNavigation('Turn left'), isFalse);
+      expect(engine.started, isEmpty);
+      unawaited(
+        queue.announce('Okay ka lang ba?', priority: SpeechPriority.hazard),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(engine.speaking, 'Okay ka lang ba?');
+    });
   });
 }
 

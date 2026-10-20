@@ -38,8 +38,9 @@ const kConsentChoices = <ConsentChoice>[
   ConsentChoice(
     key: 'recording',
     title: 'Record what the camera sees',
-    detail: 'Saves sessions so you can review them. Only you can play them '
-        'back.',
+    detail: 'Short clips around important events, such as a fall or an '
+        'obstacle. An administrator can play them. Kept for 7 days, not a '
+        'whole walk.',
   ),
   ConsentChoice(
     key: 'activity',

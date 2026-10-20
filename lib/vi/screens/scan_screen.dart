@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/clips/event_clip.dart';
 import '../../core/guardian/obstacle_event.dart';
+import '../../data/motion_source.dart';
 import '../../core/speech/screen_reading.dart';
 import '../../core/speech/speaker.dart';
 import '../../core/vision/friend_recognition.dart';
 import '../../core/voice/voice_commands.dart';
 import '../../data/scan_service.dart';
+import '../fall_watch.dart';
 import '../surroundings_watch.dart';
 import '../voice_controller.dart';
 import '../widgets/surroundings_preview.dart';
@@ -34,6 +37,13 @@ class ScanScreen extends StatefulWidget {
     this.voice,
     this.onObstacle,
     this.onImportantObstacle,
+    this.motion,
+    this.onFallDetected,
+    this.onFallFinished,
+    this.onFallCancel,
+    this.onFallHelp,
+    this.captureClipFrames,
+    this.onClipFrame,
     this.friends,
     this.meetFriend,
   });
@@ -46,6 +56,17 @@ class ScanScreen extends StatefulWidget {
   /// An urgent obstacle, for the guardian's history. Separate from
   /// [onObstacle], which still feeds the activity card.
   final void Function(ObstacleNotice notice)? onImportantObstacle;
+
+  /// Accelerometer. Null in tests, and on any screen that is not walking.
+  final MotionSource? motion;
+  final void Function()? onFallDetected;
+  final Future<void> Function({required bool answered})? onFallFinished;
+  final void Function()? onFallCancel;
+  final void Function()? onFallHelp;
+
+  /// When true, one gray frame is copied after each detection. Null skips it.
+  final bool Function()? captureClipFrames;
+  final void Function(GrayFrame)? onClipFrame;
 
   /// Takes priorities, because this is a screen where two things can need
   /// saying at once and one of them is a hazard.
@@ -80,7 +101,12 @@ class _ScanScreenState extends State<ScanScreen> {
     friends: widget.friends,
     onObstacle: (label) => widget.onObstacle?.call(label),
     onImportantObstacle: widget.onImportantObstacle,
+    speechHeld: () => _falls?.checking ?? false,
+    captureClipFrames: widget.captureClipFrames,
+    onClipFrame: widget.onClipFrame,
   );
+
+  FallWatch? _falls;
 
   VoiceScopeHandle? _voiceScope;
 
@@ -91,6 +117,19 @@ class _ScanScreenState extends State<ScanScreen> {
       commands: () => kScanCommands,
       onCommand: _onVoice,
     ));
+    final motion = widget.motion;
+    if (motion != null) {
+      _falls = FallWatch(
+        motion: motion,
+        speaker: widget.speaker,
+        voice: widget.voice,
+        onDetected: widget.onFallDetected ?? () {},
+        onFinished: widget.onFallFinished ?? ({required bool answered}) async {},
+        onCancel: widget.onFallCancel ?? () {},
+        onHelp: widget.onFallHelp ?? () {},
+      );
+      _falls!.start();
+    }
     _watch.start(
       readyPhrase: 'Guidance ready. Hold the phone up and walk slowly.',
       meetFriend: widget.meetFriend,
@@ -146,6 +185,7 @@ class _ScanScreenState extends State<ScanScreen> {
     // sentence, cancelled its listening, and dropped any hazard still being
     // said. The router stops listening when the route changes instead.
     _voiceScope?.detach();
+    _falls?.stop();
     _watch.dispose();
     super.dispose();
   }

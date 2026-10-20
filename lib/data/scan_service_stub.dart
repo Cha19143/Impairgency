@@ -1,6 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/clips/event_clip.dart';
 import '../core/vision/detection.dart';
 import '../core/vision/faces.dart';
 
@@ -13,6 +14,11 @@ import '../core/vision/faces.dart';
 /// It refuses honestly rather than pretending: [loadModel] returns false, and
 /// the screen already has a path for a model that would not load.
 class ScanService {
+  ScanService({
+    bool Function()? captureClipFrames,
+    void Function(GrayFrame)? onClipFrame,
+  });
+
   CameraController? get controller => null;
   bool get isReady => false;
 

@@ -20,6 +20,8 @@ const adminSections = <AdminSection>[
       'System health', Icons.monitor_heart_outlined, Routes.adminHealth),
   AdminSection('Accessibility', Icons.accessibility_new_outlined,
       Routes.adminAccessibility),
+  AdminSection(
+      'Event clips', Icons.photo_library_outlined, Routes.adminClips),
 ];
 
 /// Below this the sidebar becomes a drawer.

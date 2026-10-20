@@ -12,6 +12,8 @@ import 'package:firebase_core/firebase_core.dart';
 
 import '../core/alerts/alert_presenter.dart';
 import '../core/alerts/guardian_alert.dart';
+import '../core/clips/event_clip.dart';
+import '../core/motion/fall_event.dart';
 import '../core/auth/email_verification.dart';
 import '../core/contacts/emergency_contact.dart';
 import '../core/location/location_fix.dart';
@@ -40,6 +42,7 @@ import '../admin/screens/accessibility_screen.dart';
 import '../admin/screens/admin_page.dart';
 import '../admin/screens/admin_shell.dart';
 import '../admin/screens/admin_sign_in_screen.dart';
+import '../admin/screens/event_clips_screen.dart';
 import '../admin/screens/invite_dialog.dart';
 import '../admin/screens/overview_screen.dart';
 import '../admin/screens/system_health_screen.dart';
@@ -64,6 +67,8 @@ import '../data/journey_store.dart';
 import '../data/location_history_repository.dart';
 import '../data/navigation_history_repository.dart';
 import '../data/guardian_alert_repository.dart';
+import '../data/event_clip_repository.dart';
+import '../data/motion_source.dart';
 import '../data/obstacle_history_repository.dart';
 import '../data/navigation_history_writer.dart';
 import '../data/location_sharer.dart';
@@ -147,6 +152,8 @@ class AppSession extends ChangeNotifier {
     NavigationHistoryRepository? navigationHistory,
     ObstacleHistorySink? obstacleHistory,
     GuardianAlertSink? guardianAlerts,
+    FallHistorySink? fallHistory,
+    EventClipSink? eventClips,
     bool? dashboard,
   }) : store = store ?? InMemorySessionStore(),
        _dashboard = dashboard ?? kIsWeb,
@@ -169,7 +176,9 @@ class AppSession extends ChangeNotifier {
        _journeyStore = journeyStore,
        _navigationHistory = navigationHistory,
        _obstacleHistory = obstacleHistory,
-       _guardianAlerts = guardianAlerts;
+       _guardianAlerts = guardianAlerts,
+       _fallHistory = fallHistory,
+       _eventClips = eventClips;
 
   /// Whether this is the web dashboard: the admin app, and the roster that
   /// guards it. [kIsWeb], unless a test says otherwise.
@@ -183,6 +192,11 @@ class AppSession extends ChangeNotifier {
   final ObstacleHistorySink? _obstacleHistory;
   ObstacleHistoryRepository? _ownedObstacleHistory;
   String? _prunedObstaclesFor;
+  final EventClipSink? _eventClips;
+  EventClipRepository? _ownedEventClips;
+  String? _prunedClipsFor;
+  final _clips = ClipAssembler();
+  Timer? _clipTimer;
 
   /// Tells the guardian what the app noticed - if the user said it may,
   /// and not the same thing twice in a minute.
@@ -952,12 +966,13 @@ class AppSession extends ChangeNotifier {
 
   /// An urgent obstacle, the moment the warning is spoken.
   ///
-  /// This is the one place a later guardian notice or a short video clip
-  /// should hook. The activity card is [noticedObstacle] and is not changed
-  /// here. Nothing is stored without activity consent, and the same object
-  /// type is kept at most once per [kObstacleCooldown]. The write is not
-  /// awaited: the warning does not wait on GPS or Firestore.
+  /// The activity card is [noticedObstacle] and is not changed here. The
+  /// obstacle row needs activity consent, and the same object type is kept
+  /// at most once per [kObstacleCooldown]. A clip, when recording is on,
+  /// uses this same moment. The write is not awaited: the warning does not
+  /// wait on GPS or Firestore.
   void noteImportantObstacle(ObstacleNotice notice) {
+    noteEventClip(kClipTriggerObstacle);
     final uid = _state.uid;
     if (uid == null || _state.consent['activity'] != true) return;
     final kept = keepImportantObstacle(
@@ -1008,6 +1023,136 @@ class AppSession extends ChangeNotifier {
     await obstacleHistory.deleteExpired(uid);
   }
 
+  /// One batch of this user's expired clips, once per launch.
+  /// Runs on the user's phone: an administrator plays them, and does not
+  /// delete them.
+  Future<void> _pruneEventClips(String uid) async {
+    if (_prunedClipsFor == uid) return;
+    _prunedClipsFor = uid;
+    if (_eventClips != null) return;
+    try {
+      if (Firebase.apps.isEmpty) return;
+    } catch (_) {
+      return;
+    }
+    await eventClips.deleteExpired(uid);
+  }
+
+  EventClipRepository get eventClips =>
+      _ownedEventClips ??= EventClipRepository();
+
+  EventClipSink get _clipSink => _eventClips ?? eventClips;
+
+  /// Whether the camera should copy a gray frame after this detection.
+  ///
+  /// False leaves detection exactly as it was. Recording consent off also
+  /// drops the buffer, so nothing is kept to throw away later.
+  bool captureClipFrames() {
+    if (!kClipsEnabled) return false;
+    if (_state.consent['recording'] != true) {
+      _dropClipBuffer();
+      return false;
+    }
+    return true;
+  }
+
+  /// One gray frame from the camera callback. Ignored unless a clip is allowed.
+  void offerClipFrame(GrayFrame frame) {
+    if (!captureClipFrames()) return;
+    _clips.addFrame(frame);
+    _flushDue(DateTime.now());
+  }
+
+  /// The one place a trigger becomes a clip. The five call sites stay where
+  /// they are; none of them write the clip themselves.
+  void noteEventClip(
+    String trigger, {
+    double? latitude,
+    double? longitude,
+    Future<LocationFix?>? position,
+  }) {
+    if (!kClipsEnabled) return;
+    if (_state.consent['recording'] != true || _state.uid == null) {
+      _dropClipBuffer();
+      return;
+    }
+    final now = DateTime.now();
+    _flushDue(now);
+    final accepted = _clips.note(
+      trigger,
+      now,
+      latitude: latitude,
+      longitude: longitude,
+    );
+    if (!accepted) return;
+    if (latitude == null) {
+      final pending = position;
+      if (pending != null) {
+        unawaited(() async {
+          try {
+            final fix = await pending;
+            if (fix == null) return;
+            _clips.attachPosition(fix.latitude, fix.longitude);
+          } catch (_) {}
+        }());
+      } else {
+        unawaited(_fillClipPosition());
+      }
+    }
+    _armClipTimer();
+  }
+
+  void _dropClipBuffer() {
+    _clipTimer?.cancel();
+    _clipTimer = null;
+    _clips.clear();
+  }
+
+  void _flushDue(DateTime now) {
+    final clip = _clips.takeDue(now);
+    if (clip != null) unawaited(_saveClip(clip));
+    _armClipTimer();
+  }
+
+  void _armClipTimer() {
+    _clipTimer?.cancel();
+    final deadline = _clips.deadline;
+    if (deadline == null) {
+      _clipTimer = null;
+      return;
+    }
+    var wait = deadline.difference(DateTime.now());
+    if (wait < Duration.zero) wait = Duration.zero;
+    // The callback is given the deadline it was armed for. Closing on
+    // DateTime.now() instead would miss the clip whenever the timer and the
+    // clock were not the same clock.
+    final dueAt = deadline;
+    _clipTimer = Timer(wait, () => _flushDue(dueAt));
+  }
+
+  Future<void> _saveClip(ClosedClip clip) async {
+    if (!kClipsEnabled) return;
+    if (_state.consent['recording'] != true) return;
+    final uid = _state.uid;
+    if (uid == null) return;
+    try {
+      await _clipSink.save(uid, clip);
+    } catch (e) {
+      debugPrint('Could not save an event clip: $e');
+    }
+  }
+
+  Future<void> _fillClipPosition() async {
+    try {
+      final fix = await bestEffortFix(
+        location,
+        timeout: const Duration(seconds: 3),
+      );
+      if (fix == null) return;
+      _clips.attachPosition(fix.latitude, fix.longitude);
+    } catch (_) {}
+  }
+
   /// A position the directions used, for the journey's record. The first one
   /// of a trip is also where that trip's history entry starts.
   void recordJourneyFix(LocationFix fix) {
@@ -1028,6 +1173,87 @@ class AppSession extends ChangeNotifier {
         position: fix,
       ),
     );
+    noteEventClip(
+      kClipTriggerDeviation,
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+    );
+  }
+
+  final FallHistorySink? _fallHistory;
+  FallMoment? _openFall;
+  Future<LocationFix?>? _fallFix;
+
+  /// The moment a fall pattern tripped. The clip hooks this, not the sensor.
+  /// The history row is written when the check-in ends.
+  void noteImportantFall() {
+    if (_openFall != null) return;
+    _openFall = keepImportantFall(at: DateTime.now());
+    _fallFix = _captureFallFix();
+    noteEventClip(kClipTriggerFall, position: _fallFix);
+  }
+
+  /// The check-in was left because the screen closed. Nothing is written.
+  void cancelImportantFall() {
+    _openFall = null;
+    _fallFix = null;
+  }
+
+  /// The person answered, or the wait ran out. History follows the same
+  /// consent as a route deviation. The guardian alert follows location
+  /// sharing, and only when there was no answer.
+  Future<void> completeImportantFall({required bool answered}) async {
+    final moment = _openFall;
+    _openFall = null;
+    if (moment == null) return;
+    moment.answered = answered;
+    moment.position = await _fallFix;
+    _fallFix = null;
+    final uid = _state.uid;
+    if (uid != null && _state.consent['history'] == true) {
+      unawaited(_writeFall(uid, moment));
+    }
+    if (!answered) {
+      unawaited(
+        sendGuardianAlert(
+          kind: kGuardianAlertFall,
+          message: kFallAlertMessage,
+          position: moment.position,
+        ),
+      );
+    }
+  }
+
+  Future<LocationFix?> _captureFallFix() async {
+    try {
+      return await bestEffortFix(location, timeout: const Duration(seconds: 3));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeFall(String uid, FallMoment moment) async {
+    final sessionId = journeys.sessionId ?? 'walking';
+    try {
+      final sink = _fallHistory;
+      if (sink != null) {
+        await sink.record(uid, moment, sessionId: sessionId);
+        return;
+      }
+      if (!_fallHistoryEnabled) return;
+      await history.recordFall(uid, moment, sessionId: sessionId);
+    } catch (e) {
+      debugPrint('Could not record a fall: $e');
+    }
+  }
+
+  bool get _fallHistoryEnabled {
+    if (_fallHistory != null) return true;
+    try {
+      return Firebase.apps.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   final GuardianAlertSink? _guardianAlerts;
@@ -1085,6 +1311,11 @@ class AppSession extends ChangeNotifier {
     if (_state.uid == null) return;
     await _loadHomes();
     if (!_stay.note(fix, atHome: isAtSavedHome(fix, _homes))) return;
+    noteEventClip(
+      kClipTriggerStationary,
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+    );
     final sent = await sendGuardianAlert(
       kind: kGuardianAlertStationary,
       message: 'Has been in one place for 1 hour.',
@@ -1214,6 +1445,7 @@ class AppSession extends ChangeNotifier {
       if (!_dashboard) {
         unawaited(_pruneNavigationHistory(user.uid));
         unawaited(_pruneObstacleHistory(user.uid));
+        unawaited(_pruneEventClips(user.uid));
       }
       _settleAuth();
     });
@@ -1351,6 +1583,9 @@ class AppSession extends ChangeNotifier {
   void update(SessionState next) {
     final before = _state;
     _state = next;
+    if (next.consent['recording'] != true || next.uid != before.uid) {
+      _dropClipBuffer();
+    }
     _syncSharing(before);
     notifyListeners();
   }
@@ -1360,6 +1595,7 @@ class AppSession extends ChangeNotifier {
     _sharer?.stop();
     _rosterRetry?.cancel();
     _awayTimer?.cancel();
+    _clipTimer?.cancel();
     unawaited(_removalWatch?.cancel());
     super.dispose();
   }
@@ -1696,6 +1932,13 @@ GoRouter createRouter(AppSession session) {
             meetFriend: meet,
             onObstacle: session.noticedObstacle,
             onImportantObstacle: session.noteImportantObstacle,
+            motion: const SensorsMotionSource(),
+            onFallDetected: session.noteImportantFall,
+            onFallFinished: session.completeImportantFall,
+            onFallCancel: session.cancelImportantFall,
+            onFallHelp: () => appNavigate(context, Routes.sos),
+            captureClipFrames: session.captureClipFrames,
+            onClipFrame: session.offerClipFrame,
             onBack: () => appNavigate(context, Routes.home),
           );
         },
@@ -1732,6 +1975,13 @@ GoRouter createRouter(AppSession session) {
                       ),
                       onArrived: () => unawaited(session.arrived()),
                       onOffRoute: session.recordRouteDeviation,
+                      motion: const SensorsMotionSource(),
+                      onFallDetected: session.noteImportantFall,
+                      onFallFinished: session.completeImportantFall,
+                      onFallCancel: session.cancelImportantFall,
+                      onFallHelp: () => appNavigate(context, Routes.sos),
+                      captureClipFrames: session.captureClipFrames,
+                      onClipFrame: session.offerClipFrame,
                       // A real move to Scan, which keeps warning. The screen
                       // used to stay where it was and forget the destination
                       // itself, because a go() to the route already open is a
@@ -1858,7 +2108,12 @@ GoRouter createRouter(AppSession session) {
           voiceController: session.voice,
           contacts: session.state.contacts,
           guardianCount: session.state.guardianCount,
-          onEvent: (kind) => session.recordJourneyEvent(kind),
+          onEvent: (kind) {
+            session.recordJourneyEvent(kind);
+            if (kind == SessionEventKind.sosArmed) {
+              session.noteEventClip(kClipTriggerSos);
+            }
+          },
           onFinished: () => appNavigate(context, Routes.home),
         ),
       ),
@@ -2305,6 +2560,52 @@ GoRouter createRouter(AppSession session) {
             account: session.auth.email,
             child: const AccessibilityScreen(),
           ),
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminClips,
+        builder: (context, _) => AdminPage<
+            ({List<EventClipRecord> clips, List<AdminUserRow> users})>(
+          route: Routes.adminClips,
+          title: 'Event clips',
+          subtitle: 'Last 7 days',
+          load: () async {
+            try {
+              if (Firebase.apps.isEmpty) {
+                return (
+                  clips: const <EventClipRecord>[],
+                  users: const <AdminUserRow>[],
+                );
+              }
+            } catch (_) {
+              return (
+                clips: const <EventClipRecord>[],
+                users: const <AdminUserRow>[],
+              );
+            }
+            final clips = await session.eventClips.recent();
+            List<AdminUserRow> users = const [];
+            try {
+              users = await session.admin.users();
+            } catch (_) {}
+            return (clips: clips, users: users);
+          },
+          builder: (_, data, __) => EventClipsScreen(
+            clips: data.clips,
+            users: data.users,
+            loadFrames: session.eventClips.frames,
+            speaker: session.speaker,
+          ),
+          onSelect: (s) => appNavigate(context, s.route),
+          onSignOut: session.auth.signOut,
+          account: session.auth.email,
+          speaker: session.speaker,
+          spoken: const [
+            'User',
+            'Date',
+            'Trigger',
+            'Play',
+          ],
         ),
       ),
     ],

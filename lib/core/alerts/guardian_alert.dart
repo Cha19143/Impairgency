@@ -12,6 +12,12 @@ const String kGuardianAlertRouteDeviation = 'route_deviation';
 /// Stayed inside a small radius for an hour, and not at Home.
 const String kGuardianAlertStationary = 'stationary_1h';
 
+/// The check-in was not answered. Same delivery as the other two kinds.
+const String kGuardianAlertFall = 'fall_no_response';
+
+/// Stored on the alert. The guardian's notification adds the person's name.
+const String kFallAlertMessage = 'May have fallen and did not respond.';
+
 /// Wandering on and off the route must not notify on every new episode.
 const Duration kRouteDeviationAlertCooldown = Duration(minutes: 5);
 
@@ -110,6 +116,8 @@ String guardianAlertSentence(GuardianAlert alert, String? name) {
       return '$who left the planned route';
     case kGuardianAlertStationary:
       return '$who has been in one place for 1 hour';
+    case kGuardianAlertFall:
+      return '$who may have fallen and did not respond';
     default:
       final message = alert.message.trim();
       return message.isEmpty ? who : '$who. $message';

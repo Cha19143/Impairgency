@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../core/clips/event_clip.dart';
 import '../core/guardian/obstacle_event.dart';
 import '../core/speech/screen_reading.dart';
 import '../core/speech/speaker.dart';
@@ -36,8 +37,15 @@ class SurroundingsWatch extends ChangeNotifier {
     FriendRecognition? friends,
     this.onObstacle,
     this.onImportantObstacle,
+    this.speechHeld,
+    this.captureClipFrames,
+    this.onClipFrame,
     Future<void> Function(Duration delay)? wait,
-  })  : service = service ?? ScanService(),
+  })  : service = service ??
+            ScanService(
+              captureClipFrames: captureClipFrames,
+              onClipFrame: onClipFrame,
+            ),
         _friends = friends,
         _wait = wait ?? ((delay) => Future<void>.delayed(delay));
 
@@ -54,6 +62,17 @@ class SurroundingsWatch extends ChangeNotifier {
   /// An urgent warning, with a distance estimated from the box. The activity
   /// row stays on [onObstacle].
   final void Function(ObstacleNotice notice)? onImportantObstacle;
+
+  /// While this is true, nothing on this watch is spoken. The fall check-in
+  /// uses it so its question is not talked over. Null the rest of the time.
+  final bool Function()? speechHeld;
+
+  /// When this returns true, the scan copies one small gray frame after the
+  /// detection. Null skips that copy. Speech and the model are unchanged.
+  final bool Function()? captureClipFrames;
+
+  /// The copied frame. Null when clips are off.
+  final void Function(GrayFrame)? onClipFrame;
 
   final FriendRecognition? _friends;
   final Future<void> Function(Duration delay) _wait;
@@ -175,12 +194,13 @@ class SurroundingsWatch extends ChangeNotifier {
   /// One frame from the camera.
   void onFrame(ScanFrame frame) {
     if (_disposed) return;
+    final guidance = guidanceFor(frame.detections, depth: frame.depth);
+    _show(guidance.phrase);
+    if (speechHeld?.call() ?? false) return;
     final notice = frame.notice;
     if (notice != null) {
       speaker.announce(notice, priority: SpeechPriority.info);
     }
-    final guidance = guidanceFor(frame.detections, depth: frame.depth);
-    _show(guidance.phrase);
     // While a friend's face is being taken down, "person ahead" is the friend.
     // Only a hazard interrupts.
     if ((_faceWatch?.enrolling ?? false) && !guidance.urgent) return;

@@ -100,6 +100,7 @@ abstract final class Routes {
   static const adminUsers = '/admin/users';
   static const adminHealth = '/admin/health';
   static const adminAccessibility = '/admin/accessibility';
+  static const adminClips = '/admin/clips';
 
   /// Ordered onboarding steps. Setup resumes at the first incomplete one - a
   /// blind user restarting from scratch after a crash would be punishing.

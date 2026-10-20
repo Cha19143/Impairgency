@@ -19,6 +19,9 @@ enum SessionEventKind {
   /// detection. A later step can notify a guardian from this, without
   /// another detector.
   routeDeviation,
+
+  /// A sudden stop or fall. The history row says whether they answered.
+  fallDetected,
 }
 
 class SessionEvent {
@@ -70,7 +73,8 @@ EventWeight weightOf(SessionEventKind kind) => switch (kind) {
       SessionEventKind.stairsDetected => EventWeight.hazard,
       SessionEventKind.sosArmed ||
       SessionEventKind.sosFired ||
-      SessionEventKind.sosCancelled =>
+      SessionEventKind.sosCancelled ||
+      SessionEventKind.fallDetected =>
         EventWeight.emergency,
       _ => EventWeight.ordinary,
     };
@@ -97,5 +101,7 @@ String describeEvent(SessionEvent event) {
       detail == null ? 'Destination set' : 'Heading for $detail',
     SessionEventKind.routeDeviation =>
       detail == null ? 'Left the route' : 'Left the route — $detail',
+    SessionEventKind.fallDetected =>
+      detail == null ? 'Fall detected' : 'Fall detected — $detail',
   };
 }
