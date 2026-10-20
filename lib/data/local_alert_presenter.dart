@@ -16,6 +16,11 @@ class LocalAlertPresenter implements AlertPresenter {
   final FlutterLocalNotificationsPlugin _plugin;
   bool _ready = false;
 
+  /// Called with the notification payload when the guardian taps it.
+  /// A null handler, and any payload that is not a guardian-alert live
+  /// link, leaves SOS taps doing what they did before: nothing.
+  void Function(String? payload)? onSelect;
+
   static const String channelId = 'impairgency_emergency';
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
@@ -44,6 +49,9 @@ class LocalAlertPresenter implements AlertPresenter {
           requestBadgePermission: false,
         ),
       ),
+      onDidReceiveNotificationResponse: (response) {
+        onSelect?.call(response.payload);
+      },
     );
 
     await _plugin
@@ -91,7 +99,7 @@ class LocalAlertPresenter implements AlertPresenter {
           interruptionLevel: InterruptionLevel.timeSensitive,
         ),
       ),
-      payload: alert.eventId,
+      payload: alert.payload ?? alert.eventId,
     );
   }
 }

@@ -11,9 +11,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import '../core/alerts/alert_presenter.dart';
+import '../core/alerts/guardian_alert.dart';
 import '../core/auth/email_verification.dart';
 import '../core/contacts/emergency_contact.dart';
 import '../core/location/location_fix.dart';
+import '../core/location/stationary_detector.dart';
 import '../core/location/location_policy.dart';
 import '../core/location/location_source.dart';
 import '../core/location/where_am_i.dart';
@@ -61,6 +63,7 @@ import '../data/saved_places_repository.dart';
 import '../data/journey_store.dart';
 import '../data/location_history_repository.dart';
 import '../data/navigation_history_repository.dart';
+import '../data/guardian_alert_repository.dart';
 import '../data/obstacle_history_repository.dart';
 import '../data/navigation_history_writer.dart';
 import '../data/location_sharer.dart';
@@ -143,6 +146,7 @@ class AppSession extends ChangeNotifier {
     JourneyStore? journeyStore,
     NavigationHistoryRepository? navigationHistory,
     ObstacleHistorySink? obstacleHistory,
+    GuardianAlertSink? guardianAlerts,
     bool? dashboard,
   }) : store = store ?? InMemorySessionStore(),
        _dashboard = dashboard ?? kIsWeb,
@@ -164,7 +168,8 @@ class AppSession extends ChangeNotifier {
        _friendStore = friendStore,
        _journeyStore = journeyStore,
        _navigationHistory = navigationHistory,
-       _obstacleHistory = obstacleHistory;
+       _obstacleHistory = obstacleHistory,
+       _guardianAlerts = guardianAlerts;
 
   /// Whether this is the web dashboard: the admin app, and the roster that
   /// guards it. [kIsWeb], unless a test says otherwise.
@@ -1008,12 +1013,106 @@ class AppSession extends ChangeNotifier {
   void recordJourneyFix(LocationFix fix) {
     unawaited(journeys.recordFix(fix));
     if (_navigationEnabled) _navigation.notePosition(fix);
+    noteStationaryReading(fix);
   }
 
   /// The walker left the route. Written once per time the check trips, and
-  /// never awaited on the direction that is being spoken.
+  /// never awaited on the direction that is being spoken. The history row
+  /// stays on the history consent. The guardian alert is separate.
   void recordRouteDeviation(LocationFix fix, double metresOff) {
     unawaited(journeys.recordRouteDeviation(fix, distanceMetres: metresOff));
+    unawaited(
+      sendGuardianAlert(
+        kind: kGuardianAlertRouteDeviation,
+        message: 'Left the planned route.',
+        position: fix,
+      ),
+    );
+  }
+
+  final GuardianAlertSink? _guardianAlerts;
+  GuardianAlertSink? _ownedGuardianAlerts;
+  GuardianAlertSink get _guardianAlertSink =>
+      _guardianAlerts ??
+      (_ownedGuardianAlerts ??= FirestoreGuardianAlertSink());
+
+  final _deviationCooldown = GuardianAlertCooldown();
+  final _stay = StationaryDetector();
+  List<Destination> _homes = const [];
+  DateTime? _homesLoadedAt;
+  Future<void> _stayChain = Future<void>.value();
+
+  /// The one place a guardian is told about something other than SOS.
+  ///
+  /// Tied to "Share where I am" (`consent.location`), the live-location
+  /// consent. Not history. A paired guardian is who the rules let read it.
+  Future<bool> sendGuardianAlert({
+    required String kind,
+    required String message,
+    LocationFix? position,
+  }) async {
+    if (_state.consent['location'] != true) return false;
+    final uid = _state.uid;
+    if (uid == null || !_state.signedIn || _state.isGuardian) return false;
+    if (kind == kGuardianAlertRouteDeviation &&
+        !_deviationCooldown.admit(DateTime.now())) {
+      return false;
+    }
+    try {
+      await _guardianAlertSink.send(
+        uid: uid,
+        kind: kind,
+        message: message,
+        at: DateTime.now(),
+        latitude: position?.latitude,
+        longitude: position?.longitude,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('Could not send a guardian alert: $e');
+      return false;
+    }
+  }
+
+  /// A GPS reading the app already took, while it is open.
+  void noteStationaryReading(LocationFix fix) {
+    _stayChain = _stayChain.then((_) => _noteStay(fix));
+  }
+
+  Future<void> _noteStay(LocationFix fix) async {
+    if (_state.consent['location'] != true) return;
+    if (!_foreground || !_state.signedIn || _state.isGuardian) return;
+    if (_state.uid == null) return;
+    await _loadHomes();
+    if (!_stay.note(fix, atHome: isAtSavedHome(fix, _homes))) return;
+    final sent = await sendGuardianAlert(
+      kind: kGuardianAlertStationary,
+      message: 'Has been in one place for 1 hour.',
+      position: fix,
+    );
+    if (!sent) _stay.rearm();
+  }
+
+  Future<void> _loadHomes() async {
+    final now = DateTime.now();
+    final loaded = _homesLoadedAt;
+    if (loaded != null && now.difference(loaded) < const Duration(minutes: 5)) {
+      return;
+    }
+    _homesLoadedAt = now;
+    // The phone already keeps saved places. Decide with that, then refresh
+    // from the server so a Home saved earlier is not missed.
+    _homes = (await store.cachedPlaces()).where(isSavedHome).toList();
+    final uid = _state.uid;
+    if (uid == null) return;
+    unawaited(_refreshHomes(uid));
+  }
+
+  Future<void> _refreshHomes(String uid) async {
+    try {
+      final all = await places.list(uid);
+      _homes = all.where(isSavedHome).toList();
+    } catch (_) {}
   }
 
   /// The directions reached the place. The destination is kept - the screen
@@ -1876,6 +1975,8 @@ GoRouter createRouter(AppSession session) {
             context,
             '${Routes.guardianObstacles}?uid=${user.uid}',
           ),
+          onAlertLocation: (uid) =>
+              appNavigate(context, '${Routes.guardianLive}?uid=$uid'),
         ),
       ),
       GoRoute(

@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/alerts/alert_presenter.dart';
+import '../../core/alerts/guardian_alert.dart';
 import '../../core/alerts/sos_alert.dart';
 import '../../core/guardian/watched_user.dart';
 import '../../core/speech/speaker.dart';
 import '../../data/guardian_repository.dart';
+import '../../data/local_alert_presenter.dart';
+import '../guardian_alert_watcher.dart';
 import '../sos_watcher.dart';
 import 'guardian_home_screen.dart';
 
@@ -27,6 +30,7 @@ class GuardianHomePage extends StatefulWidget {
     this.onLiveLocation,
     this.onNavigationHistory,
     this.onObstacleHistory,
+    this.onAlertLocation,
     this.speaker = const SilentSpeaker(),
     this.reachabilityNote,
   });
@@ -38,6 +42,9 @@ class GuardianHomePage extends StatefulWidget {
 
   /// Near obstacles from the last 30 days. Null hides the button.
   final void Function(WatchedUser user)? onObstacleHistory;
+
+  /// A tap on a guardian alert opens live location for this user id.
+  final void Function(String uid)? onAlertLocation;
 
   final String guardianId;
   final GuardianRepository repository;
@@ -54,6 +61,7 @@ class GuardianHomePage extends StatefulWidget {
 class _GuardianHomePageState extends State<GuardianHomePage> {
   StreamSubscription<List<WatchedUser>>? _sub;
   SosWatcher? _watcher;
+  GuardianAlertWatcher? _alertWatcher;
   List<WatchedUser> _users = const [];
   bool _loading = true;
   final _names = <String, String>{};
@@ -79,12 +87,31 @@ class _GuardianHomePageState extends State<GuardianHomePage> {
             if (mounted) setState(() => _loading = false);
           },
         );
+    final presenter = widget.presenter;
+    if (presenter is LocalAlertPresenter) {
+      presenter.onSelect = (payload) {
+        if (payload == null || !payload.startsWith(kGuardianAlertLivePrefix)) {
+          return;
+        }
+        final uid = payload.substring(kGuardianAlertLivePrefix.length);
+        if (uid.isEmpty) return;
+        widget.onAlertLocation?.call(uid);
+      };
+    }
     _watcher = SosWatcher(
       presenter: widget.presenter,
       nameOf: (uid) => _names[uid],
     );
     unawaited(_watcher!.start(_feed()));
+    _alertWatcher = GuardianAlertWatcher(
+      presenter: widget.presenter,
+      nameOf: (uid) => _names[uid],
+    );
+    unawaited(_alertWatcher!.start(_alertFeed()));
   }
+
+  Stream<List<GuardianAlert>> _alertFeed() =>
+      widget.repository.alertFeed(widget.guardianId).handleError((_) {});
 
   Stream<List<SosEvent>> _feed() =>
       widget.repository.sosFeed(widget.guardianId).handleError((_) {});
@@ -93,6 +120,7 @@ class _GuardianHomePageState extends State<GuardianHomePage> {
   void dispose() {
     _sub?.cancel();
     _watcher?.stop();
+    _alertWatcher?.stop();
     super.dispose();
   }
 

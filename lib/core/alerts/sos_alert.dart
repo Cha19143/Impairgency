@@ -48,11 +48,16 @@ class SosAlert {
     required this.eventId,
     required this.title,
     required this.body,
+    this.payload,
   });
 
   final String eventId;
   final String title;
   final String body;
+
+  /// What a tap receives. SOS leaves this empty, so the payload stays the
+  /// event id. A guardian alert sets it when a tap should open a screen.
+  final String? payload;
 }
 
 /// How stale an event can be and still be worth waking someone for.

@@ -11,6 +11,7 @@ import 'package:impairgency/app/router.dart';
 import 'package:impairgency/app/routes.dart';
 import 'package:impairgency/app/theme.dart';
 import 'package:impairgency/core/alerts/alert_presenter.dart';
+import 'package:impairgency/core/alerts/guardian_alert.dart';
 import 'package:impairgency/core/alerts/sos_alert.dart';
 import 'package:impairgency/core/guardian/watched_user.dart';
 import 'package:impairgency/core/location/location_fix.dart';
@@ -605,6 +606,12 @@ class _NoWatchedUsers implements GuardianRepository {
   @override
   Stream<List<SosEvent>> recentSosEvents(String uid) =>
       Stream.value(const <SosEvent>[]);
+  @override
+  Stream<List<GuardianAlert>> alertFeed(String guardianId) =>
+      Stream.value(const <GuardianAlert>[]);
+  @override
+  Stream<List<GuardianAlert>> recentGuardianAlerts(String uid) =>
+      Stream.value(const <GuardianAlert>[]);
 }
 
 /// The roster's answers in order, the last one repeated; the pages' reads

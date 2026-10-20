@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/activity_repository.dart';
 import '../data/geolocator_location_source.dart';
 import '../data/location_history_repository.dart';
+import '../core/location/location_fix.dart';
 import '../data/location_sharer.dart';
 import '../data/prefs_session_store.dart';
 import '../core/speech/speech_queue.dart';
@@ -23,6 +24,8 @@ class ImpairGencyApp extends StatefulWidget {
 
 class _ImpairGencyAppState extends State<ImpairGencyApp>
     with WidgetsBindingObserver {
+  void Function(LocationFix)? _onStationaryReading;
+
   late final AppSession _session = AppSession(
     store: PrefsSessionStore(),
     // One queue for everything the app says. Hazards preempt; nothing else
@@ -36,6 +39,7 @@ class _ImpairGencyAppState extends State<ImpairGencyApp>
       sink: FirestoreLastFixSink(),
       recordHistory: (uid, fix) => LocationHistoryRepository()
           .record(uid, fix, sessionId: 'sharing'),
+      onReading: (fix) => _onStationaryReading?.call(fix),
     ),
   );
   late final _router = createRouter(_session);
@@ -55,6 +59,7 @@ class _ImpairGencyAppState extends State<ImpairGencyApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _onStationaryReading = _session.noteStationaryReading;
     Future.wait<void>([
       _session.load(),
       // Firebase answers in well under a second on a phone. If it never does,

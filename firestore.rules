@@ -206,6 +206,23 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    // A short notice for the paired guardian: route left, or an hour in
+    // one place. The same "Share where I am" consent as live location.
+    // Not history. The user writes; only a paired guardian reads.
+    // SOS rules above are unchanged.
+    match /users/{userId}/guardian_alerts/{alertId} {
+      allow read: if isPairedGuardianOf(userId)
+                  && hasConsent(userId, 'location');
+      allow create: if isOwner(userId)
+                    && !isRemoved(userId)
+                    && hasConsent(userId, 'location')
+                    && request.resource.data.kind is string
+                    && request.resource.data.message is string
+                    && request.resource.data.at is timestamp;
+      allow update: if false;
+      allow delete: if false;
+    }
+
     // ---- pairing -------------------------------------------------------
 
     // A code is written by the user who owns it and redeemed by whoever is

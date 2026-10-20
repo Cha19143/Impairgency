@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/alerts/guardian_alert.dart';
 import '../core/alerts/sos_alert.dart';
 import '../core/guardian/activity.dart';
 import '../core/guardian/watched_user.dart';
@@ -178,6 +179,49 @@ class GuardianRepository {
                     .handleError((_) {}, test: (_) => true))
                 .toList())
             .map((lists) => lists.expand((l) => l).toList());
+      });
+
+  /// Guardian alerts for one user in the last day, newest first.
+  Stream<List<GuardianAlert>> recentGuardianAlerts(String uid) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('guardian_alerts')
+      .where(
+        'at',
+        isGreaterThan: Timestamp.fromDate(
+          DateTime.now().subtract(const Duration(hours: 24)),
+        ),
+      )
+      .orderBy('at', descending: true)
+      .snapshots()
+      .map(
+        (snap) => snap.docs
+            .map(
+              (d) => GuardianAlert.tryParse(
+                uid,
+                d.id,
+                d.data(),
+                (d.data()['at'] as Timestamp?)?.toDate(),
+              ),
+            )
+            .nonNulls
+            .toList(),
+      );
+
+  /// Alerts for everyone this guardian watches, while the app is open.
+  Stream<List<GuardianAlert>> alertFeed(String guardianId) =>
+      _pairing.watchedUsers(guardianId).switchMap((uids) {
+        if (uids.isEmpty) return Stream.value(const <GuardianAlert>[]);
+        return _combine(
+          uids
+              .map(
+                (uid) => recentGuardianAlerts(uid).handleError(
+                  (_) {},
+                  test: (_) => true,
+                ),
+              )
+              .toList(),
+        ).map((lists) => lists.expand((l) => l).toList());
       });
 }
 

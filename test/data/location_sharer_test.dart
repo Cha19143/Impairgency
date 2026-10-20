@@ -189,4 +189,24 @@ void main() {
     await sharer.forget('u1');
     expect(sink.cleared, ['u1']);
   });
+
+  test('a reading that is not published is still handed on', () async {
+    final seen = <LocationFix>[];
+    final sharer = LocationSharer(
+      source: source,
+      sink: sink,
+      interval: const Duration(days: 1),
+      now: () => now,
+      onReading: seen.add,
+    );
+    source.next = fix(14.5, t0);
+    sharer.start('u1', recordHistory: false);
+    await pumpEventQueue();
+    now = t0.add(const Duration(seconds: 30));
+    source.next = fix(14.5, now);
+    await sharer.poll();
+    expect(sink.published, hasLength(1));
+    expect(seen, hasLength(2));
+    sharer.stop();
+  });
 }

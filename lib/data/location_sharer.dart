@@ -78,6 +78,7 @@ class LocationSharer implements LocationSharing {
     Duration interval = const Duration(seconds: 30),
     Duration fixTimeout = const Duration(seconds: 10),
     DateTime Function() now = DateTime.now,
+    this.onReading,
   })  : _source = source,
         _sink = sink,
         _recordHistory = recordHistory,
@@ -93,6 +94,10 @@ class LocationSharer implements LocationSharing {
   final Duration _interval;
   final Duration _fixTimeout;
   final DateTime Function() _now;
+
+  /// Every fix the sharer actually reads, including ones it does not
+  /// publish. Sharing itself is unchanged. The stationary check uses this.
+  final void Function(LocationFix fix)? onReading;
 
   String? _uid;
   bool _history = false;
@@ -161,6 +166,11 @@ class LocationSharer implements LocationSharing {
       if (availability != LocationAvailability.ready) return;
       final fix = await _source.currentFix(timeout: _fixTimeout);
       if (fix == null || _uid != uid) return;
+      try {
+        onReading?.call(fix);
+      } catch (e) {
+        debugPrint('Could not note a stationary reading: $e');
+      }
       if (!_policy.shouldPublish(last: _published, next: fix, now: _now())) {
         return;
       }

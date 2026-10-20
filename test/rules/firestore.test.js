@@ -1194,3 +1194,70 @@ describe('obstacle history', () => {
     await assertSucceeds(deleteDoc(event(as(VI))));
   });
 });
+
+describe('guardian alerts', () => {
+  const alert = (db, id = 'alert-1') =>
+    doc(db, 'users', VI, 'guardian_alerts', id);
+
+  const row = () => ({
+    kind: 'route_deviation',
+    message: 'Left the planned route.',
+    at: new Date(),
+    lat: 14.84,
+    lng: 120.81,
+  });
+
+  const allowLocation = () =>
+    env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', VI), {
+        consent: {
+          location: true,
+          history: false,
+          recording: false,
+          faces: false,
+        },
+      }, { merge: true });
+    });
+
+  it('the user cannot write one without location consent', async () => {
+    await assertFails(setDoc(alert(as(VI)), row()));
+  });
+
+  it('the user writes one, and only a paired guardian can read it', async () => {
+    await allowLocation();
+    await assertSucceeds(setDoc(alert(as(VI)), row()));
+    await assertFails(getDoc(alert(as(VI))));
+    await assertSucceeds(getDoc(alert(as(GUARDIAN))));
+    await assertSucceeds(
+      getDocs(query(
+        collection(as(GUARDIAN), 'users', VI, 'guardian_alerts'),
+        orderBy('at', 'desc'),
+      )),
+    );
+  });
+
+  it('a paired guardian cannot read it when location consent is off', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(alert(ctx.firestore()), row());
+    });
+    await assertFails(getDoc(alert(as(GUARDIAN))));
+  });
+
+  it('a guardian cannot write, a stranger cannot read, and nobody can edit', async () => {
+    await allowLocation();
+    await assertFails(setDoc(alert(as(GUARDIAN)), row()));
+    await assertFails(setDoc(alert(as(STRANGER)), row()));
+    await assertSucceeds(setDoc(alert(as(VI)), row()));
+    await assertFails(getDoc(alert(as(STRANGER))));
+    await assertFails(updateDoc(alert(as(VI)), { message: 'changed' }));
+    await assertFails(deleteDoc(alert(as(VI))));
+    await assertFails(deleteDoc(alert(as(GUARDIAN))));
+  });
+
+  it('an admin cannot read it', async () => {
+    await allowLocation();
+    await assertSucceeds(setDoc(alert(as(VI)), row()));
+    await makeAdmin();
+    await assertFails(getDoc(alert(asAdmin())));
+  });
+});
