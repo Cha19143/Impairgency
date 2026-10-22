@@ -481,7 +481,11 @@ class VoiceController extends ChangeNotifier {
   }
 
   String? _captured;
-
+  /// Says [prompt], hears one phrase, and returns the words as heard. Nothing
+  /// is pressed or acted on. Null when nothing was heard.
+  Future<String?> hearOnce(String prompt,
+          {Duration listenFor = kListenWindow}) =>
+      _hear(prompt, listenFor: listenFor);
   /// Asks for one field by voice and returns what the user kept - or null,
   /// with the field left as it was.
   ///
