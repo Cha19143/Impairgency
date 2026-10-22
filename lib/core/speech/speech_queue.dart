@@ -15,7 +15,8 @@ import 'dart:async';
 import 'speaker.dart';
 
 class _Request {
-  _Request(this.text, this.priority, this.seq, {required this.pauseAfter});
+  _Request(this.text, this.priority, this.seq,
+      {required this.pauseAfter, this.countdown = false});
 
   final String text;
   final SpeechPriority priority;
@@ -25,6 +26,9 @@ class _Request {
 
   /// Silence to leave after this sentence, for multi-line notices.
   final Duration pauseAfter;
+
+  /// A distance direction. Only the latest one waiting is worth saying.
+  final bool countdown;
 
   final Completer<void> done = Completer<void>();
 
@@ -133,14 +137,25 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
   /// the caller can say the distance that is true now rather than the one
   /// that was queued. Also false while [holdRoutineSpeech] is set, so the
   /// distance can be said once the check-in is over.
+  ///
+  /// An older direction still waiting is stale, so it is dropped and only
+  /// this one is said. The dropped one completes false, which the guide
+  /// ignores for anything but the newest direction.
   Future<bool> announceNavigation(String text) {
     if (holdRoutineSpeech) return Future<bool>.value(false);
-    final request = _start(text, SpeechPriority.navigation);
+    _pending.removeWhere((r) {
+      if (!r.countdown) return false;
+      r.interrupted = true;
+      r.finish();
+      return true;
+    });
+    final request = _start(text, SpeechPriority.navigation, countdown: true);
     if (request == null) return Future<bool>.value(true);
     return request.done.future.then((_) => !request.interrupted);
   }
 
-  _Request? _start(String text, SpeechPriority priority) {
+  _Request? _start(String text, SpeechPriority priority,
+      {bool countdown = false}) {
     if (text.trim().isEmpty) return null;
 
     if (priority == SpeechPriority.hazard) {
@@ -158,7 +173,8 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
       if (queued != null) return queued;
     }
 
-    final request = _enqueue(text, priority, pauseAfter: Duration.zero);
+    final request = _enqueue(text, priority,
+        pauseAfter: Duration.zero, countdown: countdown);
 
     // A hazard is the only thing allowed to cut a sentence short — and it
     // cuts anything, including a different hazard, because a new danger is
@@ -247,8 +263,10 @@ class SpeechQueue implements PrioritySpeaker, NarrationControl, SpeechActivity {
     String text,
     SpeechPriority priority, {
     required Duration pauseAfter,
+    bool countdown = false,
   }) {
-    final request = _Request(text, priority, _seq++, pauseAfter: pauseAfter);
+    final request = _Request(text, priority, _seq++,
+        pauseAfter: pauseAfter, countdown: countdown);
     _pending.add(request);
     // Highest priority first; within a priority, arrival order.
     _pending.sort((a, b) {

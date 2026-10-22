@@ -16,7 +16,7 @@ import 'location_sharing.dart' show metresBetween;
 ///
 /// Set this to `Duration(minutes: 2)` for a phone test, then set it back
 /// to `Duration(hours: 1)`.
-const Duration kStationaryAfter = Duration(hours: 1);
+const Duration kStationaryAfter = Duration(minutes: 2);
 
 /// Drift smaller than this is GPS wander, not the person leaving.
 ///

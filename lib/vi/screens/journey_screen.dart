@@ -28,6 +28,13 @@ import '../widgets/surroundings_preview.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/voice_mic_button.dart';
 
+/// Detection speech waits this long after a direction ends.
+const Duration kNavSpeechGap = Duration(milliseconds: 500);
+
+/// At the start, detection speech waits for the first direction, but not
+/// longer than this (after the opening announcement), e.g. a weak GPS.
+const Duration kFirstInstructionTimeout = Duration(seconds: 10);
+
 /// What the map is drawn from.
 class JourneyMapState {
   const JourneyMapState({
@@ -171,6 +178,41 @@ class _JourneyScreenState extends State<JourneyScreen> {
   final _course = CourseTracker();
   VoiceScopeHandle? _voiceScope;
 
+  // Detection speech waits for directions: until the first one has been said
+  // (or the timeout), while one is being said, and for a short gap after it.
+  bool _initialHold = true;
+  int _saying = 0;
+  bool _gapOpen = false;
+  Timer? _gapTimer;
+  Timer? _firstDirectionTimer;
+
+  void _syncHold() {
+    _watch.holdDetectionSpeech = _initialHold || _saying > 0 || _gapOpen;
+  }
+
+  /// Holds back detection speech from the moment a direction is queued until
+  /// it has been said, plus a short gap.
+  Future<T> _whileSaying<T>(Future<T> speech) async {
+    _saying++;
+    _gapTimer?.cancel();
+    _gapOpen = false;
+    _syncHold();
+    try {
+      return await speech;
+    } finally {
+      _saying--;
+      _initialHold = false;
+      if (_saying == 0 && mounted && !_stopped) {
+        _gapOpen = true;
+        _gapTimer = Timer(kNavSpeechGap, () {
+          _gapOpen = false;
+          _syncHold();
+        });
+      }
+      _syncHold();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -191,28 +233,37 @@ class _JourneyScreenState extends State<JourneyScreen> {
       commands: () => kJourneyCommands,
       onCommand: _onVoice,
     ));
+    _syncHold();
     final to = widget.destination;
-    _watch.start(
-      readyPhrase: widget.routing == null
-          ? 'Guidance ready. Heading for ${to.label}. Directions follow the '
-              'straight line to it, so listen for obstacles first. Hold the '
-              'phone up and walk slowly.'
-          : 'Guidance ready. Heading for ${to.label}. Finding a walking route; '
-              'obstacle warnings come first. Hold the phone up and walk '
-              'slowly.',
-      also: [
-        'Repeat',
-        'Say the directions and what is ahead again',
-        if (widget.voice != null)
-          ...openingMicLines(
-            handsFree: widget.voice!.handsFree,
-            detail: 'Say repeat, stop directions, where am I, or help',
-          ),
-        'Stop directions to ${to.label}',
-        'Scan carries on warning you about obstacles',
-        'Back',
-      ],
-    );
+    _watch
+        .start(
+          readyPhrase: widget.routing == null
+              ? 'Guidance ready. Heading for ${to.label}. Directions follow the '
+                  'straight line to it, so listen for obstacles first. Hold the '
+                  'phone up and walk slowly.'
+              : 'Guidance ready. Heading for ${to.label}. Finding a walking '
+                  'route; obstacle warnings come first. Hold the phone up and '
+                  'walk slowly.',
+          also: [
+            'Repeat',
+            'Say the directions and what is ahead again',
+            if (widget.voice != null)
+              ...openingMicLines(
+                handsFree: widget.voice!.handsFree,
+                detail: 'Say repeat, stop directions, where am I, or help',
+              ),
+            'Stop directions to ${to.label}',
+            'Scan carries on warning you about obstacles',
+            'Back',
+          ],
+        )
+        .then((_) {
+      if (!mounted || !_initialHold) return;
+      _firstDirectionTimer = Timer(kFirstInstructionTimeout, () {
+        _initialHold = false;
+        _syncHold();
+      });
+    });
     _beginDirections();
   }
 
@@ -232,17 +283,22 @@ class _JourneyScreenState extends State<JourneyScreen> {
       destination: widget.destination,
       routing: widget.routing,
       // Navigation, not hazard: it waits for a warning to finish and never
-      // cuts one off. The queue holds that rule.
+      // cuts one off. The queue holds that rule. Detection speech is held
+      // back while a direction is being said.
       say: (sentence) {
         widget.onGuidance?.call(sentence);
-        widget.speaker.announce(sentence, priority: SpeechPriority.navigation);
+        unawaited(_whileSaying(widget.speaker
+            .announce(sentence, priority: SpeechPriority.navigation)));
       },
       sayCountdown: (sentence) {
         widget.onGuidance?.call(sentence);
         final speaker = widget.speaker;
-        if (speaker is SpeechQueue) return speaker.announceNavigation(sentence);
-        speaker.announce(sentence, priority: SpeechPriority.navigation);
-        return Future<bool>.value(true);
+        if (speaker is SpeechQueue) {
+          return _whileSaying(speaker.announceNavigation(sentence));
+        }
+        return _whileSaying(speaker
+            .announce(sentence, priority: SpeechPriority.navigation)
+            .then((_) => true));
       },
       onOffRoute: widget.onOffRoute,
       onChanged: () {
@@ -356,6 +412,8 @@ class _JourneyScreenState extends State<JourneyScreen> {
 
   @override
   void dispose() {
+    _gapTimer?.cancel();
+    _firstDirectionTimer?.cancel();
     // Not the microphone or the speech queue: both are app-wide, and this
     // runs after the next screen has started.
     _voiceScope?.detach();

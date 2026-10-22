@@ -67,6 +67,11 @@ class SurroundingsWatch extends ChangeNotifier {
   /// uses it so its question is not talked over. Null the rest of the time.
   final bool Function()? speechHeld;
 
+  /// While true, ordinary descriptions are not spoken, so a direction is
+  /// heard on its own. Detection, the screen text, fall checks and clip
+  /// frames carry on. An urgent warning and stairs are always spoken.
+  bool holdDetectionSpeech = false;
+
   /// When this returns true, the scan copies one small gray frame after the
   /// detection. Null skips that copy. Speech and the model are unchanged.
   final bool Function()? captureClipFrames;
@@ -200,6 +205,13 @@ class SurroundingsWatch extends ChangeNotifier {
     final notice = frame.notice;
     if (notice != null) {
       speaker.announce(notice, priority: SpeechPriority.info);
+    }
+    // A direction is being said, or about to be: ordinary descriptions wait.
+    // An urgent warning, and stairs, still go through.
+    if (holdDetectionSpeech &&
+        !guidance.urgent &&
+        guidance.label != kStairsLabel) {
+      return;
     }
     // While a friend's face is being taken down, "person ahead" is the friend.
     // Only a hazard interrupts.

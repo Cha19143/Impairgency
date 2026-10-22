@@ -16,7 +16,7 @@ import 'dart:math' as math;
 ///
 /// Gravity alone is about 9.8. Walking stays under this. Set this to `15`
 /// for a phone test so a hard shake counts, then set it back to `25`.
-const double kFallImpactThreshold = 25;
+const double kFallImpactThreshold = 15;
 
 /// Below this, the phone is in free fall rather than being held.
 const double kFallFreeFallThreshold = 4;
