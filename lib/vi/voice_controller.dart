@@ -483,9 +483,16 @@ class VoiceController extends ChangeNotifier {
   String? _captured;
   /// Says [prompt], hears one phrase, and returns the words as heard. Nothing
   /// is pressed or acted on. Null when nothing was heard.
-  Future<String?> hearOnce(String prompt,
-          {Duration listenFor = kListenWindow}) =>
-      _hear(prompt, listenFor: listenFor);
+  ///
+  /// [pauseFor] and [kind] default to a short command. A dictated email passes
+  /// the longer dictation window so a slow address is not cut off.
+  Future<String?> hearOnce(
+    String prompt, {
+    Duration listenFor = kListenWindow,
+    Duration pauseFor = kPauseEndsPhrase,
+    ListenKind kind = ListenKind.command,
+  }) =>
+      _hear(prompt, listenFor: listenFor, pauseFor: pauseFor, kind: kind);
   /// Asks for one field by voice and returns what the user kept - or null,
   /// with the field left as it was.
   ///

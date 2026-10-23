@@ -7,6 +7,8 @@ import '../../core/speech/speaker.dart';
 import '../../data/auth_service.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
+import '../widgets/voice_access.dart';
+import 'verify_email_voice_flow.dart';
 
 /// "Check your email": where a new account waits until its address is real.
 ///
@@ -64,18 +66,83 @@ class VerifyEmailScreen extends StatefulWidget {
   State<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
 }
 
-class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
+class _VerifyEmailScreenState extends State<VerifyEmailScreen>
+    with WidgetsBindingObserver {
   bool _checking = false;
   bool _sending = false;
   late bool _sent = widget.linkSent;
   DateTime? _lastSentAt;
   String? _status;
   Timer? _tick;
+  bool _flowStarted = false;
+  String _spokenPrompt = '';
+  VerifyEmailVoiceFlow? _flow;
+
+  /// Set by [_check] so the voice flow can see the result it already computed.
+  VerificationCheck? _voiceCheckResult;
+
+  /// Set by [_resend] once a new link has actually been sent.
+  bool _voiceResendSent = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   @override
   void dispose() {
+    _flow?.cancel();
     _tick?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final flow = _flow;
+    if (flow == null) return;
+    if (state == AppLifecycleState.resumed) {
+      flow.resume();
+    } else {
+      flow.pause();
+    }
+  }
+
+  void _startGuidedFlow() {
+    if (_flowStarted || !mounted) return;
+    final voice = VoiceAccess.maybeOf(context);
+    if (voice == null) return;
+    _flowStarted = true;
+    _flow = VerifyEmailVoiceFlow(
+      voice: voice,
+      speaker: widget.speaker,
+      email: () => widget.email,
+      linkSent: () => _sent,
+      onPrompt: (prompt) {
+        if (!mounted) return;
+        setState(() => _spokenPrompt = prompt);
+      },
+      onCheck: _checkForVoice,
+      onResend: _resendForVoice,
+      onUseDifferentEmail: widget.onUseDifferentEmail,
+      isMounted: () => mounted,
+    );
+    _flow!.start();
+  }
+
+  Future<VerificationCheck?> _checkForVoice() async {
+    _voiceCheckResult = null;
+    await _check();
+    if (!mounted) return null;
+    return _voiceCheckResult;
+  }
+
+  Future<bool?> _resendForVoice() async {
+    _voiceResendSent = false;
+    await _resend();
+    if (!mounted) return null;
+    return _voiceResendSent;
   }
 
   Duration get _cooldownLeft {
@@ -90,6 +157,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     if (_checking) return;
     setState(() => _checking = true);
     final result = await widget.onCheck();
+    _voiceCheckResult = result;
     if (!mounted) return;
     setState(() => _checking = false);
     // Verified moves the router on; this screen is going.
@@ -100,6 +168,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   }
 
   Future<void> _resend() async {
+    _voiceResendSent = false;
     if (_sending) return;
     final left = _cooldownLeft;
     if (left > Duration.zero) {
@@ -117,6 +186,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     }
     _lastSentAt = widget.now();
     _sent = true;
+    _voiceResendSent = true;
     _tick?.cancel();
     _tick = Timer(VerifyEmailScreen.resendCooldown, () {
       if (mounted) setState(() {});
@@ -144,29 +214,49 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           'with an address that is not theirs.',
     ];
 
+    final guided = VoiceAccess.maybeOf(context) != null;
+    final prompt = _spokenPrompt.isEmpty
+        ? null
+        : Semantics(
+            liveRegion: true,
+            label: _spokenPrompt,
+            child: const SizedBox.shrink(),
+          );
+    final status = _status == null
+        ? null
+        : Semantics(
+            liveRegion: true,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.navyRaised,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                _status!,
+                style: const TextStyle(
+                    fontSize: 17, height: 1.4, color: AppColors.textPrimary),
+              ),
+            ),
+          );
+    final Widget? extra = prompt == null
+        ? status
+        : status == null
+            ? prompt
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [prompt, status],
+              );
+
     return ViScreen(
       speaker: widget.speaker,
       title: 'Check your email',
       body: body,
       spokenSuffix: 'Three buttons: I have confirmed my email, send the link '
           'again, and use a different email.',
-      extra: _status == null
-          ? null
-          : Semantics(
-              liveRegion: true,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.navyRaised,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Text(
-                  _status!,
-                  style: const TextStyle(
-                      fontSize: 17, height: 1.4, color: AppColors.textPrimary),
-                ),
-              ),
-            ),
+      speakOnOpen: !guided,
+      onSpoken: guided ? _startGuidedFlow : null,
+      extra: extra,
       actions: [
         ViButton(
           label: _checking ? 'Checking…' : 'I have confirmed my email',

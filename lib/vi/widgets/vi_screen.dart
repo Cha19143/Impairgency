@@ -38,6 +38,8 @@ class ViScreen extends StatefulWidget {
     this.extra,
     this.mic = true,
     this.micDetail = kMicDetail,
+    this.speakOnOpen = true,
+    this.onSpoken,
   });
 
   final String title;
@@ -66,6 +68,14 @@ class ViScreen extends StatefulWidget {
   /// What the microphone button says it can do when idle.
   final String micDetail;
 
+  /// When false, the screen does not read itself aloud. A guided voice flow
+  /// speaks instead. Other screens leave this on.
+  final bool speakOnOpen;
+
+  /// Called once the opening speech has finished, or straight away when
+  /// [speakOnOpen] is false. Null on every screen that does not guide itself.
+  final VoidCallback? onSpoken;
+
   @override
   State<ViScreen> createState() => _ViScreenState();
 }
@@ -88,11 +98,20 @@ class _ViScreenState extends State<ViScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      widget.speaker.speakLines([
-        widget.title,
-        ...widget.body,
-        if (widget.spokenSuffix != null) widget.spokenSuffix!,
-      ]);
+      if (!widget.speakOnOpen) {
+        widget.onSpoken?.call();
+        return;
+      }
+      widget.speaker
+          .speakLines([
+            widget.title,
+            ...widget.body,
+            if (widget.spokenSuffix != null) widget.spokenSuffix!,
+          ])
+          .whenComplete(() {
+        if (!mounted) return;
+        widget.onSpoken?.call();
+      });
     });
   }
 

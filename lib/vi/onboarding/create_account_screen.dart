@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/auth/email_address.dart';
 import '../../core/speech/speaker.dart';
+import '../../core/voice/screen_flow.dart';
 import '../voice_controller.dart';
 import '../widgets/dictated_field.dart';
 import '../widgets/vi_button.dart';
 import '../widgets/vi_screen.dart';
+import '../widgets/voice_access.dart';
 import '../widgets/voice_form.dart';
+import 'create_account_voice_flow.dart';
 
 /// Returns null on success, or a sentence to say and show.
 typedef CreateAccountHandler = Future<String?> Function(
@@ -45,38 +48,105 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _passwordFocus = FocusNode();
   String? _error;
   bool _busy = false;
+  bool _announceWait = false;
+  bool _watchingPassword = false;
+  bool _flowStarted = false;
+  String _spokenPrompt = '';
+  CreateAccountVoiceFlow? _flow;
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordFocus.addListener(_onPasswordFocus);
+  }
+
+  void _onPasswordFocus() {
+    if (!_watchingPassword || _passwordFocus.hasFocus) return;
+    _flow?.passwordFinished();
+  }
+
+  void _startGuidedFlow() {
+    if (_flowStarted || !mounted) return;
+    final voice = VoiceAccess.maybeOf(context);
+    if (voice == null) return;
+    _flowStarted = true;
+    _flow = CreateAccountVoiceFlow(
+      voice: voice,
+      speaker: widget.speaker,
+      setEmail: (value) {
+        if (!mounted) return;
+        _email.value = TextEditingValue(
+          text: value,
+          selection: TextSelection.collapsed(offset: value.length),
+        );
+      },
+      passwordLength: () => _password.text.length,
+      onPrompt: (prompt) {
+        if (!mounted) return;
+        setState(() => _spokenPrompt = prompt);
+      },
+      onWatchPassword: (watch) {
+        if (!mounted) return;
+        setState(() => _watchingPassword = watch);
+        if (!watch) _passwordFocus.unfocus();
+      },
+      onFocusPassword: () {
+        if (!mounted) return;
+        _passwordFocus.requestFocus();
+      },
+      onSubmit: () {
+        _announceWait = true;
+        return _submit();
+      },
+      isMounted: () => mounted,
+    );
+    _flow!.start();
+  }
 
   @override
   void dispose() {
+    _flow?.cancel();
+    _passwordFocus.removeListener(_onPasswordFocus);
     _email.dispose();
     _password.dispose();
     _passwordFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    if (_busy) return;
+  Future<String?> _submit() async {
+    final announce = _announceWait;
+    _announceWait = false;
+    if (_busy) return null;
     final email = _email.text.trim();
     final password = _password.text;
 
     final problem = emailAddressProblem(email);
     if (problem != null) {
       await _fail(problem);
-      return;
+      return problem;
     }
     if (password.length < 8) {
-      await _fail('Your password needs at least eight characters.');
-      return;
+      const message = 'Your password needs at least eight characters.';
+      await _fail(message);
+      return message;
     }
 
+    if (announce) {
+      await widget.speaker.speak(kCreatingAccountLine);
+    }
+    if (!mounted) return null;
     setState(() {
       _busy = true;
       _error = null;
     });
     final failure = await widget.onCreate(email, password);
-    if (!mounted) return;
+    if (!mounted) return failure;
     setState(() => _busy = false);
-    if (failure != null) await _fail(failure);
+    if (failure != null) {
+      await _fail(failure);
+      return failure;
+    }
+    return null;
   }
 
   Future<void> _fail(String message) async {
@@ -89,6 +159,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final guided = VoiceAccess.maybeOf(context) != null;
     return ViScreen(
       speaker: widget.speaker,
       step: 'Step 1 of 7',
@@ -99,11 +170,19 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       spokenSuffix: 'Say fill in to say your email address. Type the password '
           'with the keyboard: a password said out loud is not a password.',
       micDetail: kFormMicDetail,
+      speakOnOpen: !guided,
+      onSpoken: guided ? _startGuidedFlow : null,
       extra: VoiceForm(
         submitLabel: 'Create account',
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_spokenPrompt.isNotEmpty)
+            Semantics(
+              liveRegion: true,
+              label: _spokenPrompt,
+              child: const SizedBox.shrink(),
+            ),
           DictatedField(
             label: 'Email address',
             controller: _email,
@@ -142,7 +221,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             obscureText: true,
             autofillHints: const [AutofillHints.newPassword],
             style: const TextStyle(fontSize: 20, color: AppColors.textPrimary),
-            onSubmitted: (_) => _submit(),
+            onSubmitted: (_) {
+              if (_watchingPassword) {
+                _flow?.passwordFinished();
+              } else {
+                _submit();
+              }
+            },
             decoration: InputDecoration(
               labelText: 'Password',
               labelStyle: const TextStyle(fontSize: 17),

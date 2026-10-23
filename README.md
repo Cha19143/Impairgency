@@ -151,6 +151,24 @@ The manual pass that matters: complete the whole of onboarding with **VoiceOver
 on and Screen Curtain enabled** — screen fully black. Anything that cannot be
 finished that way is a defect, not a polish item.
 
+## Adding the next onboarding voice screen
+
+Step 1 (Create your account) is the pattern. The state machine is
+`CreateAccountFlow` in `lib/core/voice/screen_flow.dart`. The runner is
+`lib/vi/onboarding/create_account_voice_flow.dart`.
+
+1. Add one state per prompt, next to `CreateAccountFlow`. Each state speaks
+   one line, then listens, then moves. `repeat`, `go back`, and the names of
+   the visible buttons are handled on every listening state.
+2. Add a runner beside the screen. It calls the app's existing `Speaker` and
+   `VoiceController.hearOnce`, so speech finishes before the microphone opens.
+   Do not add a speech library.
+3. On that screen, pass `speakOnOpen: false` and `onSpoken` to `ViScreen` only
+   when `VoiceAccess` has a controller. With no controller, the screen still
+   reads itself the way it does today, and every button still works by touch.
+4. Call the screen's existing submit handler. Do not dictate a password: count
+   its characters, and pass only that count on.
+
 ## Ported from `cprwire`
 
 Carried over: the voice command vocabulary and its tests, the YUV and rotation
